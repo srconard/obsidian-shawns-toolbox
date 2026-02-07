@@ -18,6 +18,11 @@ Automatically adds a checkmark emoji and completion date when you check a checkb
 - [x] Buy groceries ✅ 2026-02-07
 ```
 
+**With time enabled:**
+```markdown
+- [x] Buy groceries ✅ 2026-02-07 14:30
+```
+
 #### Supported Formats
 
 - Dash lists: `- [x]`
@@ -71,6 +76,7 @@ Access settings via **Settings > Shawn's Toolbox**
 | Setting | Description | Default |
 |---------|-------------|---------|
 | Enable checkbox stamping | Toggle the feature on/off | On |
+| Include time | Add completion time alongside the date | Off |
 | Exclusion patterns | Lines containing these patterns won't be stamped | `#task` |
 
 ## Development

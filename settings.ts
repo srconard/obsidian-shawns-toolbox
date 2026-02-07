@@ -3,12 +3,14 @@ import type ShawnsToolboxPlugin from "./main";
 
 export interface ShawnsToolboxSettings {
 	checkboxStampingEnabled: boolean;
+	includeTime: boolean;
 	excludePatterns: string[];
 	dateFormat: string;
 }
 
 export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
 	checkboxStampingEnabled: true,
+	includeTime: false,
 	excludePatterns: ["#task"],
 	dateFormat: "YYYY-MM-DD",
 };
@@ -50,6 +52,19 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.checkboxStampingEnabled)
 					.onChange(async (value) => {
 						this.plugin.settings.checkboxStampingEnabled = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		// Include time toggle
+		new Setting(containerEl)
+			.setName("Include time")
+			.setDesc("Add the time of completion alongside the date (e.g., ✅ 2026-02-07 14:30).")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.includeTime)
+					.onChange(async (value) => {
+						this.plugin.settings.includeTime = value;
 						await this.plugin.saveSettings();
 					})
 			);

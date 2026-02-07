@@ -51,6 +51,15 @@ export function formatDate(date: Date, _format: string): string {
 }
 
 /**
+ * Formats the current time as HH:MM
+ */
+export function formatTime(date: Date): string {
+	const hours = String(date.getHours()).padStart(2, "0");
+	const minutes = String(date.getMinutes()).padStart(2, "0");
+	return `${hours}:${minutes}`;
+}
+
+/**
  * Applies a completion stamp to a checkbox line if appropriate
  * Returns true if the stamp was applied, false otherwise
  */
@@ -77,8 +86,10 @@ export function applyCheckboxStamp(
 	}
 
 	// Apply the stamp
-	const date = formatDate(new Date(), settings.dateFormat);
-	const stamp = ` ✅ ${date}`;
+	const now = new Date();
+	const dateStr = formatDate(now, settings.dateFormat);
+	const timeStr = settings.includeTime ? ` ${formatTime(now)}` : "";
+	const stamp = ` ✅ ${dateStr}${timeStr}`;
 	editor.setLine(lineNumber, lineText + stamp);
 
 	return true;
