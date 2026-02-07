@@ -1,0 +1,21 @@
+{
+	"name": "shawns-toolbox",
+	"version": "1.0.0",
+	"description": "A collection of productivity tools including checkbox completion stamping.",
+	"main": "main.js",
+	"scripts": {
+		"dev": "node esbuild.config.mjs",
+		"build": "node esbuild.config.mjs production",
+		"lint": "eslint main.ts settings.ts checkbox-handler.ts"
+	},
+	"keywords": [],
+	"author": "Shawn",
+	"license": "MIT",
+	"devDependencies": {
+		"@types/node": "^20.11.0",
+		"builtin-modules": "^3.3.0",
+		"esbuild": "^0.20.0",
+		"obsidian": "latest",
+		"typescript": "^5.3.0"
+	}
+}

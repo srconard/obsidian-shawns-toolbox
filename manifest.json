@@ -1,0 +1,9 @@
+{
+	"id": "shawns-toolbox",
+	"name": "Shawn's Toolbox",
+	"version": "1.0.0",
+	"minAppVersion": "0.15.0",
+	"description": "A collection of productivity tools including checkbox completion stamping.",
+	"author": "Shawn",
+	"isDesktopOnly": false
+}
