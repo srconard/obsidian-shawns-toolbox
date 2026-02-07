@@ -2,11 +2,13 @@ import { App, PluginSettingTab, Setting } from "obsidian";
 import type ShawnsToolboxPlugin from "./main";
 
 export interface ShawnsToolboxSettings {
+	checkboxStampingEnabled: boolean;
 	excludePatterns: string[];
 	dateFormat: string;
 }
 
 export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
+	checkboxStampingEnabled: true,
 	excludePatterns: ["#task"],
 	dateFormat: "YYYY-MM-DD",
 };
@@ -38,6 +40,19 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 			text: "Example: - [x] Buy groceries ✅ 2026-02-07",
 			cls: "setting-item-description",
 		});
+
+		// Enable/disable toggle
+		new Setting(containerEl)
+			.setName("Enable checkbox stamping")
+			.setDesc("Toggle the checkbox completion stamping feature on or off.")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.checkboxStampingEnabled)
+					.onChange(async (value) => {
+						this.plugin.settings.checkboxStampingEnabled = value;
+						await this.plugin.saveSettings();
+					})
+			);
 
 		// Exclusion patterns
 		new Setting(containerEl)

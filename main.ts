@@ -1,4 +1,4 @@
-import { Editor, MarkdownView, Plugin } from "obsidian";
+import { Editor, Plugin } from "obsidian";
 import { CheckboxHandler } from "./checkbox-handler";
 import {
 	DEFAULT_SETTINGS,
@@ -19,7 +19,11 @@ export default class ShawnsToolboxPlugin extends Plugin {
 		// Register editor change event
 		this.registerEvent(
 			this.app.workspace.on("editor-change", (editor: Editor, info) => {
-				if (this.checkboxHandler && info.file) {
+				if (
+					this.settings.checkboxStampingEnabled &&
+					this.checkboxHandler &&
+					info.file
+				) {
 					this.checkboxHandler.handleEditorChange(
 						editor,
 						info.file.path
