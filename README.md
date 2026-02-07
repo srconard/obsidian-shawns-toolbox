@@ -6,42 +6,41 @@ An Obsidian plugin with productivity tools to enhance your note-taking workflow.
 
 ### Checkbox Completion Stamping
 
-Automatically adds a checkmark emoji and completion date when you check a checkbox.
+Automatically adds a checkmark emoji and completion date when you check a checkbox. This helps you track when tasks were completed without manual effort.
 
-**Before:**
-```markdown
-- [ ] Buy groceries
-```
+#### How It Works
 
-**After:**
-```markdown
-- [x] Buy groceries ✅ 2026-02-07
-```
+When you check a checkbox, the plugin automatically appends a completion stamp:
 
-**With time enabled:**
-```markdown
-- [x] Buy groceries ✅ 2026-02-07 14:30
-```
+| Before | After |
+|--------|-------|
+| `- [ ] Buy groceries` | `- [x] Buy groceries ✅ 2026-02-07` |
+| `- [ ] Call mom` | `- [x] Call mom ✅ 2026-02-07 14:30` (with time enabled) |
 
-#### Supported Formats
+#### Supported Checkbox Formats
 
-- Dash lists: `- [x]`
-- Asterisk lists: `* [x]`
-- Plus lists: `+ [x]`
-- Numbered lists: `1. [x]`, `2) [x]`
+The plugin recognizes checkboxes in all common markdown list formats:
+
+| Format | Example |
+|--------|---------|
+| Dash lists | `- [x] Task` |
+| Asterisk lists | `* [x] Task` |
+| Plus lists | `+ [x] Task` |
+| Numbered lists | `1. [x] Task` or `1) [x] Task` |
 
 #### Exclusion Patterns
 
-You can exclude certain lines from being stamped by adding patterns in the settings. Any line containing an exclusion pattern will be skipped.
+Some tasks shouldn't receive a completion stamp—for example, tasks managed by other plugins like [Tasks](https://github.com/obsidian-tasks-group/obsidian-tasks) or [Dataview](https://github.com/blacksmithgu/obsidian-dataview).
+
+You can configure exclusion patterns in the settings. Any line containing an exclusion pattern will be skipped.
 
 **Default exclusion:** `#task`
 
-This is useful for task management plugins that use specific tags (like Tasks plugin with `#task`).
-
 **Example:**
 ```markdown
-- [x] Regular item ✅ 2026-02-07
-- [x] Task item #task              (no stamp added)
+- [x] Regular item ✅ 2026-02-07      <- stamped
+- [x] Managed task #task               <- not stamped (excluded)
+- [x] Recurring item #recurring        <- not stamped (if #recurring is added to exclusions)
 ```
 
 ## Installation
@@ -49,49 +48,59 @@ This is useful for task management plugins that use specific tags (like Tasks pl
 ### Manual Installation
 
 1. Download the latest release from the [Releases page](https://github.com/srconard/obsidian-shawns-toolbox/releases)
-2. Extract the files to your vault's `.obsidian/plugins/shawns-toolbox/` folder
-3. Reload Obsidian
-4. Enable the plugin in Settings > Community Plugins
+2. Extract the ZIP file
+3. Copy the `shawns-toolbox` folder to your vault's `.obsidian/plugins/` directory
+4. Reload Obsidian (Ctrl/Cmd + R)
+5. Go to **Settings > Community Plugins** and enable "Shawn's Toolbox"
 
-### From Source
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/srconard/obsidian-shawns-toolbox.git
-   ```
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Build the plugin:
-   ```bash
-   npm run build
-   ```
-4. Copy `main.js`, `manifest.json`, and `styles.css` to your vault's `.obsidian/plugins/shawns-toolbox/` folder
-
-## Settings
-
-Access settings via **Settings > Shawn's Toolbox**
-
-| Setting | Description | Default |
-|---------|-------------|---------|
-| Enable checkbox stamping | Toggle the feature on/off | On |
-| Include time | Add completion time alongside the date | Off |
-| Exclusion patterns | Lines containing these patterns won't be stamped | `#task` |
-
-## Development
+### Building from Source
 
 ```bash
+# Clone the repository
+git clone https://github.com/srconard/obsidian-shawns-toolbox.git
+cd obsidian-shawns-toolbox
+
 # Install dependencies
 npm install
 
-# Build for production
+# Build the plugin
 npm run build
 
-# Development mode (watch for changes)
+# For development with hot reload
 npm run dev
 ```
 
+After building, copy `main.js`, `manifest.json`, and `styles.css` to your vault's `.obsidian/plugins/shawns-toolbox/` folder.
+
+## Settings
+
+Access plugin settings via **Settings > Shawn's Toolbox**
+
+### Checkbox Completion Stamping
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| **Enable checkbox stamping** | Master toggle to turn the feature on or off | On |
+| **Include time** | Add the completion time (HH:MM) alongside the date | Off |
+| **Exclusion patterns** | Lines containing these patterns won't receive a stamp. Enter one pattern per line. | `#task` |
+
+## Compatibility
+
+- **Minimum Obsidian version:** 0.15.0
+- **Platforms:** Windows, macOS, Linux, iOS, Android
+
+## Changelog
+
+### 1.0.0
+- Initial release
+- Checkbox completion stamping feature
+- Configurable exclusion patterns
+- Optional time stamping
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit issues or pull requests on [GitHub](https://github.com/srconard/obsidian-shawns-toolbox).
+
 ## License
 
-MIT
+MIT License - see [LICENSE](LICENSE) for details.
