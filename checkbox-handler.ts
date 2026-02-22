@@ -40,6 +40,18 @@ export function hasCompletionStamp(line: string): boolean {
 }
 
 /**
+ * Regex matching the completion stamp: ✅ YYYY-MM-DD with optional HH:MM
+ */
+const COMPLETION_STAMP_REGEX = / ✅ \d{4}-\d{2}-\d{2}( \d{2}:\d{2})?/;
+
+/**
+ * Removes the completion stamp from a line, if present
+ */
+export function removeCompletionStamp(line: string): string {
+	return line.replace(COMPLETION_STAMP_REGEX, "");
+}
+
+/**
  * Formats the current date according to the specified format
  * Currently only supports YYYY-MM-DD
  */
@@ -112,7 +124,7 @@ export class CheckboxHandler {
 
 	/**
 	 * Called when the editor content changes
-	 * Detects if a checkbox was just checked and applies stamp
+	 * Detects checkbox state transitions and applies/removes stamps
 	 */
 	handleEditorChange(editor: Editor, filePath: string): void {
 		const cursor = editor.getCursor();
@@ -126,17 +138,21 @@ export class CheckboxHandler {
 			this.previousLineStates.set(filePath, fileStates);
 		}
 
-		const wasUnchecked = fileStates.get(lineNumber) === false;
-		const isNowChecked = isCheckedCheckbox(lineText);
+		const previousState = fileStates.get(lineNumber);
+		const wasChecked = previousState === true;
 
 		// Update state for current line
 		if (isUncheckedCheckbox(lineText)) {
+			// Checked → unchecked: remove stamp if present
+			if (wasChecked && hasCompletionStamp(lineText)) {
+				editor.setLine(lineNumber, removeCompletionStamp(lineText));
+			}
 			fileStates.set(lineNumber, false);
 		} else if (isCheckedCheckbox(lineText)) {
-			// Only apply stamp if transitioning from unchecked to checked
-			// or if we don't have previous state (first time seeing this line as checked)
+			// Unchecked → checked: apply stamp
+			const wasUnchecked = previousState === false;
 			if (wasUnchecked || !fileStates.has(lineNumber)) {
-				if (isNowChecked && !hasCompletionStamp(lineText)) {
+				if (!hasCompletionStamp(lineText)) {
 					applyCheckboxStamp(editor, lineNumber, this.settings);
 				}
 			}

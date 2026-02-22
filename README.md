@@ -6,16 +6,17 @@ An Obsidian plugin with productivity tools to enhance your note-taking workflow.
 
 ### Checkbox Completion Stamping
 
-Automatically adds a checkmark emoji and completion date when you check a checkbox. This helps you track when tasks were completed without manual effort.
+Automatically adds a checkmark emoji and completion date when you check a checkbox. This helps you track when tasks were completed without manual effort. Unchecking a box automatically removes the stamp.
 
 #### How It Works
 
-When you check a checkbox, the plugin automatically appends a completion stamp:
+When you check a checkbox, the plugin automatically appends a completion stamp. When you uncheck it, the stamp is removed:
 
-| Before | After |
-|--------|-------|
-| `- [ ] Buy groceries` | `- [x] Buy groceries ✅ 2026-02-07` |
-| `- [ ] Call mom` | `- [x] Call mom ✅ 2026-02-07 14:30` (with time enabled) |
+| Action | Before | After |
+|--------|--------|-------|
+| Check | `- [ ] Buy groceries` | `- [x] Buy groceries ✅ 2026-02-07` |
+| Check (with time) | `- [ ] Call mom` | `- [x] Call mom ✅ 2026-02-07 14:30` |
+| Uncheck | `- [x] Buy groceries ✅ 2026-02-07` | `- [ ] Buy groceries` |
 
 #### Supported Checkbox Formats
 
@@ -90,6 +91,9 @@ Access plugin settings via **Settings > Shawn's Toolbox**
 - **Platforms:** Windows, macOS, Linux, iOS, Android
 
 ## Changelog
+
+### 1.1.0
+- Unchecking a checkbox now automatically removes the completion stamp
 
 ### 1.0.0
 - Initial release
