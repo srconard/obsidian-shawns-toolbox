@@ -1,5 +1,8 @@
-import { Editor, Plugin } from "obsidian";
-import { CheckboxHandler } from "./checkbox-handler";
+import { Plugin } from "obsidian";
+import {
+	createCheckboxExtensions,
+	type CheckboxHandlerState,
+} from "./checkbox-handler";
 import {
 	DEFAULT_SETTINGS,
 	ShawnsToolboxSettingTab,
@@ -8,24 +11,21 @@ import {
 
 export default class ShawnsToolboxPlugin extends Plugin {
 	settings: ShawnsToolboxSettings = DEFAULT_SETTINGS;
-	private checkboxHandler: CheckboxHandler | null = null;
+	private handlerState: CheckboxHandlerState = {
+		settings: DEFAULT_SETTINGS,
+		enabled: true,
+	};
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
 
-		// Initialize checkbox handler
-		this.checkboxHandler = new CheckboxHandler(this.settings);
+		// Shared state object read by CodeMirror extensions
+		this.handlerState.settings = this.settings;
+		this.handlerState.enabled = this.settings.checkboxStampingEnabled;
 
-		// Register editor change event
-		this.registerEvent(
-			this.app.workspace.on("editor-change", (editor: Editor) => {
-				if (
-					this.settings.checkboxStampingEnabled &&
-					this.checkboxHandler
-				) {
-					this.checkboxHandler.handleEditorChange(editor);
-				}
-			})
+		// Register CodeMirror extensions for checkbox stamping
+		this.registerEditorExtension(
+			createCheckboxExtensions(this.handlerState)
 		);
 
 		// Add settings tab
@@ -35,7 +35,6 @@ export default class ShawnsToolboxPlugin extends Plugin {
 	}
 
 	onunload(): void {
-		this.checkboxHandler = null;
 		console.log("Shawn's Toolbox unloaded");
 	}
 
@@ -49,9 +48,8 @@ export default class ShawnsToolboxPlugin extends Plugin {
 
 	async saveSettings(): Promise<void> {
 		await this.saveData(this.settings);
-		// Update checkbox handler with new settings
-		if (this.checkboxHandler) {
-			this.checkboxHandler.updateSettings(this.settings);
-		}
+		// Update the shared state so extensions pick up new settings immediately
+		this.handlerState.settings = this.settings;
+		this.handlerState.enabled = this.settings.checkboxStampingEnabled;
 	}
 }
