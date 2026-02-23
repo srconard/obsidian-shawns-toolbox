@@ -7,7 +7,7 @@ See also the root vault `CLAUDE.md` for workspace-level context, build commands,
 ## Plugin-Specific Notes
 
 - **Checkbox regex patterns** in `checkbox-handler.ts` support `-`, `*`, `+`, and numbered (`1.` / `1)`) list markers with arbitrary indentation
-- **State tracking** uses `Map<filePath, Map<lineNumber, boolean>>` — stamps are added on unchecked→checked transitions and removed on checked→unchecked transitions
+- **No state tracking** — the handler is stateless; it inspects the cursor line on each change and reacts to its current content
 - **Exclusion patterns** are plain substring matches against the full line text (not regex)
 - The `dateFormat` setting exists in the interface but only `"YYYY-MM-DD"` is currently implemented in `formatDate()`
 - `styles.css` is a placeholder — no custom styles yet

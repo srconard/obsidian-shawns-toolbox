@@ -108,11 +108,10 @@ export function applyCheckboxStamp(
 }
 
 /**
- * Handles editor changes to detect checkbox state changes
+ * Handles editor changes to detect checkbox state and apply/remove stamps
  */
 export class CheckboxHandler {
 	private settings: ShawnsToolboxSettings;
-	private previousLineStates: Map<string, Map<number, boolean>> = new Map();
 
 	constructor(settings: ShawnsToolboxSettings) {
 		this.settings = settings;
@@ -123,47 +122,18 @@ export class CheckboxHandler {
 	}
 
 	/**
-	 * Called when the editor content changes
-	 * Detects checkbox state transitions and applies/removes stamps
+	 * Called when the editor content changes.
+	 * Scans the cursor line and applies or removes the completion stamp
+	 * based on the current checkbox state — no transition tracking needed.
 	 */
-	handleEditorChange(editor: Editor, filePath: string): void {
-		const cursor = editor.getCursor();
-		const lineNumber = cursor.line;
+	handleEditorChange(editor: Editor): void {
+		const lineNumber = editor.getCursor().line;
 		const lineText = editor.getLine(lineNumber);
 
-		// Get previous state for this file
-		let fileStates = this.previousLineStates.get(filePath);
-		if (!fileStates) {
-			fileStates = new Map();
-			this.previousLineStates.set(filePath, fileStates);
+		if (isCheckedCheckbox(lineText) && !hasCompletionStamp(lineText)) {
+			applyCheckboxStamp(editor, lineNumber, this.settings);
+		} else if (isUncheckedCheckbox(lineText) && hasCompletionStamp(lineText)) {
+			editor.setLine(lineNumber, removeCompletionStamp(lineText));
 		}
-
-		const previousState = fileStates.get(lineNumber);
-		const wasChecked = previousState === true;
-
-		// Update state for current line
-		if (isUncheckedCheckbox(lineText)) {
-			// Checked → unchecked: remove stamp if present
-			if (wasChecked && hasCompletionStamp(lineText)) {
-				editor.setLine(lineNumber, removeCompletionStamp(lineText));
-			}
-			fileStates.set(lineNumber, false);
-		} else if (isCheckedCheckbox(lineText)) {
-			// Unchecked → checked: apply stamp
-			const wasUnchecked = previousState === false;
-			if (wasUnchecked || !fileStates.has(lineNumber)) {
-				if (!hasCompletionStamp(lineText)) {
-					applyCheckboxStamp(editor, lineNumber, this.settings);
-				}
-			}
-			fileStates.set(lineNumber, true);
-		}
-	}
-
-	/**
-	 * Clears state for a file (e.g., when file is closed)
-	 */
-	clearFileState(filePath: string): void {
-		this.previousLineStates.delete(filePath);
 	}
 }

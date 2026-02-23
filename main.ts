@@ -18,16 +18,12 @@ export default class ShawnsToolboxPlugin extends Plugin {
 
 		// Register editor change event
 		this.registerEvent(
-			this.app.workspace.on("editor-change", (editor: Editor, info) => {
+			this.app.workspace.on("editor-change", (editor: Editor) => {
 				if (
 					this.settings.checkboxStampingEnabled &&
-					this.checkboxHandler &&
-					info.file
+					this.checkboxHandler
 				) {
-					this.checkboxHandler.handleEditorChange(
-						editor,
-						info.file.path
-					);
+					this.checkboxHandler.handleEditorChange(editor);
 				}
 			})
 		);
