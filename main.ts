@@ -1,4 +1,5 @@
-import { Plugin } from "obsidian";
+import { Notice, Plugin } from "obsidian";
+import { summarizeBlock } from "./block-summarizer";
 import {
 	createCheckboxExtensions,
 	type CheckboxHandlerState,
@@ -27,6 +28,21 @@ export default class ShawnsToolboxPlugin extends Plugin {
 		this.registerEditorExtension(
 			createCheckboxExtensions(this.handlerState)
 		);
+
+		// Register the Summarize Block command
+		this.addCommand({
+			id: "summarize-block",
+			name: "Summarize Block",
+			editorCallback: async (editor) => {
+				if (!this.settings.blockSummarizerEnabled) {
+					new Notice(
+						"Block Summarizer is disabled. Enable it in Shawn's Toolbox settings."
+					);
+					return;
+				}
+				await summarizeBlock(editor, this.settings);
+			},
+		});
 
 		// Add settings tab
 		this.addSettingTab(new ShawnsToolboxSettingTab(this.app, this));

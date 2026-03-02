@@ -6,6 +6,11 @@ export interface ShawnsToolboxSettings {
 	includeTime: boolean;
 	excludePatterns: string[];
 	dateFormat: string;
+
+	// Block Summarizer
+	blockSummarizerEnabled: boolean;
+	geminiApiKey: string;
+	geminiModel: string;
 }
 
 export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
@@ -13,6 +18,10 @@ export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
 	includeTime: false,
 	excludePatterns: ["#task"],
 	dateFormat: "YYYY-MM-DD",
+
+	blockSummarizerEnabled: true,
+	geminiApiKey: "",
+	geminiModel: "gemini-2.5-flash",
 };
 
 export class ShawnsToolboxSettingTab extends PluginSettingTab {
@@ -90,5 +99,56 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 				text.inputEl.rows = 5;
 				text.inputEl.cols = 30;
 			});
+
+		// Block Summarizer section
+		containerEl.createEl("h3", { text: "Block Summarizer" });
+
+		containerEl.createEl("p", {
+			text: 'Summarize a bullet point and its children using an LLM. Place your cursor on a bullet and run the "Summarize Block" command.',
+			cls: "setting-item-description",
+		});
+
+		new Setting(containerEl)
+			.setName("Enable block summarizer")
+			.setDesc("Toggle the block summarizer command on or off.")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.blockSummarizerEnabled)
+					.onChange(async (value) => {
+						this.plugin.settings.blockSummarizerEnabled = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Gemini API key")
+			.setDesc(
+				"Your Google Gemini API key. Get one at https://aistudio.google.com/apikey"
+			)
+			.addText((text) => {
+				text
+					.setPlaceholder("Enter your API key")
+					.setValue(this.plugin.settings.geminiApiKey)
+					.onChange(async (value) => {
+						this.plugin.settings.geminiApiKey = value.trim();
+						await this.plugin.saveSettings();
+					});
+				text.inputEl.type = "password";
+				text.inputEl.style.width = "300px";
+			});
+
+		new Setting(containerEl)
+			.setName("Gemini model")
+			.setDesc("The Gemini model to use for summarization.")
+			.addText((text) =>
+				text
+					.setPlaceholder("gemini-2.5-flash")
+					.setValue(this.plugin.settings.geminiModel)
+					.onChange(async (value) => {
+						this.plugin.settings.geminiModel =
+							value.trim() || "gemini-2.5-flash";
+						await this.plugin.saveSettings();
+					})
+			);
 	}
 }
