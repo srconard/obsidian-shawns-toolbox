@@ -1,2 +1,81 @@
 /* Shawn's Toolbox - Styles */
-/* Placeholder for future styling */
+
+/* ---- Note status control (sidebar panel + note footer) ---- */
+
+.stx-status {
+	padding: 0.5em 0;
+	font-size: var(--font-ui-small);
+}
+
+.stx-phase-row,
+.stx-ongoing-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.4em;
+	align-items: center;
+}
+
+/* Panel stacks vertically; footer stays on one line. */
+.stx-status--panel .stx-phase-row {
+	flex-direction: column;
+	align-items: stretch;
+}
+
+.stx-pill {
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	padding: 0.3em 0.7em;
+	cursor: pointer;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	text-align: left;
+	box-shadow: none;
+}
+
+.stx-pill:hover {
+	background: var(--background-modifier-hover);
+}
+
+.stx-pill--on {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	border-color: var(--interactive-accent);
+}
+
+.stx-divider {
+	border-top: 1px solid var(--background-modifier-border);
+	margin: 0.6em 0;
+}
+
+.stx-age {
+	color: var(--text-faint);
+	margin-left: auto;
+}
+
+.stx-conflict {
+	color: var(--text-warning);
+	margin-top: 0.5em;
+}
+
+.stx-status--footer {
+	border-top: 1px solid var(--background-modifier-border);
+	margin-top: 2em;
+}
+
+.stx-collapsed {
+	color: var(--text-faint);
+	cursor: pointer;
+	padding: 0.4em 0;
+	margin-top: 2em;
+	font-size: var(--font-ui-small);
+}
+
+.stx-collapsed:hover {
+	color: var(--text-muted);
+}
+
+/* Touch targets need to be bigger on the phone. */
+.is-mobile .stx-pill {
+	padding: 0.55em 0.9em;
+}
