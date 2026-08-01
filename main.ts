@@ -1,4 +1,4 @@
-import { Notice, Plugin } from "obsidian";
+import { Notice, Plugin, WorkspaceLeaf, TFile } from "obsidian";
 import { summarizeBlock } from "./block-summarizer";
 import {
 	createCheckboxExtensions,
@@ -9,6 +9,10 @@ import {
 	ShawnsToolboxSettingTab,
 	type ShawnsToolboxSettings,
 } from "./settings";
+import { StatusView, STATUS_VIEW_TYPE } from "./status-view";
+import { StatusFooter } from "./status-footer";
+import { findConflicts, formatConflictReport } from "./status-conflicts";
+import { todayIso } from "./status-service";
 
 export default class ShawnsToolboxPlugin extends Plugin {
 	settings: ShawnsToolboxSettings = DEFAULT_SETTINGS;
@@ -16,6 +20,7 @@ export default class ShawnsToolboxPlugin extends Plugin {
 		settings: DEFAULT_SETTINGS,
 		enabled: true,
 	};
+	private statusFooter: StatusFooter | null = null;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -44,6 +49,66 @@ export default class ShawnsToolboxPlugin extends Plugin {
 			},
 		});
 
+		// ---- Note status ----
+
+		this.registerView(
+			STATUS_VIEW_TYPE,
+			(leaf: WorkspaceLeaf) => new StatusView(leaf)
+		);
+
+		this.addCommand({
+			id: "open-status-panel",
+			name: "Open note status panel",
+			callback: async () => {
+				const existing =
+					this.app.workspace.getLeavesOfType(STATUS_VIEW_TYPE);
+				if (existing.length > 0) {
+					this.app.workspace.revealLeaf(existing[0]);
+					return;
+				}
+				const leaf = this.app.workspace.getRightLeaf(false);
+				if (!leaf) return;
+				await leaf.setViewState({
+					type: STATUS_VIEW_TYPE,
+					active: true,
+				});
+				this.app.workspace.revealLeaf(leaf);
+			},
+		});
+
+		this.addCommand({
+			id: "report-status-conflicts",
+			name: "Report status phase conflicts",
+			callback: async () => {
+				const conflicts = findConflicts(this.app);
+				const today = todayIso();
+				const path = `AGENTS/inbox/status-conflicts-${today}.md`;
+				const body = formatConflictReport(conflicts, today);
+				const existing = this.app.vault.getAbstractFileByPath(path);
+				if (existing instanceof TFile) {
+					await this.app.vault.modify(existing, body);
+				} else {
+					await this.app.vault.create(path, body);
+				}
+				new Notice(`${conflicts.length} conflicts → ${path}`);
+			},
+		});
+
+		this.statusFooter = new StatusFooter(this.app, () => this.settings);
+		const footer = this.statusFooter;
+		this.registerEvent(
+			this.app.workspace.on("layout-change", () => footer.refreshAll())
+		);
+		this.registerEvent(
+			this.app.workspace.on("active-leaf-change", () =>
+				footer.refreshAll()
+			)
+		);
+		this.registerEvent(
+			this.app.metadataCache.on("changed", () => footer.refreshAll())
+		);
+		this.app.workspace.onLayoutReady(() => footer.refreshAll());
+
 		// Add settings tab
 		this.addSettingTab(new ShawnsToolboxSettingTab(this.app, this));
 
@@ -51,6 +116,7 @@ export default class ShawnsToolboxPlugin extends Plugin {
 	}
 
 	onunload(): void {
+		this.statusFooter?.unmount();
 		console.log("Shawn's Toolbox unloaded");
 	}
 
@@ -67,5 +133,6 @@ export default class ShawnsToolboxPlugin extends Plugin {
 		// Update the shared state so extensions pick up new settings immediately
 		this.handlerState.settings = this.settings;
 		this.handlerState.enabled = this.settings.checkboxStampingEnabled;
+		this.statusFooter?.refreshAll();
 	}
 }

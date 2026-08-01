@@ -11,6 +11,10 @@ export interface ShawnsToolboxSettings {
 	blockSummarizerEnabled: boolean;
 	geminiApiKey: string;
 	geminiModel: string;
+
+	// Note status
+	statusFooterEnabled: boolean;
+	statusExcludeFolders: string[];
 }
 
 export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
@@ -24,6 +28,9 @@ export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
 	blockSummarizerEnabled: true,
 	geminiApiKey: "",
 	geminiModel: "gemini-2.5-flash",
+
+	statusFooterEnabled: true,
+	statusExcludeFolders: ["00. Timeline", "AGENTS"],
 };
 
 export class ShawnsToolboxSettingTab extends PluginSettingTab {
@@ -152,5 +159,49 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					})
 			);
+
+		// Note Status section
+		containerEl.createEl("h3", { text: "Note Status" });
+
+		containerEl.createEl("p", {
+			text: "Set a note's phase (simmering / on / active) and stamp the date it changed. 'ongoing' is a separate axis and can be combined with any phase, or stand alone.",
+			cls: "setting-item-description",
+		});
+
+		new Setting(containerEl)
+			.setName("Show status footer in notes")
+			.setDesc(
+				"Render the status checkboxes at the bottom of each note. The sidebar panel is unaffected."
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.statusFooterEnabled)
+					.onChange(async (value) => {
+						this.plugin.settings.statusFooterEnabled = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Exclude folders")
+			.setDesc(
+				"Notes under these folders get no status footer. One per line."
+			)
+			.addTextArea((text) => {
+				text
+					.setPlaceholder("00. Timeline\nAGENTS")
+					.setValue(
+						this.plugin.settings.statusExcludeFolders.join("\n")
+					)
+					.onChange(async (value) => {
+						this.plugin.settings.statusExcludeFolders = value
+							.split("\n")
+							.map((p) => p.trim())
+							.filter((p) => p.length > 0);
+						await this.plugin.saveSettings();
+					});
+				text.inputEl.rows = 3;
+				text.inputEl.cols = 30;
+			});
 	}
 }
