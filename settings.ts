@@ -14,7 +14,9 @@ export interface ShawnsToolboxSettings {
 }
 
 export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
-	checkboxStampingEnabled: true,
+	// Off by default: the Tasks plugin already stamps completion dates on `#task`
+	// lines, and enabling this plugin should not silently change task behaviour.
+	checkboxStampingEnabled: false,
 	includeTime: false,
 	excludePatterns: ["#task"],
 	dateFormat: "YYYY-MM-DD",
