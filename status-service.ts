@@ -27,6 +27,22 @@ export function todayIso(): string {
 	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+/** Local wall-clock time as 24h HH:mm, for the note-log timestamp. */
+export function nowHm(): string {
+	const d = new Date();
+	const pad = (n: number) => String(n).padStart(2, "0");
+	return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// Files whose phase write is mid-flight. A single status click can re-enter
+// writePhase: on a first-ever set the frontmatter-creation write fires a
+// metadataCache "changed" event that both the sidebar panel and the note
+// footer handle by tearing down and rebuilding the very control being clicked,
+// which can re-dispatch the click onto the freshly-rendered (still stale, phase
+// not yet in cache) button. This lock makes the second entry a no-op at the
+// source; the byte-identical dedupe in appendLog is the secondary guard.
+const phaseWritesInFlight = new Set<string>();
+
 export function readStatus(app: App, file: TFile): NoteStatus {
 	const fm = app.metadataCache.getFileCache(file)?.frontmatter ?? {};
 	const tags = normalizeTags(fm.tags);
@@ -52,16 +68,23 @@ export async function writePhase(
 	file: TFile,
 	phase: Phase | null
 ): Promise<void> {
-	const before = readStatus(app, file).phase;
-	const date = todayIso();
-	await app.fileManager.processFrontMatter(file, (fm) => {
-		fm.tags = setPhase(normalizeTags(fm.tags), phase);
-		fm.status_changed = date;
-	});
-	if (before !== phase) {
-		const body = await app.vault.read(file);
-		const entry = formatStatusLogEntry(before, phase, date);
-		await app.vault.modify(file, appendLog(body, entry));
+	if (phaseWritesInFlight.has(file.path)) return;
+	phaseWritesInFlight.add(file.path);
+	try {
+		const before = readStatus(app, file).phase;
+		const date = todayIso();
+		const time = nowHm();
+		await app.fileManager.processFrontMatter(file, (fm) => {
+			fm.tags = setPhase(normalizeTags(fm.tags), phase);
+			fm.status_changed = date;
+		});
+		if (before !== phase) {
+			const body = await app.vault.read(file);
+			const entry = formatStatusLogEntry(before, phase, date, time);
+			await app.vault.modify(file, appendLog(body, entry));
+		}
+	} finally {
+		phaseWritesInFlight.delete(file.path);
 	}
 }
 

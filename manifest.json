@@ -1,7 +1,7 @@
 {
 	"id": "shawns-toolbox",
 	"name": "Shawn's Toolbox",
-	"version": "1.4.0",
+	"version": "1.4.1",
 	"minAppVersion": "0.15.0",
 	"description": "Note status control (phase + ongoing with change dates, plus a signed note-log entry per transition), checkbox completion stamping, and block summarizer.",
 	"author": "Shawn",

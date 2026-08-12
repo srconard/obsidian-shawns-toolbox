@@ -17,6 +17,16 @@ describe("formatStatusLogEntry", () => {
 			"log:: 2026-08-12 status: active → none — toolbox"
 		);
 	});
+	it("includes the time when given (24h HH:mm)", () => {
+		expect(
+			formatStatusLogEntry("simmering", "active", "2026-08-12", "11:54")
+		).toBe("log:: 2026-08-12 11:54 status: simmering → active — toolbox");
+	});
+	it("omits the time when not given (hand-written human lines)", () => {
+		expect(formatStatusLogEntry(null, "active", "2026-08-12")).toBe(
+			"log:: 2026-08-12 status: none → active — toolbox"
+		);
+	});
 });
 
 describe("appendLog — section absent", () => {
@@ -69,6 +79,26 @@ describe("appendLog — section present", () => {
 		const after = appendLog(before, "log:: b");
 		expect(after).toContain("Line1\n- a checklist\n  - nested\n");
 		expect(after.endsWith("log:: a\nlog:: b\n")).toBe(true);
+	});
+});
+
+describe("appendLog — duplicate guard (first-set regression)", () => {
+	// The v1.4.0 bug: setting a status for the first time stamped two identical
+	// lines because the write path re-entered under one click. appendLog must
+	// treat a byte-identical last entry as a no-op so a re-entrant write cannot
+	// double the line.
+	it("does not append a line byte-identical to the section's last entry", () => {
+		const entry = "log:: 2026-08-12 11:54 status: none → active — toolbox";
+		const first = appendLog("# Note\n\nBody.\n", entry);
+		const second = appendLog(first, entry);
+		expect(second).toBe(first);
+		expect(second.split(entry).length - 1).toBe(1);
+	});
+	it("still appends a genuinely different entry (different time)", () => {
+		const a = "log:: 2026-08-12 11:54 status: none → active — toolbox";
+		const b = "log:: 2026-08-12 11:55 status: active → simmering — toolbox";
+		const after = appendLog(appendLog("Body\n", a), b);
+		expect(after.endsWith(`${a}\n${b}\n`)).toBe(true);
 	});
 });
 

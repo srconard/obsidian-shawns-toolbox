@@ -23,15 +23,19 @@ function phaseLabel(phase: Phase | null): string {
 
 /**
  * A status-transition log entry, e.g.
- *   "log:: 2026-08-12 status: simmering → active — toolbox"
- * Signed "toolbox" because the plugin is the author of this line.
+ *   "log:: 2026-08-12 11:54 status: simmering → active — toolbox"
+ * Signed "toolbox" because the plugin is the author of this line. The time
+ * (24h HH:mm, local) is optional so hand-written human lines may omit it; the
+ * toolbox and agents always pass it.
  */
 export function formatStatusLogEntry(
 	from: Phase | null,
 	to: Phase | null,
-	dateIso: string
+	dateIso: string,
+	time?: string
 ): string {
-	return `log:: ${dateIso} status: ${phaseLabel(from)} → ${phaseLabel(to)} — toolbox`;
+	const stamp = time ? `${dateIso} ${time}` : dateIso;
+	return `log:: ${stamp} status: ${phaseLabel(from)} → ${phaseLabel(to)} — toolbox`;
 }
 
 /**
@@ -70,6 +74,15 @@ export function appendLog(content: string, entry: string): string {
 	let insertAt = endIdx;
 	while (insertAt > headingIdx + 1 && lines[insertAt - 1].trim() === "") {
 		insertAt--;
+	}
+	// Idempotence guard: never append a line byte-identical to the section's
+	// current last entry. A single status click can re-enter the write path
+	// (the frontmatter-creation event on a first-ever set tears down and
+	// rebuilds the clicked control mid-write), and without this a first set
+	// stamped two identical lines. See the writePhase in-flight lock for the
+	// primary fix; this is belt-and-braces and also protects hand edits.
+	if (insertAt > headingIdx + 1 && lines[insertAt - 1] === entry) {
+		return content;
 	}
 	lines.splice(insertAt, 0, entry);
 	return lines.join("\n");
