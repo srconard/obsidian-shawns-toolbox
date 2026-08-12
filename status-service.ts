@@ -11,6 +11,7 @@ import {
 	setOngoing,
 	type Phase,
 } from "./status-core";
+import { appendLog, formatStatusLogEntry } from "./note-log";
 
 export interface NoteStatus {
 	phase: Phase | null;
@@ -41,16 +42,27 @@ export function readStatus(app: App, file: TFile): NoteStatus {
 /**
  * Set the phase and stamp the date. Clearing the phase (null) counts as a
  * change and stamps too, so "when did this stop being active" stays answerable.
+ *
+ * A status transition also appends one signed line to the note's `## Log`
+ * section (created at the bottom if absent), per the note-log convention, so
+ * the history stays readable and Dataview-queryable in the note itself.
  */
 export async function writePhase(
 	app: App,
 	file: TFile,
 	phase: Phase | null
 ): Promise<void> {
+	const before = readStatus(app, file).phase;
+	const date = todayIso();
 	await app.fileManager.processFrontMatter(file, (fm) => {
 		fm.tags = setPhase(normalizeTags(fm.tags), phase);
-		fm.status_changed = todayIso();
+		fm.status_changed = date;
 	});
+	if (before !== phase) {
+		const body = await app.vault.read(file);
+		const entry = formatStatusLogEntry(before, phase, date);
+		await app.vault.modify(file, appendLog(body, entry));
+	}
 }
 
 /**
