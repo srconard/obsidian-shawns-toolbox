@@ -66,13 +66,15 @@ export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
 		week: "[00. Timeline/]gggg-[W]ww",
 		month: "[00. Timeline/]YYYY-MM",
 		quarter: "[00. Timeline/]YYYY-[Q]Q",
+		year: "[00. Timeline/]YYYY",
 	},
-	sectionSelections: { day: [], week: [], month: [], quarter: [] },
+	sectionSelections: { day: [], week: [], month: [], quarter: [], year: [] },
 	focusSectionSelections: {
 		day: ["## Plan for Today"],
 		week: [],
 		month: [],
 		quarter: [],
+		year: [],
 	},
 	focusScope: "day",
 	sectionsReadingMode: false,
@@ -296,6 +298,7 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 			["week", "Weekly note format"],
 			["month", "Monthly note format"],
 			["quarter", "Quarterly note format"],
+			["year", "Yearly note format"],
 		];
 		for (const [scope, label] of scopeLabels) {
 			new Setting(containerEl).setName(label).addText((text) =>

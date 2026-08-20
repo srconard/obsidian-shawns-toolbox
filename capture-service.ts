@@ -10,13 +10,14 @@ import {
 } from "./section-core";
 import type { ShawnsToolboxSettings } from "./settings";
 
-export type NoteScope = "day" | "week" | "month" | "quarter";
+export type NoteScope = "day" | "week" | "month" | "quarter" | "year";
 
 export const SCOPE_LABELS: Record<NoteScope, string> = {
 	day: "Today",
 	week: "Week",
 	month: "Month",
 	quarter: "Quarter",
+	year: "Year",
 };
 
 export const CAPTURE_LABELS: Record<CaptureKind, string> = {

@@ -154,7 +154,13 @@ export class SectionCards extends Component {
 			void this.rebuild();
 		});
 		const scopeRow = toolbar.createDiv("stx-scope-row");
-		for (const scope of ["day", "week", "month", "quarter"] as NoteScope[]) {
+		for (const scope of [
+			"day",
+			"week",
+			"month",
+			"quarter",
+			"year",
+		] as NoteScope[]) {
 			const btn = scopeRow.createEl("button", {
 				cls: "stx-scope-btn" + (scope === this.scope ? " is-active" : ""),
 				text: SCOPE_LABELS[scope],

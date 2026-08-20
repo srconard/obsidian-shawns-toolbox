@@ -201,14 +201,24 @@ export default class ShawnsToolboxPlugin extends Plugin {
 	async loadSettings(): Promise<void> {
 		const raw = ((await this.loadData()) ?? {}) as Record<string, unknown>;
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, raw);
-		// Clone the nested records so per-scope writes never mutate the
-		// module-level DEFAULT_SETTINGS object.
-		this.settings.captureTargets = { ...this.settings.captureTargets };
-		this.settings.periodicFormats = { ...this.settings.periodicFormats };
+		// Merge the nested records defaults-first: a stored data.json from an
+		// older version lacks newer keys (e.g. the "year" scope), and the
+		// fresh objects also keep per-scope writes from mutating the
+		// module-level DEFAULT_SETTINGS.
+		this.settings.captureTargets = {
+			...DEFAULT_SETTINGS.captureTargets,
+			...this.settings.captureTargets,
+		};
+		this.settings.periodicFormats = {
+			...DEFAULT_SETTINGS.periodicFormats,
+			...this.settings.periodicFormats,
+		};
 		this.settings.sectionSelections = {
+			...DEFAULT_SETTINGS.sectionSelections,
 			...this.settings.sectionSelections,
 		};
 		this.settings.focusSectionSelections = {
+			...DEFAULT_SETTINGS.focusSectionSelections,
 			...this.settings.focusSectionSelections,
 		};
 		// v1.5.x migration: the Focus panel used to keep ONE selection across

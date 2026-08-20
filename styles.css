@@ -200,10 +200,19 @@
 	gap: 0.4em;
 }
 
+/* Scrolls sideways where five scopes don't fit (phone, narrow sidebar). */
 .stx-scope-row {
 	display: flex;
 	gap: 0.2em;
 	flex: 1 1 auto;
+	min-width: 0;
+	flex-wrap: nowrap;
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+
+.stx-scope-row::-webkit-scrollbar {
+	display: none;
 }
 
 .stx-scope-btn {
@@ -215,6 +224,8 @@
 	border-radius: var(--radius-s);
 	cursor: pointer;
 	font-size: var(--font-ui-small);
+	flex: 0 0 auto;
+	white-space: nowrap;
 }
 
 .stx-scope-btn.is-active {
