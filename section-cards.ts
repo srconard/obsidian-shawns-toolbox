@@ -116,6 +116,20 @@ export class SectionCards extends Component {
 		await this.host.saveSettings();
 	}
 
+	private chipsCollapsed(): boolean {
+		const s = this.host.getSettings();
+		return this.surface === "focus"
+			? s.focusChipsCollapsed
+			: s.sectionsChipsCollapsed;
+	}
+
+	private async setChipsCollapsed(v: boolean): Promise<void> {
+		const s = this.host.getSettings();
+		if (this.surface === "focus") s.focusChipsCollapsed = v;
+		else s.sectionsChipsCollapsed = v;
+		await this.host.saveSettings();
+	}
+
 	// ---- UI ----
 
 	async rebuild(): Promise<void> {
@@ -124,6 +138,16 @@ export class SectionCards extends Component {
 		this.containerEl.addClass("stx-section-cards");
 
 		const toolbar = this.containerEl.createDiv("stx-cards-toolbar");
+		const collapsed = this.chipsCollapsed();
+		const chipsToggle = toolbar.createEl("button", {
+			cls: "stx-chips-toggle",
+			attr: { "aria-label": "Show/hide section buttons" },
+		});
+		setIcon(chipsToggle, collapsed ? "chevron-right" : "chevron-down");
+		chipsToggle.addEventListener("click", async () => {
+			await this.setChipsCollapsed(!this.chipsCollapsed());
+			void this.rebuild();
+		});
 		const scopeRow = toolbar.createDiv("stx-scope-row");
 		for (const scope of ["day", "week", "month", "quarter"] as NoteScope[]) {
 			const btn = scopeRow.createEl("button", {
@@ -151,7 +175,9 @@ export class SectionCards extends Component {
 			void this.rebuild();
 		});
 
-		const chipsEl = this.containerEl.createDiv("stx-chips");
+		const chipsEl = this.containerEl.createDiv(
+			"stx-chips" + (collapsed ? " is-collapsed" : "")
+		);
 		this.cardsEl = this.containerEl.createDiv("stx-cards");
 
 		const file = this.noteFile();

@@ -31,6 +31,9 @@ export interface ShawnsToolboxSettings {
 	/** Reading-mode toggles, persisted per surface */
 	sectionsReadingMode: boolean;
 	focusReadingMode: boolean;
+	/** Chip-row collapse state, persisted per surface */
+	sectionsChipsCollapsed: boolean;
+	focusChipsCollapsed: boolean;
 
 	// Voice capture
 	groqApiKey: string;
@@ -69,6 +72,8 @@ export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
 	focusScope: "day",
 	sectionsReadingMode: false,
 	focusReadingMode: false,
+	sectionsChipsCollapsed: false,
+	focusChipsCollapsed: false,
 
 	groqApiKey: "",
 	groqModel: "whisper-large-v3-turbo",

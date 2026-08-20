@@ -1,7 +1,7 @@
 // capture-view.ts — the central "blank screen" view. Two modes toggled at the
 // top: Capture (type → route to a daily-note section → screen clears) and
 // Sections (the editable section cards).
-import { ItemView, Notice, WorkspaceLeaf, setIcon } from "obsidian";
+import { ItemView, Notice, Scope, WorkspaceLeaf, setIcon } from "obsidian";
 import type { CaptureKind } from "./section-core";
 import {
 	CAPTURE_ICONS,
@@ -20,9 +20,20 @@ export class CaptureView extends ItemView {
 	private cards: SectionCards | null = null;
 	private inputEl: HTMLTextAreaElement | null = null;
 	private pendingText = "";
+	private submitting = false;
 
 	constructor(leaf: WorkspaceLeaf, private host: CardsHost) {
 		super(leaf);
+		// Mod+Enter = Thought. Registered on the view's keymap scope because
+		// Obsidian's keymap claims the combo before a plain DOM listener on
+		// the textarea ever sees it.
+		this.scope = new Scope(this.app.scope);
+		this.scope.register(["Mod"], "Enter", (evt) => {
+			if (this.mode !== "capture") return true;
+			evt.preventDefault();
+			void this.submit("thought");
+			return false;
+		});
 	}
 
 	getViewType(): string {
@@ -113,8 +124,10 @@ export class CaptureView extends ItemView {
 			btn.addEventListener("click", () => void this.submit(kind));
 		}
 
-		// Ctrl/Cmd+Enter routes to Thought — the most common capture.
+		// Backup DOM path for Mod+Enter (the scope handler above is primary;
+		// defaultPrevented guards against double-submit when both fire).
 		input.addEventListener("keydown", (e) => {
+			if (e.defaultPrevented) return;
 			if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
 				e.preventDefault();
 				void this.submit("thought");
@@ -124,9 +137,10 @@ export class CaptureView extends ItemView {
 	}
 
 	private async submit(kind: CaptureKind): Promise<void> {
-		if (!this.inputEl) return;
+		if (!this.inputEl || this.submitting) return;
 		const text = this.inputEl.value;
 		if (!text.trim()) return;
+		this.submitting = true;
 		try {
 			const target = await routeCapture(
 				this.app,
@@ -143,6 +157,8 @@ export class CaptureView extends ItemView {
 			new Notice(
 				`Capture failed: ${e instanceof Error ? e.message : String(e)}`
 			);
+		} finally {
+			this.submitting = false;
 		}
 	}
 }
