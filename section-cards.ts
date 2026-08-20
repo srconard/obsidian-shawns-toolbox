@@ -154,6 +154,13 @@ export class SectionCards extends Component {
 		this.teardownCards();
 		this.containerEl.empty();
 		this.containerEl.addClass("stx-section-cards");
+		// Layout as INLINE styles: in the mobile drawer Obsidian's own
+		// .view-content rules kept beating our class selectors (the probe
+		// showed display:flex never applying → the column didn't stretch and
+		// the container's empty bottom rendered as a dead box above the
+		// keyboard). Inline styles cannot lose a specificity war.
+		this.containerEl.style.display = "flex";
+		this.containerEl.style.flexDirection = "column";
 
 		const toolbar = this.containerEl.createDiv("stx-cards-toolbar");
 		const collapsed = this.chipsCollapsed();
@@ -205,6 +212,8 @@ export class SectionCards extends Component {
 			"stx-chips" + (collapsed ? " is-collapsed" : "")
 		);
 		this.cardsEl = this.containerEl.createDiv("stx-cards");
+		this.cardsEl.style.flex = "1 1 auto";
+		this.cardsEl.style.minHeight = "0";
 		if (!this.readingMode()) this.buildEditBar();
 
 		const file = this.noteFile();
@@ -319,6 +328,8 @@ export class SectionCards extends Component {
 	 */
 	private buildEditBar(): void {
 		const bar = this.containerEl.createDiv("stx-edit-bar");
+		bar.style.marginTop = "auto";
+		bar.style.flex = "0 0 auto";
 		const opBtn = (op: LineOp, aria: string, icon: string) => {
 			const btn = bar.createEl("button", {
 				cls: "stx-edit-btn",
@@ -355,6 +366,26 @@ export class SectionCards extends Component {
 	private async runLayoutProbe(bar: HTMLElement): Promise<void> {
 		const lines: string[] = [];
 		try {
+			const version =
+				(this.host.app as any).plugins?.plugins?.["shawns-toolbox"]
+					?.manifest?.version ?? "?";
+			lines.push(`plugin v${version}`);
+			const cs = getComputedStyle(this.containerEl);
+			const cr = this.containerEl.getBoundingClientRect();
+			lines.push(
+				`container computed: display=${cs.display} flexDir=${cs.flexDirection}` +
+					` [top=${Math.round(cr.top)} bottom=${Math.round(cr.bottom)}]`
+			);
+			if (this.cardsEl) {
+				const cc = getComputedStyle(this.cardsEl);
+				const r = this.cardsEl.getBoundingClientRect();
+				lines.push(
+					`cards computed: flexGrow=${cc.flexGrow}` +
+						` [top=${Math.round(r.top)} bottom=${Math.round(r.bottom)} h=${Math.round(r.height)}]`
+				);
+			}
+			const bs = getComputedStyle(bar);
+			lines.push(`bar computed: marginTop=${bs.marginTop}`);
 			const rect = bar.getBoundingClientRect();
 			const vv = window.visualViewport;
 			lines.push(
