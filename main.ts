@@ -199,11 +199,29 @@ export default class ShawnsToolboxPlugin extends Plugin {
 	}
 
 	async loadSettings(): Promise<void> {
-		this.settings = Object.assign(
-			{},
-			DEFAULT_SETTINGS,
-			await this.loadData()
-		);
+		const raw = ((await this.loadData()) ?? {}) as Record<string, unknown>;
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, raw);
+		// Clone the nested records so per-scope writes never mutate the
+		// module-level DEFAULT_SETTINGS object.
+		this.settings.captureTargets = { ...this.settings.captureTargets };
+		this.settings.periodicFormats = { ...this.settings.periodicFormats };
+		this.settings.sectionSelections = {
+			...this.settings.sectionSelections,
+		};
+		this.settings.focusSectionSelections = {
+			...this.settings.focusSectionSelections,
+		};
+		// v1.5.x migration: the Focus panel used to keep ONE selection across
+		// all scopes (focusSections) — seed it into the current scope's slot.
+		const legacy = raw.focusSections;
+		if (
+			Array.isArray(legacy) &&
+			legacy.length > 0 &&
+			!raw.focusSectionSelections
+		) {
+			this.settings.focusSectionSelections[this.settings.focusScope] =
+				legacy as string[];
+		}
 	}
 
 	async saveSettings(): Promise<void> {

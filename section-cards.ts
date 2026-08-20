@@ -90,15 +90,20 @@ export class SectionCards extends Component {
 
 	private selection(): string[] {
 		const s = this.host.getSettings();
-		return this.surface === "focus"
-			? s.focusSections
-			: s.sectionSelections[this.scope] ?? [];
+		const map =
+			this.surface === "focus"
+				? s.focusSectionSelections
+				: s.sectionSelections;
+		return map[this.scope] ?? [];
 	}
 
 	private async setSelection(specs: string[]): Promise<void> {
 		const s = this.host.getSettings();
-		if (this.surface === "focus") s.focusSections = specs;
-		else s.sectionSelections[this.scope] = specs;
+		const map =
+			this.surface === "focus"
+				? s.focusSectionSelections
+				: s.sectionSelections;
+		map[this.scope] = specs;
 		await this.host.saveSettings();
 	}
 

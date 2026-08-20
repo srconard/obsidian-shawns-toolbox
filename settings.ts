@@ -23,10 +23,10 @@ export interface ShawnsToolboxSettings {
 	captureTargets: Record<CaptureKind, string>;
 	/** moment formats resolving each periodic note's vault path (no .md) */
 	periodicFormats: Record<NoteScope, string>;
-	/** Persisted section-mode chip selection per scope (capture view) */
+	/** Persisted section chip selection per scope (sections view) */
 	sectionSelections: Record<NoteScope, string[]>;
-	/** Persisted selection for the left Focus panel */
-	focusSections: string[];
+	/** Persisted selection per scope for the left Focus panel */
+	focusSectionSelections: Record<NoteScope, string[]>;
 	focusScope: NoteScope;
 	/** Reading-mode toggles, persisted per surface */
 	sectionsReadingMode: boolean;
@@ -68,7 +68,12 @@ export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
 		quarter: "[00. Timeline/]YYYY-[Q]Q",
 	},
 	sectionSelections: { day: [], week: [], month: [], quarter: [] },
-	focusSections: ["## Plan for Today"],
+	focusSectionSelections: {
+		day: ["## Plan for Today"],
+		week: [],
+		month: [],
+		quarter: [],
+	},
 	focusScope: "day",
 	sectionsReadingMode: false,
 	focusReadingMode: false,
