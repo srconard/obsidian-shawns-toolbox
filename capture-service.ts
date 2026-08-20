@@ -8,6 +8,10 @@ import {
 	formatCaptureLine,
 	type CaptureKind,
 } from "./section-core";
+import {
+	renderDailyNote,
+	type TemplateVault,
+} from "./template-renderer";
 import type { ShawnsToolboxSettings } from "./settings";
 
 export type NoteScope = "day" | "week" | "month" | "quarter" | "year";
@@ -40,13 +44,19 @@ export function nowHm(): string {
 	return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+export function todayIsoLocal(): string {
+	const d = new Date();
+	const pad = (n: number) => String(n).padStart(2, "0");
+	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 export function periodicNotePath(
 	settings: ShawnsToolboxSettings,
-	scope: NoteScope
+	scope: NoteScope,
+	dateIso?: string
 ): string {
-	return normalizePath(
-		moment().format(settings.periodicFormats[scope]) + ".md"
-	);
+	const m = dateIso ? moment(dateIso, "YYYY-MM-DD") : moment();
+	return normalizePath(m.format(settings.periodicFormats[scope]) + ".md");
 }
 
 export function getPeriodicFile(
@@ -59,25 +69,66 @@ export function getPeriodicFile(
 }
 
 /**
- * Append captured text to its target section in today's daily note.
+ * The daily note for dateIso, created from the daily template (via the
+ * create-daily-note renderer port) when it does not exist yet.
+ */
+export async function ensureDailyNote(
+	app: App,
+	settings: ShawnsToolboxSettings,
+	dateIso: string
+): Promise<TFile> {
+	const path = periodicNotePath(settings, "day", dateIso);
+	const existing = app.vault.getAbstractFileByPath(path);
+	if (existing instanceof TFile) return existing;
+
+	const tv: TemplateVault = {
+		read: async (p: string) => {
+			const f = app.vault.getAbstractFileByPath(normalizePath(p));
+			return f instanceof TFile ? await app.vault.cachedRead(f) : null;
+		},
+	};
+	const content = await renderDailyNote(
+		tv,
+		{
+			template: settings.dailyTemplatePath,
+			templaterDir: settings.templaterFolder,
+		},
+		dateIso,
+		nowHm()
+	);
+	if (content === null) {
+		throw new Error(
+			`Daily note template not found: ${settings.dailyTemplatePath}`
+		);
+	}
+	const folder = path.split("/").slice(0, -1).join("/");
+	if (folder && !app.vault.getAbstractFileByPath(folder)) {
+		await app.vault.createFolder(folder);
+	}
+	return await app.vault.create(path, content);
+}
+
+/**
+ * Append captured text to its target section in the daily note for dateIso
+ * (default: today), creating that note from the template when missing.
  * Returns the section title for the receipt toast. Throws with a readable
- * message when there is nothing to capture or no daily note — the caller
- * must keep the user's text on failure.
+ * message when there is nothing to capture — the caller must keep the
+ * user's text on failure.
  */
 export async function routeCapture(
 	app: App,
 	settings: ShawnsToolboxSettings,
 	kind: CaptureKind,
-	text: string
+	text: string,
+	dateIso?: string
 ): Promise<string> {
 	const trimmed = text.trim();
 	if (!trimmed) throw new Error("Nothing to capture");
-	const file = getPeriodicFile(app, settings, "day");
-	if (!file) {
-		throw new Error(
-			`No daily note at ${periodicNotePath(settings, "day")}`
-		);
-	}
+	const file = await ensureDailyNote(
+		app,
+		settings,
+		dateIso ?? todayIsoLocal()
+	);
 	const heading = settings.captureTargets[kind];
 	const line = formatCaptureLine(kind, trimmed, nowHm());
 	await app.vault.process(file, (content) =>

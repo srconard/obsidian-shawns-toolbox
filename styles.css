@@ -167,6 +167,67 @@
 	border: 1px solid var(--background-modifier-border);
 	color: var(--text-normal);
 	cursor: pointer;
+	/* long-press must not trigger text selection / iOS callout */
+	user-select: none;
+	-webkit-user-select: none;
+	-webkit-touch-callout: none;
+	touch-action: manipulation;
+}
+
+/* ---- long-press date bar ---- */
+
+.stx-datebar {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	gap: 0.35em;
+	padding: 0.45em 0.6em;
+	border: 1px solid var(--interactive-accent);
+	border-radius: var(--radius-m);
+	background: var(--background-secondary);
+}
+
+.stx-datebar-label {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	white-space: nowrap;
+}
+
+.stx-datebar-btn {
+	background: transparent;
+	border: none;
+	box-shadow: none;
+	color: var(--text-muted);
+	padding: 0.3em;
+	border-radius: var(--radius-s);
+	cursor: pointer;
+	display: flex;
+}
+
+.stx-datebar-btn:hover {
+	color: var(--text-normal);
+	background: var(--background-modifier-hover);
+}
+
+.stx-datebar-input {
+	flex: 1 1 auto;
+	min-width: 0;
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+	padding: 0.25em 0.4em;
+}
+
+.stx-datebar-add {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	border: none;
+	border-radius: var(--radius-s);
+	padding: 0.35em 0.9em;
+	cursor: pointer;
+	font-weight: 600;
 }
 
 .stx-capture-btn:hover {

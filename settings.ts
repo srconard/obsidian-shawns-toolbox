@@ -23,6 +23,10 @@ export interface ShawnsToolboxSettings {
 	captureTargets: Record<CaptureKind, string>;
 	/** moment formats resolving each periodic note's vault path (no .md) */
 	periodicFormats: Record<NoteScope, string>;
+	/** Daily note template, rendered when capture targets a missing day */
+	dailyTemplatePath: string;
+	/** Folder holding Templater includes (and its "Day Tasks/" subfolder) */
+	templaterFolder: string;
 	/** Persisted section chip selection per scope (sections view) */
 	sectionSelections: Record<NoteScope, string[]>;
 	/** Persisted selection per scope for the left Focus panel */
@@ -68,6 +72,8 @@ export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
 		quarter: "[00. Timeline/]YYYY-[Q]Q",
 		year: "[00. Timeline/]YYYY",
 	},
+	dailyTemplatePath: "Settings/Templates/Day/Daily Note Template.md",
+	templaterFolder: "Settings/Templater",
 	sectionSelections: { day: [], week: [], month: [], quarter: [], year: [] },
 	focusSectionSelections: {
 		day: ["## Plan for Today"],
@@ -312,6 +318,38 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 					})
 			);
 		}
+
+		new Setting(containerEl)
+			.setName("Daily note template")
+			.setDesc(
+				"Rendered (create-daily-note style) when a capture targets a day whose note doesn't exist yet."
+			)
+			.addText((text) => {
+				text
+					.setValue(this.plugin.settings.dailyTemplatePath)
+					.onChange(async (value) => {
+						this.plugin.settings.dailyTemplatePath =
+							value.trim() ||
+							DEFAULT_SETTINGS.dailyTemplatePath;
+						await this.plugin.saveSettings();
+					});
+				text.inputEl.style.width = "300px";
+			});
+
+		new Setting(containerEl)
+			.setName("Templater folder")
+			.setDesc(
+				'Folder the template\'s includes resolve against (holds "Day Tasks/").'
+			)
+			.addText((text) =>
+				text
+					.setValue(this.plugin.settings.templaterFolder)
+					.onChange(async (value) => {
+						this.plugin.settings.templaterFolder =
+							value.trim() || DEFAULT_SETTINGS.templaterFolder;
+						await this.plugin.saveSettings();
+					})
+			);
 
 		// Voice capture section
 		containerEl.createEl("h3", { text: "Voice capture" });
