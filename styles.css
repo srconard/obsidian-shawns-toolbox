@@ -15,32 +15,63 @@
 	align-items: center;
 }
 
-/* Panel stacks vertically; footer stays on one line. */
-.stx-status--panel .stx-phase-row {
-	flex-direction: column;
-	align-items: stretch;
+/* Panel: the three phases share one row at equal width. */
+.stx-status--panel .stx-phase-row .stx-pill {
+	flex: 1 1 0;
 }
 
 .stx-pill {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.45em;
 	background: var(--background-secondary);
 	border: 1px solid var(--background-modifier-border);
-	border-radius: 6px;
-	padding: 0.3em 0.7em;
+	border-radius: 999px;
+	padding: 0.35em 0.85em;
 	cursor: pointer;
 	color: var(--text-muted);
 	font-size: var(--font-ui-small);
-	text-align: left;
 	box-shadow: none;
+	transition: background 80ms ease, border-color 80ms ease, color 80ms ease;
 }
 
 .stx-pill:hover {
 	background: var(--background-modifier-hover);
+	color: var(--text-normal);
 }
 
-.stx-pill--on {
-	background: var(--interactive-accent);
-	color: var(--text-on-accent);
+.stx-pill-dot {
+	flex: 0 0 auto;
+	width: 0.55em;
+	height: 0.55em;
+	border-radius: 50%;
+	background: var(--background-modifier-border-hover);
+}
+
+.stx-pill--simmering .stx-pill-dot {
+	background: var(--color-yellow);
+}
+
+.stx-pill--on .stx-pill-dot {
+	background: var(--color-blue);
+}
+
+.stx-pill--active .stx-pill-dot {
+	background: var(--color-green);
+}
+
+.stx-pill--ongoing .stx-pill-dot {
+	background: var(--color-purple);
+}
+
+.stx-pill--current {
+	/* fallback first, then the accent tint where color-mix is supported */
+	background: var(--background-modifier-hover);
+	background: color-mix(in srgb, var(--interactive-accent) 16%, transparent);
 	border-color: var(--interactive-accent);
+	color: var(--text-normal);
+	font-weight: 600;
 }
 
 .stx-divider {
@@ -49,7 +80,9 @@
 }
 
 .stx-age {
-	color: var(--text-faint);
+	color: var(--text-muted);
+	opacity: 0.7;
+	font-size: var(--font-ui-smaller);
 	margin-left: auto;
 }
 

@@ -20,9 +20,10 @@ export function renderStatusControls(
 	for (const phase of PHASES) {
 		const isCurrent = status.phase === phase;
 		const btn = phaseRow.createEl("button", {
-			cls: `stx-pill${isCurrent ? " stx-pill--on" : ""}`,
-			text: `${isCurrent ? "☑" : "☐"} ${phase}`,
+			cls: `stx-pill stx-pill--${phase}${isCurrent ? " stx-pill--current" : ""}`,
 		});
+		btn.createSpan({ cls: "stx-pill-dot" });
+		btn.createSpan({ cls: "stx-pill-label", text: phase });
 		btn.setAttribute("aria-pressed", String(isCurrent));
 		btn.onclick = async () => {
 			// Clicking the current phase clears it; clicking another switches.
@@ -35,9 +36,10 @@ export function renderStatusControls(
 
 	const ongoingRow = container.createDiv({ cls: "stx-ongoing-row" });
 	const ongoingBtn = ongoingRow.createEl("button", {
-		cls: `stx-pill${status.ongoing ? " stx-pill--on" : ""}`,
-		text: `${status.ongoing ? "☑" : "☐"} ongoing`,
+		cls: `stx-pill stx-pill--ongoing${status.ongoing ? " stx-pill--current" : ""}`,
 	});
+	ongoingBtn.createSpan({ cls: "stx-pill-dot" });
+	ongoingBtn.createSpan({ cls: "stx-pill-label", text: "ongoing" });
 	ongoingBtn.setAttribute("aria-pressed", String(status.ongoing));
 	ongoingBtn.onclick = async () => {
 		await writeOngoing(app, file, !status.ongoing);
