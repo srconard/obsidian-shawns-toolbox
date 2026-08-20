@@ -11,12 +11,21 @@ import { App, Component, TFile } from "obsidian";
 import {
 	indentLines,
 	moveLines,
+	toggleBullet,
+	toggleCheckbox,
 	lineOfOffset,
 	colOfOffset,
 	offsetOf,
+	type LineOpResult,
 } from "./line-ops";
 
-export type LineOp = "indent" | "outdent" | "up" | "down";
+export type LineOp =
+	| "indent"
+	| "outdent"
+	| "up"
+	| "down"
+	| "bullet"
+	| "checkbox";
 
 export interface EmbeddedEditorOptions {
 	value: string;
@@ -118,52 +127,6 @@ export class EmbeddedMarkdownEditor extends Component {
 				this.opts.onBlur?.(this.get())
 			);
 		}
-		this.registerDomEvent(el, "focusin", () => this.claimActiveEditor());
-	}
-
-	/**
-	 * Announce this embedded editor as the workspace's active editor while it
-	 * has focus. Obsidian's mobile toolbar (the strip above the keyboard) and
-	 * every editor command (toggle bullet/checkbox, indent, move line) act on
-	 * `workspace.activeEditor` — a real MarkdownView sets it on focus, but an
-	 * embedded editor doesn't, which leaves the toolbar container empty and
-	 * its buttons dead. Internals-based (like the editor mount itself), so
-	 * failure is silent: the toolbar just doesn't light up.
-	 */
-	private claimActiveEditor(): void {
-		if (!this.editor) return;
-		try {
-			const owner = this.editor.owner;
-			if (!owner) return;
-			// The owner is our options object; commands expect a
-			// MarkdownFileInfo shape — give it `editor` and `file` lazily.
-			if (!("editor" in owner)) {
-				Object.defineProperty(owner, "editor", {
-					get: () => this.editor?.editor ?? null,
-					configurable: true,
-				});
-			}
-			if (!("file" in owner)) {
-				Object.defineProperty(owner, "file", {
-					get: () => {
-						if (!this.opts.filePath) return null;
-						const f = this.app.vault.getAbstractFileByPath(
-							this.opts.filePath
-						);
-						return f instanceof TFile ? f : null;
-					},
-					configurable: true,
-				});
-			}
-			if (!owner.editor) return;
-			const ws = this.app.workspace as any;
-			ws.activeEditor = owner;
-			const toolbar = (this.app as any).mobileToolbar;
-			toolbar?.update?.();
-			toolbar?.requestUpdate?.();
-		} catch {
-			// internals moved — never break typing over a toolbar nicety
-		}
 	}
 
 	private mountTextarea(container: HTMLElement): void {
@@ -209,10 +172,28 @@ export class EmbeddedMarkdownEditor extends Component {
 		const startLine = lineOfOffset(text, Math.min(sel.anchor, sel.head));
 		const endLine = lineOfOffset(text, Math.max(sel.anchor, sel.head));
 		const col = colOfOffset(text, sel.head);
-		const res =
-			op === "indent" || op === "outdent"
-				? indentLines(text, startLine, endLine, op === "indent" ? 1 : -1)
-				: moveLines(text, startLine, endLine, op === "up" ? -1 : 1);
+		let res: LineOpResult;
+		switch (op) {
+			case "indent":
+			case "outdent":
+				res = indentLines(
+					text,
+					startLine,
+					endLine,
+					op === "indent" ? 1 : -1
+				);
+				break;
+			case "up":
+			case "down":
+				res = moveLines(text, startLine, endLine, op === "up" ? -1 : 1);
+				break;
+			case "bullet":
+				res = toggleBullet(text, startLine, endLine);
+				break;
+			case "checkbox":
+				res = toggleCheckbox(text, startLine, endLine);
+				break;
+		}
 		if (!res.changed) return false;
 		// Put a plain cursor on the head's line, same column (clamped).
 		const headLine =

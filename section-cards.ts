@@ -205,6 +205,7 @@ export class SectionCards extends Component {
 			"stx-chips" + (collapsed ? " is-collapsed" : "")
 		);
 		this.cardsEl = this.containerEl.createDiv("stx-cards");
+		if (!this.readingMode()) this.buildEditBar();
 
 		const file = this.noteFile();
 		if (!file) {
@@ -306,23 +307,35 @@ export class SectionCards extends Component {
 			today.addClass("is-anchored");
 		}
 
-		if (!this.readingMode()) {
-			const ops = nav.createDiv("stx-lineops");
-			const opBtn = (op: LineOp, aria: string, icon: string) => {
-				const btn = ops.createEl("button", {
-					cls: "stx-nav-btn",
-					attr: { "aria-label": aria },
-				});
-				setIcon(btn, icon);
-				// Keep the editor's focus/cursor: the press must not blur it.
-				btn.addEventListener("pointerdown", (e) => e.preventDefault());
-				btn.addEventListener("click", () => this.applyLineOp(op));
-			};
-			opBtn("outdent", "Outdent line", "chevrons-left");
-			opBtn("indent", "Indent line", "chevrons-right");
-			opBtn("up", "Move line up", "arrow-up");
-			opBtn("down", "Move line down", "arrow-down");
-		}
+	}
+
+	/**
+	 * The edit bar: bullet / checkbox / outdent / indent / move up / move
+	 * down, pinned to the bottom of the view so it sits directly above the
+	 * phone keyboard (the container is a flex column; this is its last row).
+	 * Obsidian's own mobile toolbar ignores embedded editors — the v1.7.1
+	 * activeEditor claim did not populate it on-device — so the cards carry
+	 * their own bar instead.
+	 */
+	private buildEditBar(): void {
+		const bar = this.containerEl.createDiv("stx-edit-bar");
+		const opBtn = (op: LineOp, aria: string, icon: string) => {
+			const btn = bar.createEl("button", {
+				cls: "stx-edit-btn",
+				attr: { "aria-label": aria },
+			});
+			setIcon(btn, icon);
+			// Keep the editor's focus/cursor: the press must not blur it,
+			// so the keyboard stays up and the op hits the right line.
+			btn.addEventListener("pointerdown", (e) => e.preventDefault());
+			btn.addEventListener("click", () => this.applyLineOp(op));
+		};
+		opBtn("bullet", "Toggle bullet", "list");
+		opBtn("checkbox", "Toggle checkbox", "check-square");
+		opBtn("outdent", "Outdent line", "chevrons-left");
+		opBtn("indent", "Indent line", "chevrons-right");
+		opBtn("up", "Move line up", "arrow-up");
+		opBtn("down", "Move line down", "arrow-down");
 	}
 
 	/** Route a line op to the focused card's editor (or the only card). */

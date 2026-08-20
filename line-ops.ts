@@ -72,6 +72,83 @@ export function indentLines(
 	return { text: lines.join("\n"), startLine: a, endLine: b, changed };
 }
 
+/** indent · bullet marker (no checkbox) · checkbox marker · rest */
+const LINE_RE = /^(\s*)(?:([-*+])\s+)?(?:\[(.)\]\s+)?(.*)$/;
+
+interface ParsedLine {
+	indent: string;
+	bullet: boolean;
+	checkbox: string | null;
+	text: string;
+}
+
+function parseLine(line: string): ParsedLine {
+	const m = LINE_RE.exec(line);
+	if (!m) return { indent: "", bullet: false, checkbox: null, text: line };
+	// "[x]" only counts as a checkbox after a list marker ("- [x] …");
+	// a bare "[note] …" line is prose and stays untouched.
+	const bullet = m[2] !== undefined;
+	const checkbox = bullet && m[3] !== undefined ? m[3] : null;
+	const text = checkbox === null && !bullet ? line.slice(m[1].length) : m[4];
+	return { indent: m[1], bullet, checkbox, text };
+}
+
+/** Toggle plain bullets on the range: if every non-empty line is already a
+ * plain bullet, strip the markers; otherwise make every non-empty line a
+ * plain bullet (checkboxes lose their box, indent and text preserved). */
+export function toggleBullet(
+	text: string,
+	startLine: number,
+	endLine: number
+): LineOpResult {
+	const lines = text.split("\n");
+	const [a, b] = clampRange(lines, startLine, endLine);
+	const rows = [];
+	for (let i = a; i <= b; i++) {
+		if (lines[i].trim() === "") continue;
+		rows.push({ i, p: parseLine(lines[i]) });
+	}
+	if (rows.length === 0) {
+		return { text, startLine: a, endLine: b, changed: false };
+	}
+	const allPlainBullets = rows.every(
+		(r) => r.p.bullet && r.p.checkbox === null
+	);
+	for (const r of rows) {
+		lines[r.i] = allPlainBullets
+			? r.p.indent + r.p.text
+			: `${r.p.indent}- ${r.p.text}`;
+	}
+	return { text: lines.join("\n"), startLine: a, endLine: b, changed: true };
+}
+
+/** Toggle checkboxes on the range: if every non-empty line is a checkbox,
+ * drop back to plain bullets; otherwise make every non-empty line a
+ * checkbox (existing boxes keep their checked state). */
+export function toggleCheckbox(
+	text: string,
+	startLine: number,
+	endLine: number
+): LineOpResult {
+	const lines = text.split("\n");
+	const [a, b] = clampRange(lines, startLine, endLine);
+	const rows = [];
+	for (let i = a; i <= b; i++) {
+		if (lines[i].trim() === "") continue;
+		rows.push({ i, p: parseLine(lines[i]) });
+	}
+	if (rows.length === 0) {
+		return { text, startLine: a, endLine: b, changed: false };
+	}
+	const allCheckboxes = rows.every((r) => r.p.checkbox !== null);
+	for (const r of rows) {
+		lines[r.i] = allCheckboxes
+			? `${r.p.indent}- ${r.p.text}`
+			: `${r.p.indent}- [${r.p.checkbox ?? " "}] ${r.p.text}`;
+	}
+	return { text: lines.join("\n"), startLine: a, endLine: b, changed: true };
+}
+
 /** Move the line range one line up (dir -1) or down (dir 1); no-op at the
  * edges of the text. */
 export function moveLines(

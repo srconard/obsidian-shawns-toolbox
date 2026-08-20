@@ -545,9 +545,37 @@
 	flex: 0 1 auto;
 }
 
-.stx-lineops {
-	margin-left: auto;
-	display: flex;
-	gap: 0.1em;
+/* Edit bar (v1.7.3): pinned last row of the flex column, so with the
+   keyboard open it sits directly above it. Touch-sized targets. */
+.stx-edit-bar {
 	flex: 0 0 auto;
+	display: flex;
+	justify-content: space-around;
+	gap: 0.2em;
+	border-top: 1px solid var(--background-modifier-border);
+	padding-top: 0.25em;
+}
+
+.stx-edit-btn {
+	background: transparent;
+	border: none;
+	box-shadow: none;
+	color: var(--text-muted);
+	padding: 0.5em 0.7em;
+	border-radius: var(--radius-s);
+	cursor: pointer;
+	display: flex;
+	flex: 0 0 auto;
+}
+
+.stx-edit-btn:active {
+	color: var(--interactive-accent);
+}
+
+/* Obsidian reserves its mobile-toolbar strip above the keyboard, but the
+   toolbar only populates for real markdown views — in our embedded-editor
+   views it stays an empty dead box. Collapse it when it has no options.
+   (Scoped to the empty state, so normal notes keep their toolbar.) */
+body.is-mobile .mobile-toolbar:not(:has(.mobile-toolbar-option)) {
+	display: none;
 }
