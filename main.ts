@@ -13,6 +13,7 @@ import { StatusView, STATUS_VIEW_TYPE } from "./status-view";
 import { StatusFooter } from "./status-footer";
 import { findConflicts, formatConflictReport } from "./status-conflicts";
 import { todayIso } from "./status-service";
+import { ensureDailyNote, logicalTodayIso } from "./capture-service";
 import { CaptureView, CAPTURE_VIEW_TYPE } from "./capture-view";
 import { SectionsView, SECTIONS_VIEW_TYPE } from "./sections-view";
 import { FocusView, FOCUS_VIEW_TYPE } from "./focus-view";
@@ -152,6 +153,17 @@ export default class ShawnsToolboxPlugin extends Plugin {
 			void this.activateView(SECTIONS_VIEW_TYPE, "main")
 		);
 
+		// "Go to today" — jumps to (logical) today's daily note from anywhere,
+		// creating it from the daily template when the 5 AM cron hasn't run.
+		this.addCommand({
+			id: "open-todays-daily-note",
+			name: "Open today's daily note",
+			callback: () => void this.openToday(),
+		});
+		this.addRibbonIcon("calendar-check", "Open today's daily note", () =>
+			void this.openToday()
+		);
+
 		this.statusFooter = new StatusFooter(this.app, () => this.settings);
 		const footer = this.statusFooter;
 		this.registerEvent(
@@ -176,6 +188,19 @@ export default class ShawnsToolboxPlugin extends Plugin {
 	onunload(): void {
 		this.statusFooter?.unmount();
 		console.log("Shawn's Toolbox unloaded");
+	}
+
+	private async openToday(): Promise<void> {
+		try {
+			const file = await ensureDailyNote(
+				this.app,
+				this.settings,
+				logicalTodayIso(this.settings)
+			);
+			await this.app.workspace.getLeaf(false).openFile(file);
+		} catch (e) {
+			new Notice(e instanceof Error ? e.message : String(e));
+		}
 	}
 
 	private async activateView(

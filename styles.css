@@ -501,3 +501,53 @@
 		box-shadow: 0 0 0 6px rgba(var(--color-red-rgb), 0);
 	}
 }
+
+/* ---- Section nav row (v1.7.0): ◀ note ▶ [today] + line-edit cluster ---- */
+
+.stx-nav-row {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	gap: 0.1em;
+	min-width: 0;
+}
+
+.stx-nav-btn {
+	background: transparent;
+	border: none;
+	box-shadow: none;
+	color: var(--text-muted);
+	padding: 0.3em;
+	border-radius: var(--radius-s);
+	cursor: pointer;
+	display: flex;
+	flex: 0 0 auto;
+}
+
+.stx-nav-btn.is-anchored {
+	color: var(--interactive-accent);
+}
+
+.stx-nav-label {
+	background: transparent;
+	border: none;
+	box-shadow: none;
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+	font-weight: 600;
+	padding: 0.3em 0.4em;
+	border-radius: var(--radius-s);
+	cursor: pointer;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	min-width: 0;
+	flex: 0 1 auto;
+}
+
+.stx-lineops {
+	margin-left: auto;
+	display: flex;
+	gap: 0.1em;
+	flex: 0 0 auto;
+}

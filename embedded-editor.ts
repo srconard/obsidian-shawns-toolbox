@@ -8,6 +8,15 @@
 // <textarea> instead of a broken view.
 
 import { App, Component, TFile } from "obsidian";
+import {
+	indentLines,
+	moveLines,
+	lineOfOffset,
+	colOfOffset,
+	offsetOf,
+} from "./line-ops";
+
+export type LineOp = "indent" | "outdent" | "up" | "down";
 
 export interface EmbeddedEditorOptions {
 	value: string;
@@ -139,6 +148,66 @@ export class EmbeddedMarkdownEditor extends Component {
 			this.editor.set(value, false);
 		} else if (this.textarea) {
 			this.textarea.value = value;
+		}
+	}
+
+	/**
+	 * Apply a line operation (indent/outdent/move) to the lines under the
+	 * cursor or selection, preserving the cursor's line-relative position.
+	 * Returns whether anything changed.
+	 */
+	applyLineOp(op: LineOp): boolean {
+		const text = this.get();
+		const sel = this.getSelectionOffsets();
+		if (sel === null) return false;
+		const startLine = lineOfOffset(text, Math.min(sel.anchor, sel.head));
+		const endLine = lineOfOffset(text, Math.max(sel.anchor, sel.head));
+		const col = colOfOffset(text, sel.head);
+		const res =
+			op === "indent" || op === "outdent"
+				? indentLines(text, startLine, endLine, op === "indent" ? 1 : -1)
+				: moveLines(text, startLine, endLine, op === "up" ? -1 : 1);
+		if (!res.changed) return false;
+		// Put a plain cursor on the head's line, same column (clamped).
+		const headLine =
+			res.startLine + (lineOfOffset(text, sel.head) - startLine);
+		const pos = offsetOf(res.text, headLine, col);
+		this.setWithSelection(res.text, pos);
+		this.opts.onChange?.(res.text);
+		return true;
+	}
+
+	private getSelectionOffsets(): { anchor: number; head: number } | null {
+		if (this.editor) {
+			const cm = this.editor.activeCM;
+			const main = cm?.state?.selection?.main;
+			if (!main) return null;
+			return { anchor: main.anchor, head: main.head };
+		}
+		if (this.textarea) {
+			return {
+				anchor: this.textarea.selectionStart,
+				head: this.textarea.selectionEnd,
+			};
+		}
+		return null;
+	}
+
+	private setWithSelection(value: string, pos: number): void {
+		if (this.editor) {
+			const cm = this.editor.activeCM;
+			if (cm?.dispatch) {
+				cm.dispatch({
+					changes: { from: 0, to: cm.state.doc.length, insert: value },
+					selection: { anchor: pos },
+					scrollIntoView: true,
+				});
+				return;
+			}
+			this.editor.set(value, false);
+		} else if (this.textarea) {
+			this.textarea.value = value;
+			this.textarea.setSelectionRange(pos, pos);
 		}
 	}
 

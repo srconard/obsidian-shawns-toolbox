@@ -10,6 +10,7 @@ import {
 	App,
 	Component,
 	MarkdownRenderer,
+	Notice,
 	TFile,
 	setIcon,
 } from "obsidian";
@@ -21,11 +22,12 @@ import {
 } from "./section-core";
 import {
 	SCOPE_LABELS,
-	getPeriodicFile,
+	logicalTodayIso,
 	periodicNotePath,
 	type NoteScope,
 } from "./capture-service";
-import { EmbeddedMarkdownEditor } from "./embedded-editor";
+import { stepAnchorIso, formatDateLabel } from "./date-nav";
+import { EmbeddedMarkdownEditor, type LineOp } from "./embedded-editor";
 import type { ShawnsToolboxSettings } from "./settings";
 
 export interface CardsHost {
@@ -49,6 +51,8 @@ export class SectionCards extends Component {
 	private scope: NoteScope;
 	private cards: Card[] = [];
 	private cardsEl: HTMLElement | null = null;
+	/** Date the view is anchored on; null = follow (logical) today. */
+	private anchorIso: string | null = null;
 
 	constructor(
 		private host: CardsHost,
@@ -80,12 +84,21 @@ export class SectionCards extends Component {
 
 	// ---- state helpers ----
 
+	private resolvedIso(): string {
+		return this.anchorIso ?? logicalTodayIso(this.host.getSettings());
+	}
+
 	private notePath(): string {
-		return periodicNotePath(this.host.getSettings(), this.scope);
+		return periodicNotePath(
+			this.host.getSettings(),
+			this.scope,
+			this.anchorIso ?? undefined
+		);
 	}
 
 	private noteFile(): TFile | null {
-		return getPeriodicFile(this.host.app, this.host.getSettings(), this.scope);
+		const f = this.host.app.vault.getAbstractFileByPath(this.notePath());
+		return f instanceof TFile ? f : null;
 	}
 
 	private selection(): string[] {
@@ -186,6 +199,8 @@ export class SectionCards extends Component {
 			void this.rebuild();
 		});
 
+		this.buildNavRow();
+
 		const chipsEl = this.containerEl.createDiv(
 			"stx-chips" + (collapsed ? " is-collapsed" : "")
 		);
@@ -235,6 +250,87 @@ export class SectionCards extends Component {
 				text: "Pick one or more sections above.",
 			});
 		}
+	}
+
+	/** ◀ note-label ▶ [today] — plus the line-edit cluster in edit mode. */
+	private buildNavRow(): void {
+		const nav = this.containerEl.createDiv("stx-nav-row");
+
+		const navBtn = (aria: string, icon: string, cb: () => void) => {
+			const btn = nav.createEl("button", {
+				cls: "stx-nav-btn",
+				attr: { "aria-label": aria },
+			});
+			setIcon(btn, icon);
+			btn.addEventListener("click", cb);
+			return btn;
+		};
+
+		navBtn(`Previous ${this.scope}`, "chevron-left", () => {
+			this.anchorIso = stepAnchorIso(this.resolvedIso(), this.scope, -1);
+			void this.rebuild();
+		});
+
+		// The label names the note being viewed; tapping it opens that note.
+		const noteName =
+			this.notePath().split("/").pop()?.replace(/\.md$/, "") ?? "";
+		const label = nav.createEl("button", {
+			cls: "stx-nav-label",
+			text:
+				this.scope === "day"
+					? formatDateLabel(this.resolvedIso())
+					: noteName,
+			attr: { "aria-label": `Open ${noteName}` },
+		});
+		label.addEventListener("click", () => {
+			const file = this.noteFile();
+			if (!file) return;
+			void this.host.app.workspace.getLeaf(false).openFile(file);
+		});
+
+		navBtn(`Next ${this.scope}`, "chevron-right", () => {
+			this.anchorIso = stepAnchorIso(this.resolvedIso(), this.scope, 1);
+			void this.rebuild();
+		});
+
+		if (this.anchorIso !== null) {
+			const today = navBtn("Back to today", "calendar-check", () => {
+				this.anchorIso = null;
+				void this.rebuild();
+			});
+			today.addClass("is-anchored");
+		}
+
+		if (!this.readingMode()) {
+			const ops = nav.createDiv("stx-lineops");
+			const opBtn = (op: LineOp, aria: string, icon: string) => {
+				const btn = ops.createEl("button", {
+					cls: "stx-nav-btn",
+					attr: { "aria-label": aria },
+				});
+				setIcon(btn, icon);
+				// Keep the editor's focus/cursor: the press must not blur it.
+				btn.addEventListener("pointerdown", (e) => e.preventDefault());
+				btn.addEventListener("click", () => this.applyLineOp(op));
+			};
+			opBtn("outdent", "Outdent line", "chevrons-left");
+			opBtn("indent", "Indent line", "chevrons-right");
+			opBtn("up", "Move line up", "arrow-up");
+			opBtn("down", "Move line down", "arrow-down");
+		}
+	}
+
+	/** Route a line op to the focused card's editor (or the only card). */
+	private applyLineOp(op: LineOp): void {
+		const editing = this.cards.filter((c) => c.editor);
+		const target =
+			editing.find((c) => c.editor?.hasFocus) ??
+			(editing.length === 1 ? editing[0] : undefined);
+		if (!target?.editor) {
+			new Notice("Tap into a section first");
+			return;
+		}
+		target.editor.applyLineOp(op);
 	}
 
 	private buildCard(file: TFile, sec: Section, content: string): void {

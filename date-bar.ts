@@ -4,6 +4,7 @@
 // wiring lives here too so both surfaces behave identically.
 import { setIcon } from "obsidian";
 import { shiftDateIso } from "./template-renderer";
+import { formatDateLabel } from "./date-nav";
 
 export interface DateBar {
 	el: HTMLElement;
@@ -12,28 +13,6 @@ export interface DateBar {
 	hide(): void;
 	/** Currently picked date (YYYY-MM-DD). */
 	value(): string;
-}
-
-const DAY_ABBR = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MONTH_ABBR = [
-	"Jan",
-	"Feb",
-	"Mar",
-	"Apr",
-	"May",
-	"Jun",
-	"Jul",
-	"Aug",
-	"Sep",
-	"Oct",
-	"Nov",
-	"Dec",
-];
-
-function formatDateLabel(dateIso: string): string {
-	const [y, m, d] = dateIso.split("-").map(Number);
-	const t = new Date(Date.UTC(y, m - 1, d));
-	return `${DAY_ABBR[t.getUTCDay()]} ${MONTH_ABBR[t.getUTCMonth()]} ${t.getUTCDate()}`;
 }
 
 export function createDateBar(
