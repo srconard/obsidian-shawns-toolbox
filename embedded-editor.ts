@@ -112,11 +112,57 @@ export class EmbeddedMarkdownEditor extends Component {
 			getMode: () => "source",
 		});
 		this.editor.set(this.opts.value, false);
+		const el: HTMLElement = this.editor.editorEl ?? container;
 		if (this.opts.onBlur) {
-			const el: HTMLElement = this.editor.editorEl ?? container;
 			this.registerDomEvent(el, "focusout", () =>
 				this.opts.onBlur?.(this.get())
 			);
+		}
+		this.registerDomEvent(el, "focusin", () => this.claimActiveEditor());
+	}
+
+	/**
+	 * Announce this embedded editor as the workspace's active editor while it
+	 * has focus. Obsidian's mobile toolbar (the strip above the keyboard) and
+	 * every editor command (toggle bullet/checkbox, indent, move line) act on
+	 * `workspace.activeEditor` — a real MarkdownView sets it on focus, but an
+	 * embedded editor doesn't, which leaves the toolbar container empty and
+	 * its buttons dead. Internals-based (like the editor mount itself), so
+	 * failure is silent: the toolbar just doesn't light up.
+	 */
+	private claimActiveEditor(): void {
+		if (!this.editor) return;
+		try {
+			const owner = this.editor.owner;
+			if (!owner) return;
+			// The owner is our options object; commands expect a
+			// MarkdownFileInfo shape — give it `editor` and `file` lazily.
+			if (!("editor" in owner)) {
+				Object.defineProperty(owner, "editor", {
+					get: () => this.editor?.editor ?? null,
+					configurable: true,
+				});
+			}
+			if (!("file" in owner)) {
+				Object.defineProperty(owner, "file", {
+					get: () => {
+						if (!this.opts.filePath) return null;
+						const f = this.app.vault.getAbstractFileByPath(
+							this.opts.filePath
+						);
+						return f instanceof TFile ? f : null;
+					},
+					configurable: true,
+				});
+			}
+			if (!owner.editor) return;
+			const ws = this.app.workspace as any;
+			ws.activeEditor = owner;
+			const toolbar = (this.app as any).mobileToolbar;
+			toolbar?.update?.();
+			toolbar?.requestUpdate?.();
+		} catch {
+			// internals moved — never break typing over a toolbar nicety
 		}
 	}
 
