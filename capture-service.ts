@@ -9,6 +9,7 @@ import {
 	type CaptureKind,
 } from "./section-core";
 import {
+	logicalDateIso,
 	renderDailyNote,
 	type TemplateVault,
 } from "./template-renderer";
@@ -44,10 +45,13 @@ export function nowHm(): string {
 	return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export function todayIsoLocal(): string {
-	const d = new Date();
-	const pad = (n: number) => String(n).padStart(2, "0");
-	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+/**
+ * "Today" under the day-rollover rule: before dayRolloverHour (default 4 AM)
+ * the logical day is still yesterday, so late-night captures and the Today
+ * scope stay on the evening's note.
+ */
+export function logicalTodayIso(settings: ShawnsToolboxSettings): string {
+	return logicalDateIso(new Date(), settings.dayRolloverHour);
 }
 
 export function periodicNotePath(
@@ -55,7 +59,7 @@ export function periodicNotePath(
 	scope: NoteScope,
 	dateIso?: string
 ): string {
-	const m = dateIso ? moment(dateIso, "YYYY-MM-DD") : moment();
+	const m = moment(dateIso ?? logicalTodayIso(settings), "YYYY-MM-DD");
 	return normalizePath(m.format(settings.periodicFormats[scope]) + ".md");
 }
 
@@ -127,7 +131,7 @@ export async function routeCapture(
 	const file = await ensureDailyNote(
 		app,
 		settings,
-		dateIso ?? todayIsoLocal()
+		dateIso ?? logicalTodayIso(settings)
 	);
 	const heading = settings.captureTargets[kind];
 	const line = formatCaptureLine(kind, trimmed, nowHm());

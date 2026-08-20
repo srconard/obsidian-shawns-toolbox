@@ -23,6 +23,8 @@ export interface ShawnsToolboxSettings {
 	captureTargets: Record<CaptureKind, string>;
 	/** moment formats resolving each periodic note's vault path (no .md) */
 	periodicFormats: Record<NoteScope, string>;
+	/** Captures before this hour (0–23) count as the previous day */
+	dayRolloverHour: number;
 	/** Daily note template, rendered when capture targets a missing day */
 	dailyTemplatePath: string;
 	/** Folder holding Templater includes (and its "Day Tasks/" subfolder) */
@@ -72,6 +74,7 @@ export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
 		quarter: "[00. Timeline/]YYYY-[Q]Q",
 		year: "[00. Timeline/]YYYY",
 	},
+	dayRolloverHour: 4,
 	dailyTemplatePath: "Settings/Templates/Day/Daily Note Template.md",
 	templaterFolder: "Settings/Templater",
 	sectionSelections: { day: [], week: [], month: [], quarter: [], year: [] },
@@ -318,6 +321,28 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 					})
 			);
 		}
+
+		new Setting(containerEl)
+			.setName("Day rollover hour")
+			.setDesc(
+				'"My day ends at 4 AM": captures and the Today scope before this hour (0–23) count as the previous day. 0 = plain midnight.'
+			)
+			.addText((text) => {
+				text
+					.setValue(String(this.plugin.settings.dayRolloverHour))
+					.onChange(async (value) => {
+						const n = Number(value.trim());
+						this.plugin.settings.dayRolloverHour =
+							Number.isInteger(n) && n >= 0 && n <= 23
+								? n
+								: DEFAULT_SETTINGS.dayRolloverHour;
+						await this.plugin.saveSettings();
+					});
+				text.inputEl.type = "number";
+				text.inputEl.min = "0";
+				text.inputEl.max = "23";
+				text.inputEl.style.width = "60px";
+			});
 
 		new Setting(containerEl)
 			.setName("Daily note template")

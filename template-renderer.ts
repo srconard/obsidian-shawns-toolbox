@@ -47,6 +47,17 @@ export function shiftDateIso(dateIso: string, days: number): string {
 	return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
 }
 
+/**
+ * The "logical" date for a wall-clock moment under Shawn's day-rollover rule:
+ * before rolloverHour (e.g. 4 AM) the day still counts as yesterday, so a
+ * 1 AM capture lands on the evening's note. rolloverHour 0 = plain midnight.
+ */
+export function logicalDateIso(now: Date, rolloverHour: number): string {
+	const shifted = new Date(now.getTime() - rolloverHour * 3600000);
+	const pad = (n: number) => String(n).padStart(2, "0");
+	return `${shifted.getFullYear()}-${pad(shifted.getMonth() + 1)}-${pad(shifted.getDate())}`;
+}
+
 /** ISO-8601 week (Monday-based, week 1 contains Jan 4). */
 export function isoWeek(dateIso: string): { year: number; week: number } {
 	const t = utc(dateIso);

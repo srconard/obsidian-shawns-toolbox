@@ -7,10 +7,11 @@ import type { CaptureKind } from "./section-core";
 import {
 	CAPTURE_ICONS,
 	CAPTURE_LABELS,
+	logicalTodayIso,
 	nowHm,
 	routeCapture,
-	todayIsoLocal,
 } from "./capture-service";
+import { shiftDateIso } from "./template-renderer";
 import { createDateBar, wireLongPress, type DateBar } from "./date-bar";
 import type { CardsHost } from "./section-cards";
 
@@ -61,6 +62,9 @@ export class CaptureView extends ItemView {
 
 		this.dateBar = createDateBar(root, {
 			confirmLabel: "Add",
+			// Long-press means "not today" — default to logical tomorrow.
+			getDefaultDate: () =>
+				shiftDateIso(logicalTodayIso(this.host.getSettings()), 1),
 			onConfirm: () => {
 				const date = this.dateBar?.value();
 				if (this.dateBarKind && date) {
@@ -134,7 +138,9 @@ export class CaptureView extends ItemView {
 			this.inputEl.value = "";
 			this.inputEl.focus();
 			const when =
-				dateIso && dateIso !== todayIsoLocal() ? dateIso : nowHm();
+				dateIso && dateIso !== logicalTodayIso(this.host.getSettings())
+					? dateIso
+					: nowHm();
 			new Notice(`→ ${target} ${when}`);
 			this.hideDateBar();
 		} catch (e) {

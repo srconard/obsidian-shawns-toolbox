@@ -4,7 +4,6 @@
 // wiring lives here too so both surfaces behave identically.
 import { setIcon } from "obsidian";
 import { shiftDateIso } from "./template-renderer";
-import { todayIsoLocal } from "./capture-service";
 
 export interface DateBar {
 	el: HTMLElement;
@@ -43,6 +42,8 @@ export function createDateBar(
 		confirmLabel: string;
 		confirmIcon?: string;
 		onConfirm: () => void;
+		/** Date preselected when the bar opens (views pass logical tomorrow). */
+		getDefaultDate: () => string;
 	}
 ): DateBar {
 	const bar = parent.createDiv("stx-datebar");
@@ -115,8 +116,7 @@ export function createDateBar(
 		el: bar,
 		show(label: string) {
 			labelEl.textContent = label;
-			// Long-press means "not today" — default to tomorrow.
-			input.value = shiftDateIso(todayIsoLocal(), 1);
+			input.value = opts.getDefaultDate();
 			syncLabel();
 			bar.show();
 		},

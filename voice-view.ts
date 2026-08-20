@@ -9,10 +9,11 @@ import { ItemView, Notice, WorkspaceLeaf, setIcon } from "obsidian";
 import type { CaptureKind } from "./section-core";
 import {
 	CAPTURE_LABELS,
+	logicalTodayIso,
 	nowHm,
 	routeCapture,
-	todayIsoLocal,
 } from "./capture-service";
+import { shiftDateIso } from "./template-renderer";
 import { transcribeGroq } from "./groq-stt";
 import { createDateBar, wireLongPress, type DateBar } from "./date-bar";
 import type { CardsHost } from "./section-cards";
@@ -77,6 +78,9 @@ export class VoiceView extends ItemView {
 		this.dateBar = createDateBar(root, {
 			confirmLabel: "Record",
 			confirmIcon: "mic",
+			// Long-press means "not today" — default to logical tomorrow.
+			getDefaultDate: () =>
+				shiftDateIso(logicalTodayIso(this.host.getSettings()), 1),
 			onConfirm: () => {
 				const kind = this.dateBarKind;
 				const date = this.dateBar?.value();
@@ -215,7 +219,10 @@ export class VoiceView extends ItemView {
 				dateIso
 			);
 			const when =
-				dateIso && dateIso !== todayIsoLocal() ? dateIso : nowHm();
+				dateIso &&
+				dateIso !== logicalTodayIso(this.host.getSettings())
+					? dateIso
+					: nowHm();
 			// receipt carries the transcript so garbage is catchable
 			new Notice(`→ ${target} ${when}\n${text}`, 6000);
 		} catch (e) {

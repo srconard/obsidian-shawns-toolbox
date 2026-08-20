@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
 	isoWeek,
 	shiftDateIso,
+	logicalDateIso,
 	renderMomentFragments,
 	fixTrailingSpaceOnEmptyItems,
 	renderDailyNote,
@@ -26,6 +27,36 @@ describe("isoWeek", () => {
 		expect(isoWeek("2016-01-04")).toEqual({ year: 2016, week: 1 });
 		expect(isoWeek("2015-12-31")).toEqual({ year: 2015, week: 53 });
 		expect(isoWeek("2021-01-01")).toEqual({ year: 2020, week: 53 });
+	});
+});
+
+describe("logicalDateIso", () => {
+	it("counts pre-rollover hours as the previous day", () => {
+		// local-time Date constructor keeps this TZ-independent
+		expect(logicalDateIso(new Date(2026, 7, 20, 0, 30), 4)).toBe(
+			"2026-08-19"
+		);
+		expect(logicalDateIso(new Date(2026, 7, 20, 3, 59), 4)).toBe(
+			"2026-08-19"
+		);
+	});
+	it("flips to the new day at the rollover hour", () => {
+		expect(logicalDateIso(new Date(2026, 7, 20, 4, 0), 4)).toBe(
+			"2026-08-20"
+		);
+		expect(logicalDateIso(new Date(2026, 7, 20, 23, 50), 4)).toBe(
+			"2026-08-20"
+		);
+	});
+	it("rollover 0 is plain midnight", () => {
+		expect(logicalDateIso(new Date(2026, 7, 20, 0, 1), 0)).toBe(
+			"2026-08-20"
+		);
+	});
+	it("handles month boundaries", () => {
+		expect(logicalDateIso(new Date(2026, 8, 1, 2, 0), 4)).toBe(
+			"2026-08-31"
+		);
 	});
 });
 
