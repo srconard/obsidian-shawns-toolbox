@@ -15,6 +15,28 @@ export interface DateBar {
 	value(): string;
 }
 
+const DAY_ABBR = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTH_ABBR = [
+	"Jan",
+	"Feb",
+	"Mar",
+	"Apr",
+	"May",
+	"Jun",
+	"Jul",
+	"Aug",
+	"Sep",
+	"Oct",
+	"Nov",
+	"Dec",
+];
+
+function formatDateLabel(dateIso: string): string {
+	const [y, m, d] = dateIso.split("-").map(Number);
+	const t = new Date(Date.UTC(y, m - 1, d));
+	return `${DAY_ABBR[t.getUTCDay()]} ${MONTH_ABBR[t.getUTCMonth()]} ${t.getUTCDate()}`;
+}
+
 export function createDateBar(
 	parent: HTMLElement,
 	opts: {
@@ -34,12 +56,24 @@ export function createDateBar(
 	});
 	setIcon(prev, "chevron-left");
 
-	const input = bar.createEl("input", {
+	// The native date input renders as an unreadable stub on Android in a
+	// narrow panel, so the visible date is our own label with the real input
+	// stretched invisibly over it — a tap still opens the platform picker.
+	const dateWrap = bar.createDiv("stx-datebar-date");
+	const dateLabel = dateWrap.createSpan({ cls: "stx-datebar-date-label" });
+	const input = dateWrap.createEl("input", {
 		cls: "stx-datebar-input",
-		attr: { type: "date" },
+		attr: { type: "date", "aria-label": "Target date" },
 	});
-	// Tap the date itself → platform calendar (Android native picker,
-	// Chromium dropdown on desktop).
+	const syncLabel = () => {
+		dateLabel.textContent = input.value
+			? formatDateLabel(input.value)
+			: "pick a date";
+	};
+	input.addEventListener("change", syncLabel);
+	input.addEventListener("input", syncLabel);
+	// Desktop: a click on the transparent input only focuses it — open the
+	// calendar dropdown explicitly. Android opens its dialog natively.
 	input.addEventListener("click", () => {
 		try {
 			input.showPicker?.();
@@ -56,9 +90,11 @@ export function createDateBar(
 
 	prev.addEventListener("click", () => {
 		if (input.value) input.value = shiftDateIso(input.value, -1);
+		syncLabel();
 	});
 	next.addEventListener("click", () => {
 		if (input.value) input.value = shiftDateIso(input.value, 1);
+		syncLabel();
 	});
 
 	const confirm = bar.createEl("button", { cls: "stx-datebar-add" });
@@ -81,6 +117,7 @@ export function createDateBar(
 			labelEl.textContent = label;
 			// Long-press means "not today" — default to tomorrow.
 			input.value = shiftDateIso(todayIsoLocal(), 1);
+			syncLabel();
 			bar.show();
 		},
 		hide() {

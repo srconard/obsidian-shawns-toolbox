@@ -179,7 +179,9 @@
 .stx-datebar {
 	flex: 0 0 auto;
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
+	justify-content: center;
 	gap: 0.35em;
 	padding: 0.45em 0.6em;
 	border: 1px solid var(--interactive-accent);
@@ -209,15 +211,37 @@
 	background: var(--background-modifier-hover);
 }
 
-.stx-datebar-input {
+/* Visible date = our label; the real input sits invisibly on top so a tap
+   opens the platform picker (raw date inputs render unreadably on Android). */
+.stx-datebar-date {
+	position: relative;
 	flex: 1 1 auto;
-	min-width: 0;
+	min-width: 6.5em;
+	display: flex;
+	align-items: center;
+	justify-content: center;
 	background: var(--background-primary);
 	border: 1px solid var(--background-modifier-border);
 	border-radius: var(--radius-s);
-	color: var(--text-normal);
+	padding: 0.3em 0.4em;
+}
+
+.stx-datebar-date-label {
 	font-size: var(--font-ui-small);
-	padding: 0.25em 0.4em;
+	color: var(--text-normal);
+	white-space: nowrap;
+}
+
+.stx-datebar-input {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	opacity: 0;
+	cursor: pointer;
+	border: none;
+	padding: 0;
+	margin: 0;
 }
 
 .stx-datebar-add {
