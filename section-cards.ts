@@ -53,6 +53,8 @@ export class SectionCards extends Component {
 	private cardsEl: HTMLElement | null = null;
 	/** Date the view is anchored on; null = follow (logical) today. */
 	private anchorIso: string | null = null;
+	/** The bottom padding we last applied (to tell ours from Obsidian's). */
+	private myPad: string | null = null;
 
 	constructor(
 		private host: CardsHost,
@@ -75,7 +77,54 @@ export class SectionCards extends Component {
 				if (f.path === this.notePath()) void this.rebuild();
 			})
 		);
+		// Re-clamp when the keyboard state likely changed (focus moves,
+		// window/viewport resize). Obsidian re-sizes its keyboard padding on
+		// those same signals; the delays let it write first.
+		this.registerDomEvent(this.containerEl, "focusin", () =>
+			this.schedulePaddingClamp()
+		);
+		this.registerDomEvent(this.containerEl, "focusout", () =>
+			this.schedulePaddingClamp()
+		);
+		this.registerDomEvent(window, "resize", () =>
+			this.schedulePaddingClamp()
+		);
 		void this.rebuild();
+	}
+
+	/**
+	 * Obsidian pads the view's bottom to keep content clear of the on-screen
+	 * keyboard, sized as if the view reached the window bottom. In the mobile
+	 * drawer the tab strip + vault switcher sit BELOW the view, so that
+	 * padding overshoots by exactly their height — Shawn's probe: children
+	 * end y=392, container bottom y=724, keyboard-clearance padding ≈330px
+	 * while only ~160px of the container is actually under the keyboard.
+	 * The overshoot rendered as the dead strip between the edit bar and the
+	 * keyboard. Clamp: our padding = Obsidian's padding minus everything
+	 * already below the container.
+	 */
+	private clampBottomPadding(): void {
+		const el = this.containerEl;
+		// Only clear the inline value if WE set it — if Obsidian overwrote
+		// it, the current value is the fresh keyboard measurement.
+		if (this.myPad !== null && el.style.paddingBottom === this.myPad) {
+			el.style.paddingBottom = "";
+		}
+		const obsPad =
+			parseFloat(getComputedStyle(el).paddingBottom) || 0;
+		const below = Math.max(
+			0,
+			window.innerHeight - el.getBoundingClientRect().bottom
+		);
+		const pad = Math.max(7, Math.round(obsPad - below));
+		this.myPad = `${pad}px`;
+		el.style.paddingBottom = this.myPad;
+	}
+
+	private schedulePaddingClamp(): void {
+		for (const ms of [60, 350, 750]) {
+			window.setTimeout(() => this.clampBottomPadding(), ms);
+		}
 	}
 
 	onunload(): void {
@@ -222,6 +271,7 @@ export class SectionCards extends Component {
 				cls: "stx-empty",
 				text: `No ${SCOPE_LABELS[this.scope].toLowerCase()} note (${this.notePath()})`,
 			});
+			this.clampBottomPadding();
 			return;
 		}
 
@@ -260,6 +310,8 @@ export class SectionCards extends Component {
 				text: "Pick one or more sections above.",
 			});
 		}
+		this.clampBottomPadding();
+		this.schedulePaddingClamp();
 	}
 
 	/** ◀ note-label ▶ [today] — plus the line-edit cluster in edit mode. */
@@ -386,6 +438,16 @@ export class SectionCards extends Component {
 			}
 			const bs = getComputedStyle(bar);
 			lines.push(`bar computed: marginTop=${bs.marginTop}`);
+			lines.push(
+				`container padding: t=${cs.paddingTop} b=${cs.paddingBottom}` +
+					` (our inline pb=${this.containerEl.style.paddingBottom || "none"}, myPad=${this.myPad ?? "unset"})`
+			);
+			lines.push(
+				`body[style]: ${document.body.getAttribute("style") ?? "(none)"}`
+			);
+			lines.push(
+				`html[style]: ${document.documentElement.getAttribute("style") ?? "(none)"}`
+			);
 			const rect = bar.getBoundingClientRect();
 			const vv = window.visualViewport;
 			lines.push(
