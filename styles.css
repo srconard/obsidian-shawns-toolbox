@@ -561,11 +561,20 @@
 	border: none;
 	box-shadow: none;
 	color: var(--text-muted);
-	padding: 0.5em 0.7em;
+	padding: 0.3em 0.4em;
 	border-radius: var(--radius-s);
 	cursor: pointer;
 	display: flex;
 	flex: 0 0 auto;
+}
+
+.stx-edit-btn svg {
+	width: 15px;
+	height: 15px;
+}
+
+.stx-probe-btn {
+	opacity: 0.5;
 }
 
 .stx-edit-btn:active {

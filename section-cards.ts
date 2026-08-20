@@ -336,6 +336,81 @@ export class SectionCards extends Component {
 		opBtn("indent", "Indent line", "chevrons-right");
 		opBtn("up", "Move line up", "arrow-up");
 		opBtn("down", "Move line down", "arrow-down");
+
+		// TEMPORARY (v1.7.4): the dead box below the bar survived the
+		// empty-mobile-toolbar CSS collapse, so the guess was wrong. This
+		// probe samples what element actually occupies the space between
+		// the bar and the keyboard and writes a report note to read back.
+		// Remove once the box is identified and killed.
+		const probe = bar.createEl("button", {
+			cls: "stx-edit-btn stx-probe-btn",
+			attr: { "aria-label": "Probe layout below the bar (debug)" },
+		});
+		setIcon(probe, "bug");
+		probe.addEventListener("pointerdown", (e) => e.preventDefault());
+		probe.addEventListener("click", () => void this.runLayoutProbe(bar));
+	}
+
+	/** Sample elementFromPoint down the gap under the bar → report note. */
+	private async runLayoutProbe(bar: HTMLElement): Promise<void> {
+		const lines: string[] = [];
+		try {
+			const rect = bar.getBoundingClientRect();
+			const vv = window.visualViewport;
+			lines.push(
+				`bar.bottom=${Math.round(rect.bottom)} innerHeight=${window.innerHeight}` +
+					` vv.height=${vv ? Math.round(vv.height) : "n/a"}` +
+					` vv.offsetTop=${vv ? Math.round(vv.offsetTop) : "n/a"}` +
+					` doc.clientHeight=${document.documentElement.clientHeight}`
+			);
+			const describe = (el: Element): string => {
+				const cls = Array.from(el.classList).slice(0, 6).join(".");
+				return `${el.tagName.toLowerCase()}${el.id ? "#" + el.id : ""}${cls ? "." + cls : ""}`;
+			};
+			const x = Math.round(window.innerWidth / 2);
+			const yEnd = Math.max(
+				window.innerHeight,
+				document.documentElement.clientHeight
+			);
+			let last = "";
+			for (let y = Math.round(rect.bottom) + 2; y < yEnd - 1; y += 10) {
+				const el = document.elementFromPoint(x, y);
+				const desc = el ? describe(el) : "(nothing)";
+				if (desc === last) continue;
+				last = desc;
+				const r = el?.getBoundingClientRect();
+				lines.push(
+					`y=${y}: ${desc}` +
+						(r
+							? ` [top=${Math.round(r.top)} bottom=${Math.round(r.bottom)} h=${Math.round(r.height)}]`
+							: "")
+				);
+			}
+			const below = document.elementFromPoint(
+				x,
+				Math.round(rect.bottom) + 6
+			);
+			const chain: string[] = [];
+			for (
+				let el: Element | null = below;
+				el && chain.length < 10;
+				el = el.parentElement
+			) {
+				chain.push(describe(el));
+			}
+			lines.push(`ancestor chain: ${chain.join("  <  ")}`);
+		} catch (e) {
+			lines.push(`probe error: ${e instanceof Error ? e.message : e}`);
+		}
+		const path = "AGENTS/inbox/stx-layout-probe.md";
+		const body = `# Toolbox layout probe\n\nTaken ${new Date().toISOString()} — keyboard should have been open.\n\n\`\`\`\n${lines.join("\n")}\n\`\`\`\n`;
+		const existing = this.host.app.vault.getAbstractFileByPath(path);
+		if (existing instanceof TFile) {
+			await this.host.app.vault.modify(existing, body);
+		} else {
+			await this.host.app.vault.create(path, body);
+		}
+		new Notice(`Layout probe → ${path}`);
 	}
 
 	/** Route a line op to the focused card's editor (or the only card). */
