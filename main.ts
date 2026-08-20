@@ -13,6 +13,10 @@ import { StatusView, STATUS_VIEW_TYPE } from "./status-view";
 import { StatusFooter } from "./status-footer";
 import { findConflicts, formatConflictReport } from "./status-conflicts";
 import { todayIso } from "./status-service";
+import { CaptureView, CAPTURE_VIEW_TYPE } from "./capture-view";
+import { FocusView, FOCUS_VIEW_TYPE } from "./focus-view";
+import { VoiceView, VOICE_VIEW_TYPE } from "./voice-view";
+import type { CardsHost } from "./section-cards";
 
 export default class ShawnsToolboxPlugin extends Plugin {
 	settings: ShawnsToolboxSettings = DEFAULT_SETTINGS;
@@ -94,6 +98,46 @@ export default class ShawnsToolboxPlugin extends Plugin {
 			},
 		});
 
+		// ---- Capture & Sections ----
+
+		const host: CardsHost = {
+			app: this.app,
+			getSettings: () => this.settings,
+			saveSettings: () => this.saveSettings(),
+		};
+
+		this.registerView(
+			CAPTURE_VIEW_TYPE,
+			(leaf: WorkspaceLeaf) => new CaptureView(leaf, host)
+		);
+		this.registerView(
+			FOCUS_VIEW_TYPE,
+			(leaf: WorkspaceLeaf) => new FocusView(leaf, host)
+		);
+		this.registerView(
+			VOICE_VIEW_TYPE,
+			(leaf: WorkspaceLeaf) => new VoiceView(leaf, host)
+		);
+
+		this.addCommand({
+			id: "open-capture-view",
+			name: "Open capture view",
+			callback: () => void this.activateView(CAPTURE_VIEW_TYPE, "main"),
+		});
+		this.addCommand({
+			id: "open-focus-panel",
+			name: "Open focus panel",
+			callback: () => void this.activateView(FOCUS_VIEW_TYPE, "left"),
+		});
+		this.addCommand({
+			id: "open-voice-panel",
+			name: "Open voice capture panel",
+			callback: () => void this.activateView(VOICE_VIEW_TYPE, "right"),
+		});
+		this.addRibbonIcon("zap", "Open capture view", () =>
+			void this.activateView(CAPTURE_VIEW_TYPE, "main")
+		);
+
 		this.statusFooter = new StatusFooter(this.app, () => this.settings);
 		const footer = this.statusFooter;
 		this.registerEvent(
@@ -118,6 +162,26 @@ export default class ShawnsToolboxPlugin extends Plugin {
 	onunload(): void {
 		this.statusFooter?.unmount();
 		console.log("Shawn's Toolbox unloaded");
+	}
+
+	private async activateView(
+		type: string,
+		side: "main" | "left" | "right"
+	): Promise<void> {
+		const existing = this.app.workspace.getLeavesOfType(type);
+		if (existing.length > 0) {
+			this.app.workspace.revealLeaf(existing[0]);
+			return;
+		}
+		const leaf =
+			side === "main"
+				? this.app.workspace.getLeaf(true)
+				: side === "left"
+					? this.app.workspace.getLeftLeaf(false)
+					: this.app.workspace.getRightLeaf(false);
+		if (!leaf) return;
+		await leaf.setViewState({ type, active: true });
+		this.app.workspace.revealLeaf(leaf);
 	}
 
 	async loadSettings(): Promise<void> {

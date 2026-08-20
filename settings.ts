@@ -1,5 +1,7 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import type ShawnsToolboxPlugin from "./main";
+import type { CaptureKind } from "./section-core";
+import type { NoteScope } from "./capture-service";
 
 export interface ShawnsToolboxSettings {
 	checkboxStampingEnabled: boolean;
@@ -15,6 +17,24 @@ export interface ShawnsToolboxSettings {
 	// Note status
 	statusFooterEnabled: boolean;
 	statusExcludeFolders: string[];
+
+	// Capture & Sections
+	/** Full heading line each capture button appends under */
+	captureTargets: Record<CaptureKind, string>;
+	/** moment formats resolving each periodic note's vault path (no .md) */
+	periodicFormats: Record<NoteScope, string>;
+	/** Persisted section-mode chip selection per scope (capture view) */
+	sectionSelections: Record<NoteScope, string[]>;
+	/** Persisted selection for the left Focus panel */
+	focusSections: string[];
+	focusScope: NoteScope;
+	/** Reading-mode toggles, persisted per surface */
+	sectionsReadingMode: boolean;
+	focusReadingMode: boolean;
+
+	// Voice capture
+	groqApiKey: string;
+	groqModel: string;
 }
 
 export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
@@ -31,6 +51,27 @@ export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
 
 	statusFooterEnabled: true,
 	statusExcludeFolders: ["00. Timeline", "AGENTS"],
+
+	captureTargets: {
+		thought: "# Thoughts",
+		doToday: "### Do Today",
+		otherTask: "### Other tasks",
+		log: "# Logs",
+	},
+	periodicFormats: {
+		day: "[00. Timeline/]YYYY-MM-DD",
+		week: "[00. Timeline/]gggg-[W]ww",
+		month: "[00. Timeline/]YYYY-MM",
+		quarter: "[00. Timeline/]YYYY-[Q]Q",
+	},
+	sectionSelections: { day: [], week: [], month: [], quarter: [] },
+	focusSections: ["## Plan for Today"],
+	focusScope: "day",
+	sectionsReadingMode: false,
+	focusReadingMode: false,
+
+	groqApiKey: "",
+	groqModel: "whisper-large-v3-turbo",
 };
 
 export class ShawnsToolboxSettingTab extends PluginSettingTab {
@@ -203,5 +244,96 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 				text.inputEl.rows = 3;
 				text.inputEl.cols = 30;
 			});
+
+		// Capture & Sections section
+		containerEl.createEl("h3", { text: "Capture & Sections" });
+
+		containerEl.createEl("p", {
+			text: "Each capture button appends under a heading in today's daily note. Specify the full heading line (hashes included).",
+			cls: "setting-item-description",
+		});
+
+		const targetLabels: Array<
+			[keyof ShawnsToolboxSettings["captureTargets"], string]
+		> = [
+			["thought", "Thought button target"],
+			["doToday", "Do Today button target"],
+			["otherTask", "Other Task button target"],
+			["log", "Log button target"],
+		];
+		for (const [kind, label] of targetLabels) {
+			new Setting(containerEl).setName(label).addText((text) =>
+				text
+					.setValue(this.plugin.settings.captureTargets[kind])
+					.onChange(async (value) => {
+						this.plugin.settings.captureTargets[kind] =
+							value.trim() ||
+							DEFAULT_SETTINGS.captureTargets[kind];
+						await this.plugin.saveSettings();
+					})
+			);
+		}
+
+		containerEl.createEl("p", {
+			text: "Periodic note paths as moment formats (no .md). Literal text goes in [brackets].",
+			cls: "setting-item-description",
+		});
+
+		const scopeLabels: Array<
+			[keyof ShawnsToolboxSettings["periodicFormats"], string]
+		> = [
+			["day", "Daily note format"],
+			["week", "Weekly note format"],
+			["month", "Monthly note format"],
+			["quarter", "Quarterly note format"],
+		];
+		for (const [scope, label] of scopeLabels) {
+			new Setting(containerEl).setName(label).addText((text) =>
+				text
+					.setValue(this.plugin.settings.periodicFormats[scope])
+					.onChange(async (value) => {
+						this.plugin.settings.periodicFormats[scope] =
+							value.trim() ||
+							DEFAULT_SETTINGS.periodicFormats[scope];
+						await this.plugin.saveSettings();
+					})
+			);
+		}
+
+		// Voice capture section
+		containerEl.createEl("h3", { text: "Voice capture" });
+
+		containerEl.createEl("p", {
+			text: "The voice panel records audio, transcribes it with Groq Whisper, and routes the text like a typed capture.",
+			cls: "setting-item-description",
+		});
+
+		new Setting(containerEl)
+			.setName("Groq API key")
+			.setDesc("Get one at https://console.groq.com/keys")
+			.addText((text) => {
+				text
+					.setPlaceholder("Enter your API key")
+					.setValue(this.plugin.settings.groqApiKey)
+					.onChange(async (value) => {
+						this.plugin.settings.groqApiKey = value.trim();
+						await this.plugin.saveSettings();
+					});
+				text.inputEl.type = "password";
+				text.inputEl.style.width = "300px";
+			});
+
+		new Setting(containerEl)
+			.setName("Groq transcription model")
+			.addText((text) =>
+				text
+					.setPlaceholder("whisper-large-v3-turbo")
+					.setValue(this.plugin.settings.groqModel)
+					.onChange(async (value) => {
+						this.plugin.settings.groqModel =
+							value.trim() || DEFAULT_SETTINGS.groqModel;
+						await this.plugin.saveSettings();
+					})
+			);
 	}
 }

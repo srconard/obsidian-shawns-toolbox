@@ -1,9 +1,9 @@
 {
 	"id": "shawns-toolbox",
 	"name": "Shawn's Toolbox",
-	"version": "1.4.1",
-	"minAppVersion": "0.15.0",
-	"description": "Note status control (phase + ongoing with change dates, plus a signed note-log entry per transition), checkbox completion stamping, and block summarizer.",
+	"version": "1.5.0",
+	"minAppVersion": "1.4.0",
+	"description": "Capture view (blank screen → daily-note sections), editable section cards, focus & voice panels, note status control, checkbox completion stamping, and block summarizer.",
 	"author": "Shawn",
 	"isDesktopOnly": false
 }
