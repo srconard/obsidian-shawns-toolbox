@@ -1,6 +1,7 @@
-// capture-view.ts — the central "blank screen" view. Two modes toggled at the
-// top: Capture (type → route to a daily-note section → screen clears) and
-// Sections (the editable section cards).
+// capture-view.ts — the central "blank screen" view: nothing but an
+// auto-focused input and the four routing buttons (type → route to a
+// daily-note section → screen clears). Sections live in their own view
+// (sections-view.ts) — deliberately no tabs or chrome here.
 import { ItemView, Notice, Scope, WorkspaceLeaf, setIcon } from "obsidian";
 import type { CaptureKind } from "./section-core";
 import {
@@ -9,17 +10,12 @@ import {
 	nowHm,
 	routeCapture,
 } from "./capture-service";
-import { SectionCards, type CardsHost } from "./section-cards";
+import type { CardsHost } from "./section-cards";
 
 export const CAPTURE_VIEW_TYPE = "shawns-toolbox-capture";
 
-type Mode = "capture" | "sections";
-
 export class CaptureView extends ItemView {
-	private mode: Mode = "capture";
-	private cards: SectionCards | null = null;
 	private inputEl: HTMLTextAreaElement | null = null;
-	private pendingText = "";
 	private submitting = false;
 
 	constructor(leaf: WorkspaceLeaf, private host: CardsHost) {
@@ -29,7 +25,6 @@ export class CaptureView extends ItemView {
 		// the textarea ever sees it.
 		this.scope = new Scope(this.app.scope);
 		this.scope.register(["Mod"], "Enter", (evt) => {
-			if (this.mode !== "capture") return true;
 			evt.preventDefault();
 			void this.submit("thought");
 			return false;
@@ -49,62 +44,17 @@ export class CaptureView extends ItemView {
 	}
 
 	async onOpen(): Promise<void> {
-		this.render();
-	}
-
-	async onClose(): Promise<void> {
-		this.unmountCards();
-	}
-
-	private unmountCards(): void {
-		if (this.cards) {
-			this.removeChild(this.cards);
-			this.cards = null;
-		}
-	}
-
-	private render(): void {
-		// keep unsent capture text across mode switches
-		if (this.inputEl) this.pendingText = this.inputEl.value;
-		this.unmountCards();
-		this.inputEl = null;
-
 		const root = this.contentEl;
 		root.empty();
-		root.addClass("stx-capture-root");
+		root.addClass("stx-capture-root", "stx-capture-body");
 
-		const tabs = root.createDiv("stx-mode-tabs");
-		for (const mode of ["capture", "sections"] as Mode[]) {
-			const btn = tabs.createEl("button", {
-				cls:
-					"stx-mode-tab" + (mode === this.mode ? " is-active" : ""),
-				text: mode === "capture" ? "Capture" : "Sections",
-			});
-			btn.addEventListener("click", () => {
-				if (this.mode === mode) return;
-				this.mode = mode;
-				this.render();
-			});
-		}
-
-		const body = root.createDiv("stx-mode-body");
-		if (this.mode === "capture") this.renderCapture(body);
-		else {
-			this.cards = new SectionCards(this.host, body, "main");
-			this.addChild(this.cards);
-		}
-	}
-
-	private renderCapture(body: HTMLElement): void {
-		body.addClass("stx-capture-body");
-		const input = body.createEl("textarea", {
+		const input = root.createEl("textarea", {
 			cls: "stx-capture-input",
 			attr: { placeholder: "…" },
 		});
-		input.value = this.pendingText;
 		this.inputEl = input;
 
-		const buttons = body.createDiv("stx-capture-buttons");
+		const buttons = root.createDiv("stx-capture-buttons");
 		const kinds: CaptureKind[] = [
 			"thought",
 			"doToday",
@@ -150,7 +100,6 @@ export class CaptureView extends ItemView {
 			);
 			// Only clear after the write succeeded — never lose input.
 			this.inputEl.value = "";
-			this.pendingText = "";
 			this.inputEl.focus();
 			new Notice(`→ ${target} ${nowHm()}`);
 		} catch (e) {

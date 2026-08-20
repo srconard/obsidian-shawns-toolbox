@@ -14,6 +14,7 @@ import { StatusFooter } from "./status-footer";
 import { findConflicts, formatConflictReport } from "./status-conflicts";
 import { todayIso } from "./status-service";
 import { CaptureView, CAPTURE_VIEW_TYPE } from "./capture-view";
+import { SectionsView, SECTIONS_VIEW_TYPE } from "./sections-view";
 import { FocusView, FOCUS_VIEW_TYPE } from "./focus-view";
 import { VoiceView, VOICE_VIEW_TYPE } from "./voice-view";
 import type { CardsHost } from "./section-cards";
@@ -111,6 +112,10 @@ export default class ShawnsToolboxPlugin extends Plugin {
 			(leaf: WorkspaceLeaf) => new CaptureView(leaf, host)
 		);
 		this.registerView(
+			SECTIONS_VIEW_TYPE,
+			(leaf: WorkspaceLeaf) => new SectionsView(leaf, host)
+		);
+		this.registerView(
 			FOCUS_VIEW_TYPE,
 			(leaf: WorkspaceLeaf) => new FocusView(leaf, host)
 		);
@@ -125,6 +130,12 @@ export default class ShawnsToolboxPlugin extends Plugin {
 			callback: () => void this.activateView(CAPTURE_VIEW_TYPE, "main"),
 		});
 		this.addCommand({
+			id: "open-sections-view",
+			name: "Open sections view",
+			callback: () =>
+				void this.activateView(SECTIONS_VIEW_TYPE, "main"),
+		});
+		this.addCommand({
 			id: "open-focus-panel",
 			name: "Open focus panel",
 			callback: () => void this.activateView(FOCUS_VIEW_TYPE, "left"),
@@ -136,6 +147,9 @@ export default class ShawnsToolboxPlugin extends Plugin {
 		});
 		this.addRibbonIcon("zap", "Open capture view", () =>
 			void this.activateView(CAPTURE_VIEW_TYPE, "main")
+		);
+		this.addRibbonIcon("layout-list", "Open sections view", () =>
+			void this.activateView(SECTIONS_VIEW_TYPE, "main")
 		);
 
 		this.statusFooter = new StatusFooter(this.app, () => this.settings);
