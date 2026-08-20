@@ -546,9 +546,26 @@
 }
 
 /* Edit bar (v1.7.3): pinned last row of the flex column, so with the
-   keyboard open it sits directly above it. Touch-sized targets. */
+   keyboard open it sits directly above it. Touch-sized targets.
+   v1.7.5: margin-top auto pins the bar to the container's real bottom —
+   Shawn's phone probe showed the flex column NOT stretching in the
+   drawer (bar at y=392, container to y=724; Obsidian's .workspace-drawer
+   .view-content rules outrank a single class), which left the leftover
+   container space rendering as a dead box between bar and keyboard.
+   The compound selectors below out-specify the drawer rules. */
+div.view-content.stx-section-cards {
+	display: flex;
+	flex-direction: column;
+}
+
+.stx-section-cards .stx-cards {
+	flex: 1 1 auto;
+	min-height: 0;
+}
+
 .stx-edit-bar {
 	flex: 0 0 auto;
+	margin-top: auto;
 	display: flex;
 	justify-content: space-around;
 	gap: 0.2em;
@@ -556,15 +573,20 @@
 	padding-top: 0.25em;
 }
 
+/* Square, shorter buttons (Shawn's 08-20 sizing feedback). */
 .stx-edit-btn {
 	background: transparent;
 	border: none;
 	box-shadow: none;
 	color: var(--text-muted);
-	padding: 0.3em 0.4em;
+	width: 28px;
+	height: 28px;
+	padding: 0;
 	border-radius: var(--radius-s);
 	cursor: pointer;
 	display: flex;
+	align-items: center;
+	justify-content: center;
 	flex: 0 0 auto;
 }
 
