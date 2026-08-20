@@ -11,18 +11,15 @@ import {
 	routeCapture,
 	todayIsoLocal,
 } from "./capture-service";
-import { shiftDateIso } from "./template-renderer";
+import { createDateBar, wireLongPress, type DateBar } from "./date-bar";
 import type { CardsHost } from "./section-cards";
-
-const LONG_PRESS_MS = 450;
 
 export const CAPTURE_VIEW_TYPE = "shawns-toolbox-capture";
 
 export class CaptureView extends ItemView {
 	private inputEl: HTMLTextAreaElement | null = null;
 	private submitting = false;
-	private dateBarEl: HTMLElement | null = null;
-	private dateInputEl: HTMLInputElement | null = null;
+	private dateBar: DateBar | null = null;
 	private dateBarKind: CaptureKind | null = null;
 	private lastLongPress = 0;
 
@@ -62,7 +59,15 @@ export class CaptureView extends ItemView {
 		});
 		this.inputEl = input;
 
-		this.buildDateBar(root);
+		this.dateBar = createDateBar(root, {
+			confirmLabel: "Add",
+			onConfirm: () => {
+				const date = this.dateBar?.value();
+				if (this.dateBarKind && date) {
+					void this.submit(this.dateBarKind, date);
+				}
+			},
+		});
 
 		const buttons = root.createDiv("stx-capture-buttons");
 		const kinds: CaptureKind[] = [
@@ -87,7 +92,11 @@ export class CaptureView extends ItemView {
 				void this.submit(kind);
 			});
 			if (kind === "doToday" || kind === "otherTask") {
-				this.wireLongPress(btn, kind);
+				wireLongPress(btn, () => {
+					this.lastLongPress = Date.now();
+					this.dateBarKind = kind;
+					this.dateBar?.show(CAPTURE_LABELS[kind] + " on");
+				});
 			}
 		}
 
@@ -103,101 +112,8 @@ export class CaptureView extends ItemView {
 		window.setTimeout(() => input.focus(), 0);
 	}
 
-	/** Hold a task button to pick which day the task goes to. */
-	private wireLongPress(btn: HTMLElement, kind: CaptureKind): void {
-		let timer: number | null = null;
-		const cancel = () => {
-			if (timer !== null) {
-				window.clearTimeout(timer);
-				timer = null;
-			}
-		};
-		btn.addEventListener("pointerdown", () => {
-			cancel();
-			timer = window.setTimeout(() => {
-				timer = null;
-				this.lastLongPress = Date.now();
-				this.showDateBar(kind);
-			}, LONG_PRESS_MS);
-		});
-		btn.addEventListener("pointerup", cancel);
-		btn.addEventListener("pointerleave", cancel);
-		btn.addEventListener("pointercancel", cancel);
-		// Android long-press context menu would steal the gesture
-		btn.addEventListener("contextmenu", (e) => e.preventDefault());
-	}
-
-	private buildDateBar(root: HTMLElement): void {
-		const bar = root.createDiv("stx-datebar");
-		bar.hide();
-		this.dateBarEl = bar;
-
-		bar.createSpan({ cls: "stx-datebar-label" });
-
-		const prev = bar.createEl("button", {
-			cls: "stx-datebar-btn",
-			attr: { "aria-label": "Previous day" },
-		});
-		setIcon(prev, "chevron-left");
-
-		const input = bar.createEl("input", {
-			cls: "stx-datebar-input",
-			attr: { type: "date" },
-		});
-		this.dateInputEl = input;
-		// Tap the date itself → platform calendar (Android native picker,
-		// Chromium dropdown on desktop).
-		input.addEventListener("click", () => {
-			try {
-				input.showPicker?.();
-			} catch {
-				// picker already open, or not allowed — the input still works
-			}
-		});
-
-		const next = bar.createEl("button", {
-			cls: "stx-datebar-btn",
-			attr: { "aria-label": "Next day" },
-		});
-		setIcon(next, "chevron-right");
-
-		prev.addEventListener("click", () => {
-			if (input.value) input.value = shiftDateIso(input.value, -1);
-		});
-		next.addEventListener("click", () => {
-			if (input.value) input.value = shiftDateIso(input.value, 1);
-		});
-
-		const add = bar.createEl("button", {
-			cls: "stx-datebar-add",
-			text: "Add",
-		});
-		add.addEventListener("click", () => {
-			if (this.dateBarKind && input.value) {
-				void this.submit(this.dateBarKind, input.value);
-			}
-		});
-
-		const close = bar.createEl("button", {
-			cls: "stx-datebar-btn",
-			attr: { "aria-label": "Cancel" },
-		});
-		setIcon(close, "x");
-		close.addEventListener("click", () => this.hideDateBar());
-	}
-
-	private showDateBar(kind: CaptureKind): void {
-		if (!this.dateBarEl || !this.dateInputEl) return;
-		this.dateBarKind = kind;
-		const label = this.dateBarEl.querySelector(".stx-datebar-label");
-		if (label) label.textContent = CAPTURE_LABELS[kind] + " on";
-		// Long-press means "not today" — default to tomorrow.
-		this.dateInputEl.value = shiftDateIso(todayIsoLocal(), 1);
-		this.dateBarEl.show();
-	}
-
 	private hideDateBar(): void {
-		this.dateBarEl?.hide();
+		this.dateBar?.hide();
 		this.dateBarKind = null;
 	}
 

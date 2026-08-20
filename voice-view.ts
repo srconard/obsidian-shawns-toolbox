@@ -1,16 +1,20 @@
 // voice-view.ts — right-sidebar voice panel: Echo-style big buttons. Tap a
 // button to start recording, tap again to stop; the audio is transcribed by
-// Groq Whisper and routed through the same pipeline as typed capture. On the
-// phone, the native right-edge swipe opens this panel.
+// Groq Whisper and routed through the same pipeline as typed capture.
+// Long-press a task button to pick a target day first — confirming starts
+// the recording, and the transcript lands on that day's daily note (created
+// from the template when missing). On the phone, the native right-edge swipe
+// opens this panel.
 import { ItemView, Notice, WorkspaceLeaf, setIcon } from "obsidian";
 import type { CaptureKind } from "./section-core";
 import {
-	CAPTURE_ICONS,
 	CAPTURE_LABELS,
 	nowHm,
 	routeCapture,
+	todayIsoLocal,
 } from "./capture-service";
 import { transcribeGroq } from "./groq-stt";
+import { createDateBar, wireLongPress, type DateBar } from "./date-bar";
 import type { CardsHost } from "./section-cards";
 
 export const VOICE_VIEW_TYPE = "shawns-toolbox-voice";
@@ -40,7 +44,14 @@ export class VoiceView extends ItemView {
 	private stream: MediaStream | null = null;
 	private recordingKind: CaptureKind | null = null;
 	private busy = false;
-	private buttons: Partial<Record<CaptureKind, HTMLButtonElement>> = {};
+	private buttons: Partial<
+		Record<CaptureKind, { btn: HTMLButtonElement; icon: HTMLElement }>
+	> = {};
+	private dateBar: DateBar | null = null;
+	private dateBarKind: CaptureKind | null = null;
+	/** Target day per kind, set by the date bar for the next recording. */
+	private targetDates: Partial<Record<CaptureKind, string>> = {};
+	private lastLongPress = 0;
 
 	constructor(leaf: WorkspaceLeaf, private host: CardsHost) {
 		super(leaf);
@@ -62,6 +73,21 @@ export class VoiceView extends ItemView {
 		const root = this.contentEl;
 		root.empty();
 		root.addClass("stx-voice-root");
+
+		this.dateBar = createDateBar(root, {
+			confirmLabel: "Record",
+			confirmIcon: "mic",
+			onConfirm: () => {
+				const kind = this.dateBarKind;
+				const date = this.dateBar?.value();
+				if (!kind || !date) return;
+				this.targetDates[kind] = date;
+				this.dateBar?.hide();
+				this.dateBarKind = null;
+				void this.toggle(kind);
+			},
+		});
+
 		const wrap = root.createDiv("stx-voice-buttons");
 		for (const kind of KINDS) {
 			const btn = wrap.createEl("button", {
@@ -73,11 +99,23 @@ export class VoiceView extends ItemView {
 				cls: "stx-voice-btn-label",
 				text: CAPTURE_LABELS[kind],
 			});
-			const iconEl = icon;
-			btn.addEventListener("click", () =>
-				void this.toggle(kind, btn, iconEl)
-			);
-			this.buttons[kind] = btn;
+			btn.addEventListener("click", () => {
+				// a long-press already handled this gesture
+				if (Date.now() - this.lastLongPress < 700) return;
+				void this.toggle(kind);
+			});
+			if (kind === "doToday" || kind === "otherTask") {
+				wireLongPress(btn, () => {
+					this.lastLongPress = Date.now();
+					if (this.recordingKind !== null) {
+						new Notice("Already recording — stop that one first");
+						return;
+					}
+					this.dateBarKind = kind;
+					this.dateBar?.show(CAPTURE_LABELS[kind] + " on");
+				});
+			}
+			this.buttons[kind] = { btn, icon };
 		}
 	}
 
@@ -98,17 +136,15 @@ export class VoiceView extends ItemView {
 		this.stream = null;
 	}
 
-	private async toggle(
-		kind: CaptureKind,
-		btn: HTMLButtonElement,
-		iconEl: HTMLElement
-	): Promise<void> {
+	private async toggle(kind: CaptureKind): Promise<void> {
 		if (this.busy) return;
+		const ui = this.buttons[kind];
+		if (!ui) return;
 		if (this.recordingKind === kind) {
 			// second tap: stop → transcribe → route
 			this.recordingKind = null;
-			btn.removeClass("is-recording");
-			setIcon(iconEl, "mic");
+			ui.btn.removeClass("is-recording");
+			setIcon(ui.icon, "mic");
 			this.recorder?.stop();
 			return;
 		}
@@ -121,6 +157,7 @@ export class VoiceView extends ItemView {
 				audio: true,
 			});
 		} catch (e) {
+			delete this.targetDates[kind];
 			new Notice(
 				"Microphone unavailable: " +
 					(e instanceof Error ? e.message : String(e))
@@ -147,19 +184,21 @@ export class VoiceView extends ItemView {
 		};
 		this.recorder = recorder;
 		this.recordingKind = kind;
-		btn.addClass("is-recording");
-		setIcon(iconEl, "square");
+		ui.btn.addClass("is-recording");
+		setIcon(ui.icon, "square");
 		recorder.start();
 	}
 
 	private async finish(kind: CaptureKind, blob: Blob): Promise<void> {
+		const dateIso = this.targetDates[kind];
+		delete this.targetDates[kind];
 		if (blob.size === 0) {
 			new Notice("No audio captured");
 			return;
 		}
 		this.busy = true;
-		const btn = this.buttons[kind];
-		btn?.addClass("is-busy");
+		const ui = this.buttons[kind];
+		ui?.btn.addClass("is-busy");
 		try {
 			const settings = this.host.getSettings();
 			const text = await transcribeGroq(
@@ -168,9 +207,17 @@ export class VoiceView extends ItemView {
 				await blob.arrayBuffer(),
 				blob.type
 			);
-			const target = await routeCapture(this.app, settings, kind, text);
+			const target = await routeCapture(
+				this.app,
+				settings,
+				kind,
+				text,
+				dateIso
+			);
+			const when =
+				dateIso && dateIso !== todayIsoLocal() ? dateIso : nowHm();
 			// receipt carries the transcript so garbage is catchable
-			new Notice(`→ ${target} ${nowHm()}\n${text}`, 6000);
+			new Notice(`→ ${target} ${when}\n${text}`, 6000);
 		} catch (e) {
 			new Notice(
 				"Voice capture failed: " +
@@ -178,7 +225,7 @@ export class VoiceView extends ItemView {
 			);
 		} finally {
 			this.busy = false;
-			btn?.removeClass("is-busy");
+			ui?.btn.removeClass("is-busy");
 		}
 	}
 }
