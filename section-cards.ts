@@ -293,7 +293,12 @@ export class SectionCards extends Component {
 			void this.rebuild();
 		});
 
-		if (this.anchorIso !== null) {
+		// Only offer "back to today" when this scope is actually showing a
+		// different note than today's: an anchor of yesterday still resolves
+		// to the current week/month, and a reset button there looks like a
+		// no-op but silently yanks the day scope back (Shawn's 08-20 repro).
+		const todayPath = periodicNotePath(this.host.getSettings(), this.scope);
+		if (this.anchorIso !== null && this.notePath() !== todayPath) {
 			const today = navBtn("Back to today", "calendar-check", () => {
 				this.anchorIso = null;
 				void this.rebuild();
