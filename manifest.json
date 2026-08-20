@@ -1,7 +1,7 @@
 {
 	"id": "shawns-toolbox",
 	"name": "Shawn's Toolbox",
-	"version": "1.5.5",
+	"version": "1.5.6",
 	"minAppVersion": "1.4.0",
 	"description": "Capture view (blank screen → daily-note sections), editable section cards, focus & voice panels, note status control, checkbox completion stamping, and block summarizer.",
 	"author": "Shawn",

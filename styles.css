@@ -229,8 +229,8 @@
 }
 
 .stx-scope-btn.is-active {
-	background: var(--background-modifier-hover);
-	color: var(--text-normal);
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
 	font-weight: 600;
 }
 
