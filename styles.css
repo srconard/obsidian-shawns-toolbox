@@ -595,9 +595,6 @@ div.view-content.stx-section-cards {
 	height: 15px;
 }
 
-.stx-probe-btn {
-	opacity: 0.5;
-}
 
 .stx-edit-btn:active {
 	color: var(--interactive-accent);
