@@ -210,7 +210,8 @@ export function buildSummarizationPrompt(block: ContentBlock): string {
 export async function callGeminiApi(
 	apiKey: string,
 	model: string,
-	promptText: string
+	promptText: string,
+	maxOutputTokens = 40
 ): Promise<string> {
 	const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
@@ -224,9 +225,9 @@ export async function callGeminiApi(
 		body: JSON.stringify({
 			contents: [{ parts: [{ text: promptText }] }],
 			generationConfig: {
-				maxOutputTokens: 40,
+				maxOutputTokens,
 				temperature: 0.2,
-				// Disable thinking for 2.5 models — we only need a short phrase
+				// Disable thinking for 2.5 models — short outputs only
 				thinkingConfig: { thinkingBudget: 0 },
 			},
 		}),

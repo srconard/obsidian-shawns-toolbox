@@ -12,15 +12,25 @@ import {
 	logicalTodayIso,
 	nowHm,
 	routeCapture,
+	routePreformatted,
 } from "./capture-service";
 import { shiftDateIso } from "./template-renderer";
 import { transcribeGroq } from "./groq-stt";
+import { callGeminiApi } from "./block-summarizer";
+import {
+	buildBulletsPrompt,
+	parseBulletsResponse,
+	formatBulletedThought,
+} from "./ai-bullets";
 import { createDateBar, wireLongPress, type DateBar } from "./date-bar";
 import type { CardsHost } from "./section-cards";
 
 export const VOICE_VIEW_TYPE = "shawns-toolbox-voice";
 
 const KINDS: CaptureKind[] = ["thought", "doToday", "otherTask", "log"];
+
+/** The voice panel's buttons: the four capture kinds plus AI bullets. */
+type VoiceKind = CaptureKind | "aiThought";
 
 function pickMimeType(): string {
 	const candidates = [
@@ -43,15 +53,15 @@ function pickMimeType(): string {
 export class VoiceView extends ItemView {
 	private recorder: MediaRecorder | null = null;
 	private stream: MediaStream | null = null;
-	private recordingKind: CaptureKind | null = null;
+	private recordingKind: VoiceKind | null = null;
 	private busy = false;
 	private buttons: Partial<
-		Record<CaptureKind, { btn: HTMLButtonElement; icon: HTMLElement }>
+		Record<VoiceKind, { btn: HTMLButtonElement; icon: HTMLElement }>
 	> = {};
 	private dateBar: DateBar | null = null;
-	private dateBarKind: CaptureKind | null = null;
+	private dateBarKind: VoiceKind | null = null;
 	/** Target day per kind, set by the date bar for the next recording. */
-	private targetDates: Partial<Record<CaptureKind, string>> = {};
+	private targetDates: Partial<Record<VoiceKind, string>> = {};
 	private lastLongPress = 0;
 
 	constructor(leaf: WorkspaceLeaf, private host: CardsHost) {
@@ -121,6 +131,20 @@ export class VoiceView extends ItemView {
 			}
 			this.buttons[kind] = { btn, icon };
 		}
+
+		// Fifth button — AI Thought: record → transcript → Gemini turns the
+		// ramble into a bold summary + bullets (raw transcript folded under).
+		const aiBtn = wrap.createEl("button", {
+			cls: "stx-voice-btn stx-capture-thought stx-voice-ai",
+		});
+		const aiIcon = aiBtn.createSpan("stx-voice-btn-icon");
+		setIcon(aiIcon, "sparkles");
+		aiBtn.createSpan({ cls: "stx-voice-btn-label", text: "AI Thought" });
+		aiBtn.addEventListener("click", () => {
+			if (Date.now() - this.lastLongPress < 700) return;
+			void this.toggle("aiThought");
+		});
+		this.buttons.aiThought = { btn: aiBtn, icon: aiIcon };
 	}
 
 	async onClose(): Promise<void> {
@@ -140,7 +164,7 @@ export class VoiceView extends ItemView {
 		this.stream = null;
 	}
 
-	private async toggle(kind: CaptureKind): Promise<void> {
+	private async toggle(kind: VoiceKind): Promise<void> {
 		if (this.busy) return;
 		const ui = this.buttons[kind];
 		if (!ui) return;
@@ -193,7 +217,7 @@ export class VoiceView extends ItemView {
 		recorder.start();
 	}
 
-	private async finish(kind: CaptureKind, blob: Blob): Promise<void> {
+	private async finish(kind: VoiceKind, blob: Blob): Promise<void> {
 		const dateIso = this.targetDates[kind];
 		delete this.targetDates[kind];
 		if (blob.size === 0) {
@@ -211,6 +235,15 @@ export class VoiceView extends ItemView {
 				await blob.arrayBuffer(),
 				blob.type
 			);
+			const when =
+				dateIso &&
+				dateIso !== logicalTodayIso(this.host.getSettings())
+					? dateIso
+					: nowHm();
+			if (kind === "aiThought") {
+				await this.finishAiThought(text, dateIso, when);
+				return;
+			}
 			const target = await routeCapture(
 				this.app,
 				settings,
@@ -218,11 +251,6 @@ export class VoiceView extends ItemView {
 				text,
 				dateIso
 			);
-			const when =
-				dateIso &&
-				dateIso !== logicalTodayIso(this.host.getSettings())
-					? dateIso
-					: nowHm();
 			// receipt carries the transcript so garbage is catchable
 			new Notice(`→ ${target} ${when}\n${text}`, 6000);
 		} catch (e) {
@@ -233,6 +261,66 @@ export class VoiceView extends ItemView {
 		} finally {
 			this.busy = false;
 			ui?.btn.removeClass("is-busy");
+		}
+	}
+
+	/**
+	 * AI Thought: transcript → Gemini → bold summary + bullets, raw folded
+	 * beneath, appended under the thought heading. Any AI failure (no key,
+	 * API error, unparseable reply) degrades to saving the raw transcript as
+	 * a normal thought — a capture is never lost to a flaky model call.
+	 */
+	private async finishAiThought(
+		text: string,
+		dateIso: string | undefined,
+		when: string
+	): Promise<void> {
+		const settings = this.host.getSettings();
+		const heading = settings.captureTargets.thought;
+		let block: string | null = null;
+		let aiNote = "";
+		if (!settings.geminiApiKey) {
+			aiNote = "no Gemini key in settings";
+		} else {
+			try {
+				const raw = await callGeminiApi(
+					settings.geminiApiKey,
+					settings.geminiModel,
+					buildBulletsPrompt(text),
+					600
+				);
+				const parsed = parseBulletsResponse(raw);
+				if (parsed) {
+					block = formatBulletedThought(parsed, text, nowHm());
+					aiNote = `**${parsed.summary}** + ${parsed.bullets.length} bullets`;
+				} else {
+					aiNote = "unparseable AI reply";
+				}
+			} catch (e) {
+				aiNote = e instanceof Error ? e.message : String(e);
+			}
+		}
+		if (block !== null) {
+			const target = await routePreformatted(
+				this.app,
+				settings,
+				heading,
+				block,
+				dateIso
+			);
+			new Notice(`→ ${target} ${when}\n${aiNote}`, 6000);
+		} else {
+			const target = await routeCapture(
+				this.app,
+				settings,
+				"thought",
+				text,
+				dateIso
+			);
+			new Notice(
+				`AI bullets unavailable (${aiNote}) — saved raw → ${target} ${when}\n${text}`,
+				8000
+			);
 		}
 	}
 }

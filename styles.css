@@ -607,3 +607,8 @@ div.view-content.stx-section-cards {
 body.is-mobile .mobile-toolbar:not(:has(.mobile-toolbar-option)) {
 	display: none;
 }
+
+/* AI Thought voice button (v1.8.0) — sparkles variant of the thought button */
+.stx-voice-ai .stx-voice-btn-icon {
+	color: var(--interactive-accent);
+}

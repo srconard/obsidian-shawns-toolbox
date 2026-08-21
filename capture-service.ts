@@ -119,6 +119,31 @@ export async function ensureDailyNote(
  * message when there is nothing to capture — the caller must keep the
  * user's text on failure.
  */
+/**
+ * Append an already-formatted (possibly multi-line) block under a heading in
+ * the daily note for dateIso (default: logical today), creating the note from
+ * the template when missing. Used by the AI-bullets voice capture, which
+ * builds its own block instead of a single formatted line.
+ */
+export async function routePreformatted(
+	app: App,
+	settings: ShawnsToolboxSettings,
+	heading: string,
+	block: string,
+	dateIso?: string
+): Promise<string> {
+	if (!block.trim()) throw new Error("Nothing to capture");
+	const file = await ensureDailyNote(
+		app,
+		settings,
+		dateIso ?? logicalTodayIso(settings)
+	);
+	await app.vault.process(file, (content) =>
+		appendToSection(content, heading, block)
+	);
+	return heading.replace(/^#+\s*/, "");
+}
+
 export async function routeCapture(
 	app: App,
 	settings: ShawnsToolboxSettings,
