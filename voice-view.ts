@@ -17,6 +17,7 @@ import {
 import { shiftDateIso } from "./template-renderer";
 import { transcribeGroq } from "./groq-stt";
 import { callGeminiApi } from "./block-summarizer";
+import { callOpenAiApi } from "./ai-providers";
 import {
 	buildBulletsPrompt,
 	parseBulletsResponse,
@@ -335,18 +336,30 @@ export class VoiceView extends ItemView {
 	): Promise<void> {
 		const settings = this.host.getSettings();
 		const heading = settings.captureTargets.thought;
+		const useOpenAi = settings.aiThoughtProvider === "openai";
+		const key = useOpenAi ? settings.openaiApiKey : settings.geminiApiKey;
 		let block: string | null = null;
 		let aiNote = "";
-		if (!settings.geminiApiKey) {
-			aiNote = "no Gemini key in settings";
+		if (!key) {
+			aiNote = useOpenAi
+				? "no OpenAI key in settings"
+				: "no Gemini key in settings";
 		} else {
 			try {
-				const raw = await callGeminiApi(
-					settings.geminiApiKey,
-					settings.geminiModel,
-					buildBulletsPrompt(text),
-					600
-				);
+				const prompt = buildBulletsPrompt(text);
+				const raw = useOpenAi
+					? await callOpenAiApi(
+							key,
+							settings.openaiModel,
+							prompt,
+							600
+						)
+					: await callGeminiApi(
+							key,
+							settings.geminiModel,
+							prompt,
+							600
+						);
 				const parsed = parseBulletsResponse(raw);
 				if (parsed) {
 					block = formatBulletedThought(parsed, text, nowHm());

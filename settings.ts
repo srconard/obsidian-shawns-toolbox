@@ -44,6 +44,12 @@ export interface ShawnsToolboxSettings {
 	// Voice capture
 	groqApiKey: string;
 	groqModel: string;
+
+	// AI Thought (voice → summary + bullets)
+	/** Which model turns the transcript into bullets. */
+	aiThoughtProvider: "gemini" | "openai";
+	openaiApiKey: string;
+	openaiModel: string;
 }
 
 export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
@@ -93,6 +99,10 @@ export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
 
 	groqApiKey: "",
 	groqModel: "whisper-large-v3-turbo",
+
+	aiThoughtProvider: "gemini",
+	openaiApiKey: "",
+	openaiModel: "gpt-luna",
 };
 
 export class ShawnsToolboxSettingTab extends PluginSettingTab {
@@ -408,6 +418,56 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 					.onChange(async (value) => {
 						this.plugin.settings.groqModel =
 							value.trim() || DEFAULT_SETTINGS.groqModel;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		// AI Thought section
+		containerEl.createEl("h3", { text: "AI Thought" });
+
+		containerEl.createEl("p", {
+			text: "The AI Thought voice button turns a rambling transcript into a bold headline + bullets. Pick which model does it. Gemini uses the Block Summarizer key above.",
+			cls: "setting-item-description",
+		});
+
+		new Setting(containerEl)
+			.setName("Provider")
+			.addDropdown((drop) =>
+				drop
+					.addOption("gemini", "Gemini (Block Summarizer key)")
+					.addOption("openai", "OpenAI")
+					.setValue(this.plugin.settings.aiThoughtProvider)
+					.onChange(async (value) => {
+						this.plugin.settings.aiThoughtProvider =
+							value === "openai" ? "openai" : "gemini";
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("OpenAI API key")
+			.setDesc("Used only when the provider above is OpenAI.")
+			.addText((text) => {
+				text
+					.setPlaceholder("Enter your API key")
+					.setValue(this.plugin.settings.openaiApiKey)
+					.onChange(async (value) => {
+						this.plugin.settings.openaiApiKey = value.trim();
+						await this.plugin.saveSettings();
+					});
+				text.inputEl.type = "password";
+				text.inputEl.style.width = "300px";
+			});
+
+		new Setting(containerEl)
+			.setName("OpenAI model")
+			.addText((text) =>
+				text
+					.setPlaceholder("gpt-luna")
+					.setValue(this.plugin.settings.openaiModel)
+					.onChange(async (value) => {
+						this.plugin.settings.openaiModel =
+							value.trim() || DEFAULT_SETTINGS.openaiModel;
 						await this.plugin.saveSettings();
 					})
 			);
