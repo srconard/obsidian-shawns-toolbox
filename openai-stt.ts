@@ -1,19 +1,21 @@
-// groq-stt.ts — Groq Whisper transcription over Obsidian's requestUrl
-// (multipart body built by hand; requestUrl works on desktop and phone and
-// avoids CORS, same reason block-summarizer uses it for Gemini).
+// openai-stt.ts — OpenAI Whisper transcription over Obsidian's requestUrl.
+// Fallback for Groq (see stt-chain.ts): system-wide convention is Groq
+// whisper-large-v3-turbo primary, OpenAI whisper-1 fallback. Same hand-built
+// multipart body as groq-stt.ts (requestUrl works on desktop and phone and
+// avoids CORS).
 import { requestUrl } from "obsidian";
 import { extensionFor } from "./stt-chain";
 
-const GROQ_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
+const OPENAI_URL = "https://api.openai.com/v1/audio/transcriptions";
 
-export async function transcribeGroq(
+export async function transcribeOpenAi(
 	apiKey: string,
 	model: string,
 	audio: ArrayBuffer,
 	mime: string
 ): Promise<string> {
 	if (!apiKey) {
-		throw new Error("No Groq API key — add one in Shawn's Toolbox settings");
+		throw new Error("No OpenAI API key — add one in Shawn's Toolbox settings");
 	}
 	const boundary =
 		"----stxBoundary" + Math.random().toString(36).slice(2);
@@ -34,7 +36,7 @@ export async function transcribeGroq(
 	body.set(tail, head.length + audio.byteLength);
 
 	const res = await requestUrl({
-		url: GROQ_URL,
+		url: OPENAI_URL,
 		method: "POST",
 		headers: {
 			Authorization: `Bearer ${apiKey}`,
@@ -45,10 +47,10 @@ export async function transcribeGroq(
 	});
 	if (res.status >= 300) {
 		throw new Error(
-			`Groq ${res.status}: ${(res.text ?? "").slice(0, 200)}`
+			`OpenAI ${res.status}: ${(res.text ?? "").slice(0, 200)}`
 		);
 	}
 	const text = (res.json?.text ?? "").trim();
-	if (!text) throw new Error("Groq returned an empty transcript");
+	if (!text) throw new Error("OpenAI returned an empty transcript");
 	return text;
 }

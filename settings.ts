@@ -44,6 +44,10 @@ export interface ShawnsToolboxSettings {
 	// Voice capture
 	groqApiKey: string;
 	groqModel: string;
+	/** OpenAI Whisper model used as the STT fallback when Groq fails. */
+	openaiSttModel: string;
+	/** Folder that failed (untranscribable) recordings are parked in. */
+	voiceFailuresFolder: string;
 
 	// AI Thought (voice → summary + bullets)
 	/** Which model turns the transcript into bullets. */
@@ -99,6 +103,8 @@ export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
 
 	groqApiKey: "",
 	groqModel: "whisper-large-v3-turbo",
+	openaiSttModel: "whisper-1",
+	voiceFailuresFolder: "Voice Failures",
 
 	aiThoughtProvider: "gemini",
 	openaiApiKey: "",
@@ -390,7 +396,7 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 		containerEl.createEl("h3", { text: "Voice capture" });
 
 		containerEl.createEl("p", {
-			text: "The voice panel records audio, transcribes it with Groq Whisper, and routes the text like a typed capture.",
+			text: "The voice panel records audio, transcribes it with Groq Whisper (OpenAI whisper-1 fallback), and routes the text like a typed capture. If every provider fails the raw audio is parked in the vault instead of lost.",
 			cls: "setting-item-description",
 		});
 
@@ -422,6 +428,39 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 					})
 			);
 
+		new Setting(containerEl)
+			.setName("OpenAI transcription model (fallback)")
+			.setDesc(
+				"Tried when Groq fails, using the OpenAI API key in the AI Thought section below."
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder("whisper-1")
+					.setValue(this.plugin.settings.openaiSttModel)
+					.onChange(async (value) => {
+						this.plugin.settings.openaiSttModel =
+							value.trim() || DEFAULT_SETTINGS.openaiSttModel;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Voice failures folder")
+			.setDesc(
+				"When transcription fails on every provider, the raw audio is saved here (timestamped) so nothing is lost."
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder("Voice Failures")
+					.setValue(this.plugin.settings.voiceFailuresFolder)
+					.onChange(async (value) => {
+						this.plugin.settings.voiceFailuresFolder =
+							value.trim() ||
+							DEFAULT_SETTINGS.voiceFailuresFolder;
+						await this.plugin.saveSettings();
+					})
+			);
+
 		// AI Thought section
 		containerEl.createEl("h3", { text: "AI Thought" });
 
@@ -446,7 +485,9 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("OpenAI API key")
-			.setDesc("Used only when the provider above is OpenAI.")
+			.setDesc(
+				"Used for AI Thought when the provider above is OpenAI, and as the voice-transcription fallback when Groq fails."
+			)
 			.addText((text) => {
 				text
 					.setPlaceholder("Enter your API key")

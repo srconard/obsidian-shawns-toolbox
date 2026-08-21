@@ -5,7 +5,7 @@
 // the recording, and the transcript lands on that day's daily note (created
 // from the template when missing). On the phone, the native right-edge swipe
 // opens this panel.
-import { ItemView, Notice, WorkspaceLeaf, setIcon } from "obsidian";
+import { ItemView, Notice, WorkspaceLeaf, normalizePath, setIcon } from "obsidian";
 import type { CaptureKind } from "./section-core";
 import {
 	CAPTURE_LABELS,
@@ -16,6 +16,9 @@ import {
 } from "./capture-service";
 import { shiftDateIso } from "./template-renderer";
 import { transcribeGroq } from "./groq-stt";
+import { transcribeOpenAi } from "./openai-stt";
+import { failureAudioPath, sttProviderOrder } from "./stt-chain";
+import type { ShawnsToolboxSettings } from "./settings";
 import { callGeminiApi } from "./block-summarizer";
 import { callOpenAiApi } from "./ai-providers";
 import {
@@ -288,12 +291,15 @@ export class VoiceView extends ItemView {
 		ui?.btn.addClass("is-busy");
 		try {
 			const settings = this.host.getSettings();
-			const text = await transcribeGroq(
-				settings.groqApiKey,
-				settings.groqModel,
-				await blob.arrayBuffer(),
-				blob.type
-			);
+			let text: string;
+			try {
+				text = await this.transcribe(settings, blob);
+			} catch (e) {
+				// Every provider failed: never discard the audio — park it in
+				// the vault and point today's note at it so it resurfaces.
+				await this.saveFailedAudio(settings, kind, blob, dateIso, e);
+				return;
+			}
 			const when =
 				dateIso &&
 				dateIso !== logicalTodayIso(this.host.getSettings())
@@ -320,6 +326,93 @@ export class VoiceView extends ItemView {
 		} finally {
 			this.busy = false;
 			ui?.btn.removeClass("is-busy");
+		}
+	}
+
+	/**
+	 * Transcribe with the provider chain: Groq primary, OpenAI whisper-1
+	 * fallback (only if its key is set). Throws the last provider's error when
+	 * all configured providers fail, so the caller can save the audio.
+	 */
+	private async transcribe(
+		settings: ShawnsToolboxSettings,
+		blob: Blob
+	): Promise<string> {
+		const order = sttProviderOrder(settings);
+		if (order.length === 0) {
+			throw new Error("No transcription API key — add Groq or OpenAI in settings");
+		}
+		const buf = await blob.arrayBuffer();
+		let lastErr: unknown = null;
+		for (const provider of order) {
+			try {
+				if (provider === "groq") {
+					return await transcribeGroq(
+						settings.groqApiKey,
+						settings.groqModel,
+						buf,
+						blob.type
+					);
+				}
+				return await transcribeOpenAi(
+					settings.openaiApiKey,
+					settings.openaiSttModel,
+					buf,
+					blob.type
+				);
+			} catch (e) {
+				lastErr = e;
+			}
+		}
+		throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+	}
+
+	/**
+	 * Last-resort durability: transcription failed on every provider, so write
+	 * the raw audio into the vault (timestamped, correct extension) and drop a
+	 * one-line pointer into today's capture section so it resurfaces. The
+	 * failure Notice says exactly where the audio landed.
+	 */
+	private async saveFailedAudio(
+		settings: ShawnsToolboxSettings,
+		kind: VoiceKind,
+		blob: Blob,
+		dateIso: string | undefined,
+		err: unknown
+	): Promise<void> {
+		const reason = err instanceof Error ? err.message : String(err);
+		try {
+			const folder = (
+				settings.voiceFailuresFolder || "Voice Failures"
+			).replace(/\/+$/, "");
+			if (folder && !this.app.vault.getAbstractFileByPath(folder)) {
+				await this.app.vault.createFolder(folder);
+			}
+			const path = normalizePath(failureAudioPath(folder, blob.type));
+			await this.app.vault.createBinary(path, await blob.arrayBuffer());
+			// Pointer resurfaces the orphaned recording; best-effort so a
+			// daily-note write failure can't also swallow the saved-audio notice.
+			try {
+				await routeCapture(
+					this.app,
+					settings,
+					kind === "aiThought" ? "thought" : kind,
+					`⚠️ Voice transcription failed — audio saved: [[${path}]]`,
+					dateIso
+				);
+			} catch {
+				// pointer is optional; the audio file is the durable record
+			}
+			new Notice(
+				`Transcription failed (${reason}).\nAudio saved → ${path}`,
+				12000
+			);
+		} catch (saveErr) {
+			new Notice(
+				`Transcription failed (${reason}) AND could not save audio: ` +
+					(saveErr instanceof Error ? saveErr.message : String(saveErr)),
+				15000
+			);
 		}
 	}
 
