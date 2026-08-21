@@ -63,6 +63,8 @@ export class VoiceView extends ItemView {
 	/** Target day per kind, set by the date bar for the next recording. */
 	private targetDates: Partial<Record<VoiceKind, string>> = {};
 	private lastLongPress = 0;
+	/** Kind the in-flight recording will finish as (mid-recording switching). */
+	private liveKind: VoiceKind | null = null;
 
 	constructor(leaf: WorkspaceLeaf, private host: CardsHost) {
 		super(leaf);
@@ -164,6 +166,33 @@ export class VoiceView extends ItemView {
 		this.stream = null;
 	}
 
+	/** Default (idle) icon for a voice button. */
+	private defaultIcon(kind: VoiceKind): string {
+		return kind === "aiThought" ? "sparkles" : "mic";
+	}
+
+	/** Thought ⇄ AI Thought may swap mid-recording; nothing else may. */
+	private static switchable(a: VoiceKind, b: VoiceKind): boolean {
+		return (
+			(a === "thought" && b === "aiThought") ||
+			(a === "aiThought" && b === "thought")
+		);
+	}
+
+	/**
+	 * While a thought is being recorded, highlight its counterpart button as
+	 * the live "switch this recording" target (and vice versa).
+	 */
+	private setSwitchAffordance(active: VoiceKind | null): void {
+		this.buttons.thought?.btn.removeClass("is-switch-target");
+		this.buttons.aiThought?.btn.removeClass("is-switch-target");
+		if (active === "thought") {
+			this.buttons.aiThought?.btn.addClass("is-switch-target");
+		} else if (active === "aiThought") {
+			this.buttons.thought?.btn.addClass("is-switch-target");
+		}
+	}
+
 	private async toggle(kind: VoiceKind): Promise<void> {
 		if (this.busy) return;
 		const ui = this.buttons[kind];
@@ -171,9 +200,32 @@ export class VoiceView extends ItemView {
 		if (this.recordingKind === kind) {
 			// second tap: stop → transcribe → route
 			this.recordingKind = null;
+			this.setSwitchAffordance(null);
 			ui.btn.removeClass("is-recording");
-			setIcon(ui.icon, "mic");
+			setIcon(ui.icon, this.defaultIcon(kind));
 			this.recorder?.stop();
+			return;
+		}
+		if (
+			this.recordingKind !== null &&
+			VoiceView.switchable(this.recordingKind, kind)
+		) {
+			// Mid-recording switch: the audio keeps rolling, only the routing
+			// changes ("I'm rambling — make this an AI Thought after all").
+			const from = this.recordingKind;
+			const fromUi = this.buttons[from];
+			fromUi?.btn.removeClass("is-recording");
+			if (fromUi) setIcon(fromUi.icon, this.defaultIcon(from));
+			this.recordingKind = kind;
+			this.liveKind = kind;
+			ui.btn.addClass("is-recording");
+			setIcon(ui.icon, "square");
+			this.setSwitchAffordance(kind);
+			new Notice(
+				kind === "aiThought"
+					? "→ AI Thought (bullets on stop)"
+					: "→ plain Thought"
+			);
 			return;
 		}
 		if (this.recordingKind !== null) {
@@ -208,12 +260,18 @@ export class VoiceView extends ItemView {
 			this.stream?.getTracks().forEach((t) => t.stop());
 			this.stream = null;
 			this.recorder = null;
-			void this.finish(kind, blob);
+			// liveKind, not the closure's kind: a mid-recording switch may
+			// have re-routed this recording after it started.
+			const finalKind = this.liveKind ?? kind;
+			this.liveKind = null;
+			void this.finish(finalKind, blob);
 		};
 		this.recorder = recorder;
 		this.recordingKind = kind;
+		this.liveKind = kind;
 		ui.btn.addClass("is-recording");
 		setIcon(ui.icon, "square");
+		this.setSwitchAffordance(kind);
 		recorder.start();
 	}
 

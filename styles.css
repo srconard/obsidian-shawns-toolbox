@@ -612,3 +612,16 @@ body.is-mobile .mobile-toolbar:not(:has(.mobile-toolbar-option)) {
 .stx-voice-ai .stx-voice-btn-icon {
 	color: var(--interactive-accent);
 }
+
+/* Mid-recording switch affordance (v1.8.1): while a thought records, its
+   counterpart button (Thought ⇄ AI Thought) pulses as the live switch. */
+.stx-voice-btn.is-switch-target {
+	outline: 2px dashed var(--interactive-accent);
+	outline-offset: 2px;
+	animation: stx-switch-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes stx-switch-pulse {
+	0%, 100% { outline-color: var(--interactive-accent); }
+	50% { outline-color: transparent; }
+}
