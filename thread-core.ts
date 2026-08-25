@@ -24,8 +24,38 @@ export interface ThreadPost {
 	blockId: string | null;
 	/** If this post replies to a block, the target note + block id. */
 	replyTo: { note: string; blockId: string } | null;
+	/** The periodic cadence tags on this line (subset of THOUGHT_PERIODS, in
+	 *  horizon order). Empty when the post carries no #thought/<period> tag. */
+	periods: string[];
 	/** The raw line as written (for edits that append a block id). */
 	raw: string;
+}
+
+/**
+ * A line carrying a #thought/<period> cadence tag, resolved for the periodic
+ * views. Distinct from ThreadPost: a periodic thought need not be a #thread
+ * post, so `thread` is nullable and there is no reply structure.
+ */
+export interface PeriodicPost {
+	/** The cadence tags on this line (subset of THOUGHT_PERIODS, horizon order). */
+	periods: string[];
+	/** The #thread name if the line is also a thread post, else null. */
+	thread: string | null;
+	note: string;
+	dateIso: string;
+	line: number;
+	time: string | null;
+	text: string;
+	blockId: string | null;
+	raw: string;
+}
+
+/** An aggregated cadence for the periodic-thoughts list. */
+export interface PeriodSummary {
+	period: string;
+	postCount: number;
+	lastActiveDate: string;
+	lastActiveTime: string | null;
 }
 
 /** An aggregated thread for the list view. */
@@ -48,6 +78,13 @@ const BLOCK_ID_RE = /\s\^([A-Za-z0-9]+)\s*$/;
 // A leading time: "- HH:MM " or "HH:MM " (with optional bullet marker).
 const LEADING_TIME_RE = /^\s*(?:[-*+]\s+)?(\d{1,2}:\d{2})\b/;
 
+/** The periodic-thought cadence tags, in horizon order (SOP §3). */
+export const THOUGHT_PERIODS = ["weekly", "monthly", "quarterly", "yearly"] as const;
+// A #thought/<period> cadence tag as a whole token (not a prefix of a longer
+// tag). Source only — callers build fresh global instances to avoid shared
+// lastIndex state.
+const THOUGHT_TAG_SOURCE = `#thought\\/(${THOUGHT_PERIODS.join("|")})(?![A-Za-z0-9_/-])`;
+
 function stripCr(line: string): string {
 	return line.endsWith("\r") ? line.slice(0, -1) : line;
 }
@@ -68,12 +105,23 @@ export function postDisplayText(line: string): string {
 	t = t.replace(BLOCK_ID_RE, "");
 	t = t.replace(REPLY_LINK_RE, "");
 	t = t.replace(THREAD_TAG_RE, "");
+	t = t.replace(new RegExp(THOUGHT_TAG_SOURCE, "g"), "");
 	// leading list marker + time prefix
 	t = t.replace(/^\s*(?:[-*+]\s+)?/, "");
 	t = t.replace(/^(\d{1,2}:\d{2})\s+/, "");
 	// leftover reply arrow(s)
 	t = t.replace(/↩/g, "");
 	return t.replace(/\s{2,}/g, " ").trim();
+}
+
+/** The #thought/<period> cadence tags on a line, in THOUGHT_PERIODS order. */
+export function extractPeriods(line: string): string[] {
+	const clean = stripCr(line);
+	const found = new Set<string>();
+	const re = new RegExp(THOUGHT_TAG_SOURCE, "g");
+	let m: RegExpExecArray | null;
+	while ((m = re.exec(clean))) found.add(m[1]);
+	return THOUGHT_PERIODS.filter((p) => found.has(p));
 }
 
 /** Parse one line into a ThreadPost, or null if it carries no #thread tag. */
@@ -99,6 +147,7 @@ export function parsePostLine(
 		replyTo: reply
 			? { note: reply[1].trim(), blockId: reply[2] }
 			: null,
+		periods: extractPeriods(clean),
 		raw: clean,
 	};
 }
@@ -124,8 +173,11 @@ export function parseNotePosts(
 }
 
 /** Chronological sort key: date, then time (untimed sorts before timed on the
- *  same day), then line order. */
-function postOrder(a: ThreadPost, b: ThreadPost): number {
+ *  same day), then line order. Works for any post carrying date/time/line. */
+function postOrder(
+	a: { dateIso: string; time: string | null; line: number },
+	b: { dateIso: string; time: string | null; line: number }
+): number {
 	if (a.dateIso !== b.dateIso) return a.dateIso < b.dateIso ? -1 : 1;
 	const at = a.time ?? "";
 	const bt = b.time ?? "";
@@ -226,10 +278,77 @@ export function ensureBlockId(
 	return { line: `${trimmed} ^${id}`, id, changed: true };
 }
 
-// ---- tag append (long-press / right-click "add a tag to this post") ----
+// ---- periodic thoughts (#thought/<period>) ----
 
-/** The periodic-thought cadence tags, in horizon order (SOP §3). */
-export const THOUGHT_PERIODS = ["weekly", "monthly", "quarterly", "yearly"] as const;
+/** Parse one line into a PeriodicPost, or null if it carries no cadence tag. */
+export function parsePeriodicPostLine(
+	line: string,
+	note: string,
+	dateIso: string,
+	lineNo: number
+): PeriodicPost | null {
+	const clean = stripCr(line);
+	const periods = extractPeriods(clean);
+	if (periods.length === 0) return null;
+	const tag = THREAD_TAG_RE.exec(clean);
+	const timeM = LEADING_TIME_RE.exec(clean);
+	return {
+		periods,
+		thread: tag ? tag[1] : null,
+		note,
+		dateIso,
+		line: lineNo,
+		time: timeM ? normalizeTime(timeM[1]) : null,
+		text: postDisplayText(clean),
+		blockId: extractBlockId(clean),
+		raw: clean,
+	};
+}
+
+/** Parse every #thought/<period> line in a daily note's content. */
+export function parsePeriodicPosts(
+	note: string,
+	dateIso: string,
+	content: string
+): PeriodicPost[] {
+	const out: PeriodicPost[] = [];
+	const lines = content.split("\n");
+	for (let i = 0; i < lines.length; i++) {
+		const p = parsePeriodicPostLine(lines[i], note, dateIso, i);
+		if (p) out.push(p);
+	}
+	return out;
+}
+
+/** All posts carrying a given cadence, sorted chronologically. */
+export function periodicPosts(
+	posts: PeriodicPost[],
+	period: string
+): PeriodicPost[] {
+	return posts.filter((p) => p.periods.includes(period)).sort(postOrder);
+}
+
+/**
+ * Summaries for the periodic-thoughts list, one per cadence that has at least
+ * one post, in THOUGHT_PERIODS (horizon) order.
+ */
+export function summarizePeriods(posts: PeriodicPost[]): PeriodSummary[] {
+	const out: PeriodSummary[] = [];
+	for (const period of THOUGHT_PERIODS) {
+		const list = posts.filter((p) => p.periods.includes(period));
+		if (list.length === 0) continue;
+		const last = list.slice().sort(postOrder)[list.length - 1];
+		out.push({
+			period,
+			postCount: list.length,
+			lastActiveDate: last.dateIso,
+			lastActiveTime: last.time,
+		});
+	}
+	return out;
+}
+
+// ---- tag append (long-press / right-click "add a tag to this post") ----
 
 function escapeRe(s: string): string {
 	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

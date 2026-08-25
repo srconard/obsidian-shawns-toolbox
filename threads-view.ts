@@ -11,8 +11,11 @@ import {
 	replyCounts,
 	indexByBlock,
 	targetKey,
+	periodicPosts,
+	summarizePeriods,
 	THOUGHT_PERIODS,
 	type ThreadPost,
+	type PeriodicPost,
 } from "./thread-core";
 
 export const THREADS_VIEW_TYPE = "shawns-toolbox-threads";
@@ -23,7 +26,10 @@ const REFRESH_DEBOUNCE_MS = 400;
 export class ThreadsView extends ItemView {
 	private service: ThreadService;
 	private posts: ThreadPost[] = [];
+	private periodic: PeriodicPost[] = [];
 	private activeThread: string | null = null;
+	private activePeriod: string | null = null;
+	private threadPeriodFilter = new Set<string>();
 	private replyOpenFor: string | null = null;
 	private refreshTimer: number | null = null;
 
@@ -87,14 +93,17 @@ export class ThreadsView extends ItemView {
 	}
 
 	private async refresh(): Promise<void> {
-		this.posts = await this.service.scan();
+		const { posts, periodic } = await this.service.scanAll();
+		this.posts = posts;
+		this.periodic = periodic;
 		this.render();
 	}
 
 	private render(): void {
 		this.contentEl.empty();
-		if (this.activeThread === null) this.renderList();
-		else this.renderThread(this.activeThread);
+		if (this.activePeriod !== null) this.renderPeriod(this.activePeriod);
+		else if (this.activeThread !== null) this.renderThread(this.activeThread);
+		else this.renderList();
 	}
 
 	// ---- thread list ----
@@ -105,31 +114,108 @@ export class ThreadsView extends ItemView {
 		this.iconButton(head, "refresh-cw", "Rescan", () => void this.refresh());
 
 		const summaries = summarizeThreads(this.posts);
-		if (summaries.length === 0) {
+		const periods = summarizePeriods(this.periodic);
+		if (summaries.length === 0 && periods.length === 0) {
 			this.contentEl.createDiv({
 				cls: "stx-threads-empty",
-				text: "No #thread posts found in the timeline yet.",
+				text: "No #thread or #thought posts found in the timeline yet.",
 			});
 			return;
 		}
-		const list = this.contentEl.createDiv({ cls: "stx-thread-list" });
-		for (const s of summaries) {
-			const row = list.createDiv({ cls: "stx-thread-row" });
-			row.createDiv({ cls: "stx-thread-row-name", text: s.name });
-			const meta = row.createDiv({ cls: "stx-thread-row-meta" });
-			const when = s.lastActiveTime
-				? `${s.lastActiveDate} ${s.lastActiveTime}`
-				: s.lastActiveDate;
-			meta.createSpan({ cls: "stx-thread-row-date", text: when });
-			meta.createSpan({
-				cls: "stx-thread-row-count",
-				text: `${s.postCount} post${s.postCount === 1 ? "" : "s"}`,
+		if (summaries.length > 0) {
+			const list = this.contentEl.createDiv({ cls: "stx-thread-list" });
+			for (const s of summaries) {
+				const when = s.lastActiveTime
+					? `${s.lastActiveDate} ${s.lastActiveTime}`
+					: s.lastActiveDate;
+				this.listRow(list, s.name, when, s.postCount, () => {
+					this.activeThread = s.name;
+					this.threadPeriodFilter.clear();
+					this.replyOpenFor = null;
+					this.render();
+				});
+			}
+		}
+		if (periods.length > 0) {
+			const sec = this.contentEl.createDiv({ cls: "stx-period-section" });
+			sec.createDiv({ cls: "stx-period-head", text: "Periodic thoughts" });
+			const list = sec.createDiv({ cls: "stx-thread-list" });
+			for (const s of periods) {
+				const when = s.lastActiveTime
+					? `${s.lastActiveDate} ${s.lastActiveTime}`
+					: s.lastActiveDate;
+				this.listRow(
+					list,
+					`${cap(s.period)} thoughts`,
+					when,
+					s.postCount,
+					() => {
+						this.activePeriod = s.period;
+						this.replyOpenFor = null;
+						this.render();
+					}
+				);
+			}
+		}
+	}
+
+	private listRow(
+		list: HTMLElement,
+		name: string,
+		when: string,
+		count: number,
+		onClick: () => void
+	): void {
+		const row = list.createDiv({ cls: "stx-thread-row" });
+		row.createDiv({ cls: "stx-thread-row-name", text: name });
+		const meta = row.createDiv({ cls: "stx-thread-row-meta" });
+		meta.createSpan({ cls: "stx-thread-row-date", text: when });
+		meta.createSpan({
+			cls: "stx-thread-row-count",
+			text: `${count} post${count === 1 ? "" : "s"}`,
+		});
+		row.addEventListener("click", onClick);
+	}
+
+	// ---- periodic-thoughts detail ----
+
+	private renderPeriod(period: string): void {
+		const head = this.contentEl.createDiv({ cls: "stx-threads-head" });
+		this.iconButton(head, "arrow-left", "Back", () => {
+			this.activePeriod = null;
+			this.render();
+		});
+		head.createSpan({
+			cls: "stx-threads-title",
+			text: `${cap(period)} thoughts`,
+		});
+
+		const posts = periodicPosts(this.periodic, period);
+		const listEl = this.contentEl.createDiv({ cls: "stx-thread-posts" });
+		for (const post of posts) {
+			const card = listEl.createDiv({ cls: "stx-post" });
+			const dateLine = card.createDiv({ cls: "stx-post-date" });
+			dateLine.setText(
+				post.time ? `${post.dateIso} · ${post.time}` : post.dateIso
+			);
+			dateLine.addEventListener("click", async () => {
+				try {
+					await this.service.openPost(post);
+				} catch (err) {
+					new Notice(err instanceof Error ? err.message : String(err));
+				}
 			});
-			row.addEventListener("click", () => {
-				this.activeThread = s.name;
-				this.replyOpenFor = null;
-				this.render();
-			});
+			card.createDiv({ cls: "stx-post-text", text: post.text });
+			if (post.thread) {
+				const t = card.createDiv({ cls: "stx-post-thread" });
+				t.setText(`#thread/${post.thread}`);
+				t.addEventListener("click", () => {
+					this.activePeriod = null;
+					this.activeThread = post.thread;
+					this.threadPeriodFilter.clear();
+					this.render();
+				});
+			}
 		}
 	}
 
@@ -150,10 +236,40 @@ export class ThreadsView extends ItemView {
 		const posts = threadPosts(this.posts, thread);
 		const counts = replyCounts(this.posts);
 		const parents = indexByBlock(this.posts);
+
+		// Cadence filter: chips for the periods any post in this thread carries.
+		// Multi-select is a union (a post matches if it carries any selected
+		// period); default off (empty set) shows all posts.
+		const present = THOUGHT_PERIODS.filter((pr) =>
+			posts.some((p) => p.periods.includes(pr))
+		);
+		if (present.length > 0) {
+			const bar = this.contentEl.createDiv({ cls: "stx-period-filter" });
+			for (const pr of present) {
+				const chip = bar.createEl("button", {
+					cls: "stx-period-chip",
+					text: cap(pr),
+				});
+				if (this.threadPeriodFilter.has(pr)) chip.addClass("is-active");
+				chip.addEventListener("click", () => {
+					if (this.threadPeriodFilter.has(pr))
+						this.threadPeriodFilter.delete(pr);
+					else this.threadPeriodFilter.add(pr);
+					this.render();
+				});
+			}
+		}
+		const visible =
+			this.threadPeriodFilter.size === 0
+				? posts
+				: posts.filter((p) =>
+						p.periods.some((pr) => this.threadPeriodFilter.has(pr))
+				  );
+
 		const cardByKey = new Map<string, HTMLElement>();
 		const listEl = this.contentEl.createDiv({ cls: "stx-thread-posts" });
 
-		for (const post of posts) {
+		for (const post of visible) {
 			const card = listEl.createDiv({ cls: "stx-post" });
 			const key = this.cardKey(post);
 			card.dataset.key = key;
@@ -267,29 +383,48 @@ export class ThreadsView extends ItemView {
 	// ---- add-a-tag menu (long-press on touch, right-click on desktop) ----
 
 	private wireTagMenu(card: HTMLElement, post: ThreadPost): void {
-		card.addEventListener("contextmenu", (e) => {
-			e.preventDefault();
-			this.showTagMenu(post, e.clientX, e.clientY);
-		});
-		// Touch long-press — desktop right-click is handled above, so a mouse
-		// press is ignored here to avoid a double affordance.
+		// While the press is registered or the menu is open, the post is tinted
+		// (stx-post-pressed) as feedback. menuOpen keeps the tint through the
+		// pointerup that follows a successful long-press; the menu's onHide
+		// clears it.
 		let timer: number | null = null;
+		let menuOpen = false;
 		let sx = 0;
 		let sy = 0;
+		const clearTint = () => {
+			if (!menuOpen) card.removeClass("stx-post-pressed");
+		};
 		const cancel = () => {
 			if (timer !== null) {
 				window.clearTimeout(timer);
 				timer = null;
 			}
+			clearTint();
 		};
+		const open = (x: number, y: number) => {
+			menuOpen = true;
+			card.addClass("stx-post-pressed");
+			this.showTagMenu(post, x, y, () => {
+				menuOpen = false;
+				card.removeClass("stx-post-pressed");
+			});
+		};
+		card.addEventListener("contextmenu", (e) => {
+			e.preventDefault();
+			cancel();
+			open(e.clientX, e.clientY);
+		});
+		// Touch long-press — desktop right-click is handled above, so a mouse
+		// press is ignored here to avoid a double affordance.
 		card.addEventListener("pointerdown", (e) => {
 			if (e.pointerType === "mouse") return;
 			sx = e.clientX;
 			sy = e.clientY;
-			cancel();
+			if (timer !== null) window.clearTimeout(timer);
+			card.addClass("stx-post-pressed");
 			timer = window.setTimeout(() => {
 				timer = null;
-				this.showTagMenu(post, sx, sy);
+				open(sx, sy);
 			}, 450);
 		});
 		card.addEventListener("pointermove", (e) => {
@@ -304,18 +439,14 @@ export class ThreadsView extends ItemView {
 		card.addEventListener("pointercancel", cancel);
 	}
 
-	private showTagMenu(post: ThreadPost, x: number, y: number): void {
+	private showTagMenu(
+		post: ThreadPost,
+		x: number,
+		y: number,
+		onHide?: () => void
+	): void {
 		const menu = new Menu();
-		for (const name of summarizeThreads(this.posts).map((s) => s.name)) {
-			const tag = `#thread/${name}`;
-			menu.addItem((i) =>
-				i
-					.setTitle(tag)
-					.setIcon("messages-square")
-					.onClick(() => void this.applyTag(post, tag))
-			);
-		}
-		menu.addSeparator();
+		// Periodic cadence tags first (Shawn's ordering), then the thread picker.
 		for (const period of THOUGHT_PERIODS) {
 			const tag = `#thought/${period}`;
 			menu.addItem((i) =>
@@ -325,6 +456,17 @@ export class ThreadsView extends ItemView {
 					.onClick(() => void this.applyTag(post, tag))
 			);
 		}
+		menu.addSeparator();
+		for (const name of summarizeThreads(this.posts).map((s) => s.name)) {
+			const tag = `#thread/${name}`;
+			menu.addItem((i) =>
+				i
+					.setTitle(tag)
+					.setIcon("messages-square")
+					.onClick(() => void this.applyTag(post, tag))
+			);
+		}
+		if (onHide) menu.onHide(onHide);
 		menu.showAtPosition({ x, y });
 	}
 
@@ -388,4 +530,8 @@ export class ThreadsView extends ItemView {
 		setIcon(btn, icon);
 		btn.addEventListener("click", onClick);
 	}
+}
+
+function cap(s: string): string {
+	return s.length ? s[0].toUpperCase() + s.slice(1) : s;
 }

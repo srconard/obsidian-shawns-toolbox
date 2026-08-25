@@ -13,17 +13,22 @@ import {
 import { appendToSection } from "./section-core";
 import {
 	parseNotePosts,
+	parsePeriodicPosts,
 	ensureBlockId,
 	generateBlockId,
 	formatReplyLine,
 	appendTag,
 	type ThreadPost,
+	type PeriodicPost,
 } from "./thread-core";
 
 const DAILY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export class ThreadService {
-	private cache = new Map<string, { mtime: number; posts: ThreadPost[] }>();
+	private cache = new Map<
+		string,
+		{ mtime: number; posts: ThreadPost[]; periodic: PeriodicPost[] }
+	>();
 
 	constructor(
 		private app: App,
@@ -66,8 +71,12 @@ export class ThreadService {
 		return f instanceof TFile ? f : null;
 	}
 
-	/** Scan every timeline note for posts, reusing the cache where mtime holds. */
-	async scan(): Promise<ThreadPost[]> {
+	/**
+	 * Scan every timeline note for #thread posts and #thought/<period> posts in
+	 * one pass, reusing the cache where mtime holds so a rescan only re-reads
+	 * changed notes.
+	 */
+	async scanAll(): Promise<{ posts: ThreadPost[]; periodic: PeriodicPost[] }> {
 		const prefix = this.prefix();
 		const files = this.app.vault
 			.getMarkdownFiles()
@@ -76,19 +85,24 @@ export class ThreadService {
 		for (const path of [...this.cache.keys()]) {
 			if (!live.has(path)) this.cache.delete(path);
 		}
-		const all: ThreadPost[] = [];
+		const posts: ThreadPost[] = [];
+		const periodic: PeriodicPost[] = [];
 		for (const f of files) {
 			const cached = this.cache.get(f.path);
 			if (cached && cached.mtime === f.stat.mtime) {
-				all.push(...cached.posts);
+				posts.push(...cached.posts);
+				periodic.push(...cached.periodic);
 				continue;
 			}
+			const date = this.noteDate(f);
 			const content = await this.app.vault.cachedRead(f);
-			const posts = parseNotePosts(f.basename, this.noteDate(f), content);
-			this.cache.set(f.path, { mtime: f.stat.mtime, posts });
-			all.push(...posts);
+			const p = parseNotePosts(f.basename, date, content);
+			const pp = parsePeriodicPosts(f.basename, date, content);
+			this.cache.set(f.path, { mtime: f.stat.mtime, posts: p, periodic: pp });
+			posts.push(...p);
+			periodic.push(...pp);
 		}
-		return all;
+		return { posts, periodic };
 	}
 
 	/**
@@ -177,7 +191,7 @@ export class ThreadService {
 	}
 
 	/** Open a post's source note and put the cursor on its line. */
-	async openPost(post: ThreadPost): Promise<void> {
+	async openPost(post: { note: string; line: number }): Promise<void> {
 		const file = this.noteFile(post.note);
 		if (!file) throw new Error(`Note not found: ${post.note}`);
 		const leaf = this.app.workspace.getLeaf(false);

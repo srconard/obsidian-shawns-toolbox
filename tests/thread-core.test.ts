@@ -14,6 +14,10 @@ import {
 	formatReplyLine,
 	hasTag,
 	appendTag,
+	extractPeriods,
+	parsePeriodicPosts,
+	periodicPosts,
+	summarizePeriods,
 	THOUGHT_PERIODS,
 } from "../thread-core";
 
@@ -251,5 +255,83 @@ describe("appendTag", () => {
 describe("THOUGHT_PERIODS", () => {
 	it("is the SOP cadence set in horizon order", () => {
 		expect(THOUGHT_PERIODS).toEqual(["weekly", "monthly", "quarterly", "yearly"]);
+	});
+});
+
+describe("extractPeriods", () => {
+	it("returns the cadence tags on a line in horizon order", () => {
+		expect(
+			extractPeriods("- 09:00 x #thought/yearly #thread/a #thought/weekly")
+		).toEqual(["weekly", "yearly"]);
+	});
+	it("returns empty when no cadence tag is present", () => {
+		expect(extractPeriods("- 09:00 x #thread/a")).toEqual([]);
+	});
+	it("does not match a cadence that is a prefix of a longer tag", () => {
+		expect(extractPeriods("- x #thought/weekly-review")).toEqual([]);
+		expect(extractPeriods("- x #thought/quarterly/q3")).toEqual([]);
+	});
+	it("dedupes a repeated cadence", () => {
+		expect(extractPeriods("#thought/monthly and #thought/monthly")).toEqual([
+			"monthly",
+		]);
+	});
+});
+
+describe("parsePostLine periods + display", () => {
+	it("captures cadence tags and strips them from display text", () => {
+		const p = parsePostLine(
+			"- 14:30 keep going #thread/build #thought/quarterly",
+			"2026-08-25",
+			"2026-08-25",
+			1
+		)!;
+		expect(p.periods).toEqual(["quarterly"]);
+		expect(p.text).toBe("keep going");
+	});
+});
+
+const PNOTE = [
+	"# Thoughts",
+	"- 09:00 quarterly reflection #thought/quarterly",
+	"- 10:00 a thread post with a cadence #thread/build #thought/weekly ^tp9",
+	"- 11:00 just a normal thought",
+	"- 12:00 yearly + quarterly #thought/yearly #thought/quarterly",
+].join("\n");
+
+describe("parsePeriodicPosts", () => {
+	const posts = parsePeriodicPosts("2026-08-25", "2026-08-25", PNOTE);
+	it("finds only lines carrying a cadence tag", () => {
+		expect(posts.map((p) => p.line)).toEqual([1, 2, 4]);
+	});
+	it("records the thread name when the line is also a thread post", () => {
+		expect(posts.find((p) => p.line === 2)!.thread).toBe("build");
+		expect(posts.find((p) => p.line === 1)!.thread).toBeNull();
+	});
+	it("carries the block id and clean text", () => {
+		const p = posts.find((p) => p.line === 2)!;
+		expect(p.blockId).toBe("tp9");
+		expect(p.text).toBe("a thread post with a cadence");
+	});
+});
+
+describe("periodicPosts + summarizePeriods", () => {
+	const all = [
+		...parsePeriodicPosts("2026-08-24", "2026-08-24", "- 08:00 old q #thought/quarterly"),
+		...parsePeriodicPosts("2026-08-25", "2026-08-25", PNOTE),
+	];
+	it("filters to a cadence, chronologically across notes", () => {
+		const q = periodicPosts(all, "quarterly");
+		expect(q.map((p) => p.dateIso)).toEqual([
+			"2026-08-24",
+			"2026-08-25",
+			"2026-08-25",
+		]);
+	});
+	it("summarizes only cadences with posts, in horizon order, with counts", () => {
+		const sum = summarizePeriods(all);
+		expect(sum.map((s) => s.period)).toEqual(["weekly", "quarterly", "yearly"]);
+		expect(sum.find((s) => s.period === "quarterly")!.postCount).toBe(3);
+		expect(sum.find((s) => s.period === "weekly")!.postCount).toBe(1);
 	});
 });
