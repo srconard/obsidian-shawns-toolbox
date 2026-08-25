@@ -16,6 +16,7 @@ import {
 	ensureBlockId,
 	generateBlockId,
 	formatReplyLine,
+	appendTag,
 	type ThreadPost,
 } from "./thread-core";
 
@@ -147,6 +148,32 @@ export class ThreadService {
 		this.invalidate(file.path);
 		this.invalidate(this.noteFile(post.note)?.path ?? "");
 		return parentId;
+	}
+
+	/**
+	 * Append a tag (another #thread/<name> or a #thought/<period>) to a post's
+	 * source line in its daily note, single-space separated and otherwise
+	 * verbatim. No-op when the exact tag is already there. Locates the line by
+	 * number with a content-match fallback (same as ensureParentBlockId), so an
+	 * edit since the scan still resolves. Returns whether the line changed.
+	 */
+	async appendTagToPost(post: ThreadPost, tag: string): Promise<boolean> {
+		const file = this.noteFile(post.note);
+		if (!file) throw new Error(`Note not found: ${post.note}`);
+		let changed = false;
+		await this.app.vault.process(file, (content) => {
+			const lines = content.split("\n");
+			const idx = this.locateLine(lines, post);
+			if (idx < 0) throw new Error("Could not find the post line");
+			const updated = appendTag(lines[idx], tag);
+			if (updated !== lines[idx]) {
+				lines[idx] = updated;
+				changed = true;
+			}
+			return lines.join("\n");
+		});
+		this.invalidate(file.path);
+		return changed;
 	}
 
 	/** Open a post's source note and put the cursor on its line. */

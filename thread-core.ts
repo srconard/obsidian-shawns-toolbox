@@ -226,6 +226,44 @@ export function ensureBlockId(
 	return { line: `${trimmed} ^${id}`, id, changed: true };
 }
 
+// ---- tag append (long-press / right-click "add a tag to this post") ----
+
+/** The periodic-thought cadence tags, in horizon order (SOP §3). */
+export const THOUGHT_PERIODS = ["weekly", "monthly", "quarterly", "yearly"] as const;
+
+function escapeRe(s: string): string {
+	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Whether a line already carries a tag as a whole token (so "#thread/focus"
+ * does not match inside "#thread/focus-practice"). Used to make tag-append a
+ * no-op when the exact tag is already present.
+ */
+export function hasTag(line: string, tag: string): boolean {
+	const re = new RegExp(`(?:^|\\s)${escapeRe(tag)}(?=\\s|$)`);
+	return re.test(stripCr(line));
+}
+
+/**
+ * Append a tag to a post's source line, single-space separated, preserving the
+ * line otherwise verbatim. No-op (returns the line unchanged) if the exact tag
+ * is already present. If the line ends with a block id (" ^id"), the tag is
+ * inserted just before it so the block id stays at line-end — otherwise the
+ * `^id` would stop being a block id and any reply link to it would break.
+ */
+export function appendTag(line: string, tag: string): string {
+	const clean = stripCr(line);
+	if (hasTag(clean, tag)) return line;
+	const block = BLOCK_ID_RE.exec(clean);
+	if (block) {
+		const head = clean.slice(0, block.index).replace(/\s+$/, "");
+		const tail = clean.slice(block.index); // " ^id" (+ any trailing space)
+		return `${head} ${tag}${tail}`;
+	}
+	return `${clean.replace(/\s+$/, "")} ${tag}`;
+}
+
 /**
  * Build the reply line appended to today's daily note under # Thoughts:
  * "- HH:MM <text> #thread/<name> ↩ [[<parentNote>#^<id>]]".

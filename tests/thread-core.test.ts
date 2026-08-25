@@ -12,6 +12,9 @@ import {
 	generateBlockId,
 	ensureBlockId,
 	formatReplyLine,
+	hasTag,
+	appendTag,
+	THOUGHT_PERIODS,
 } from "../thread-core";
 
 describe("parsePostLine", () => {
@@ -192,5 +195,61 @@ describe("formatReplyLine", () => {
 		expect(formatReplyLine("15:20", "line one\nline two", "x", "n", "i")).toBe(
 			"- 15:20 line one line two #thread/x ↩ [[n#^i]]"
 		);
+	});
+});
+
+describe("hasTag", () => {
+	it("matches a whole tag token", () => {
+		expect(hasTag("- 09:00 x #thread/focus", "#thread/focus")).toBe(true);
+		expect(hasTag("- 09:00 x #thought/quarterly", "#thought/quarterly")).toBe(true);
+	});
+	it("does not match a tag that is a prefix of a longer tag", () => {
+		expect(hasTag("- 09:00 x #thread/focus-practice", "#thread/focus")).toBe(false);
+		expect(hasTag("- 09:00 x #thread/focus/deep", "#thread/focus")).toBe(false);
+	});
+	it("matches a tag at end of line", () => {
+		expect(hasTag("- 09:00 x #thought/yearly", "#thought/yearly")).toBe(true);
+	});
+});
+
+describe("appendTag", () => {
+	it("appends a tag single-space separated at end of line", () => {
+		expect(appendTag("- 09:00 a thought #thread/focus", "#thought/quarterly")).toBe(
+			"- 09:00 a thought #thread/focus #thought/quarterly"
+		);
+	});
+	it("appends a second #thread tag", () => {
+		expect(appendTag("- 09:00 a thought #thread/focus", "#thread/health")).toBe(
+			"- 09:00 a thought #thread/focus #thread/health"
+		);
+	});
+	it("is a no-op when the exact tag is already present (verbatim)", () => {
+		const line = "- 09:00 a thought #thread/focus #thought/quarterly";
+		expect(appendTag(line, "#thought/quarterly")).toBe(line);
+		expect(appendTag(line, "#thread/focus")).toBe(line);
+	});
+	it("inserts before a trailing block id so the ^id stays at line-end", () => {
+		expect(appendTag("- 09:00 a thought #thread/focus ^t3f9", "#thought/monthly")).toBe(
+			"- 09:00 a thought #thread/focus #thought/monthly ^t3f9"
+		);
+	});
+	it("no-op keeps a trailing block id untouched", () => {
+		const line = "- 09:00 a thought #thread/focus #thought/monthly ^t3f9";
+		expect(appendTag(line, "#thought/monthly")).toBe(line);
+	});
+	it("collapses trailing whitespace before appending", () => {
+		expect(appendTag("- 09:00 a thought #thread/focus   ", "#thought/weekly")).toBe(
+			"- 09:00 a thought #thread/focus #thought/weekly"
+		);
+	});
+	it("preserves a CR-terminated no-op line verbatim", () => {
+		const line = "- 09:00 a thought #thought/weekly\r";
+		expect(appendTag(line, "#thought/weekly")).toBe(line);
+	});
+});
+
+describe("THOUGHT_PERIODS", () => {
+	it("is the SOP cadence set in horizon order", () => {
+		expect(THOUGHT_PERIODS).toEqual(["weekly", "monthly", "quarterly", "yearly"]);
 	});
 });

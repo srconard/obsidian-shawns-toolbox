@@ -2,7 +2,7 @@
 // timeline folder (via ThreadService) and renders a thread list → flat
 // chronological thread view (4chan-style) with reply indicators and a reply
 // action. Primary reading surface is the phone.
-import { ItemView, Notice, WorkspaceLeaf, TAbstractFile, setIcon } from "obsidian";
+import { ItemView, Menu, Notice, WorkspaceLeaf, TAbstractFile, setIcon } from "obsidian";
 import type { CardsHost } from "./section-cards";
 import { ThreadService } from "./thread-service";
 import {
@@ -11,6 +11,7 @@ import {
 	replyCounts,
 	indexByBlock,
 	targetKey,
+	THOUGHT_PERIODS,
 	type ThreadPost,
 } from "./thread-core";
 
@@ -157,6 +158,7 @@ export class ThreadsView extends ItemView {
 			const key = this.cardKey(post);
 			card.dataset.key = key;
 			cardByKey.set(key, card);
+			this.wireTagMenu(card, post);
 
 			// reply-to preview
 			if (post.replyTo) {
@@ -260,6 +262,80 @@ export class ThreadsView extends ItemView {
 			}
 		});
 		window.setTimeout(() => input.focus(), 0);
+	}
+
+	// ---- add-a-tag menu (long-press on touch, right-click on desktop) ----
+
+	private wireTagMenu(card: HTMLElement, post: ThreadPost): void {
+		card.addEventListener("contextmenu", (e) => {
+			e.preventDefault();
+			this.showTagMenu(post, e.clientX, e.clientY);
+		});
+		// Touch long-press — desktop right-click is handled above, so a mouse
+		// press is ignored here to avoid a double affordance.
+		let timer: number | null = null;
+		let sx = 0;
+		let sy = 0;
+		const cancel = () => {
+			if (timer !== null) {
+				window.clearTimeout(timer);
+				timer = null;
+			}
+		};
+		card.addEventListener("pointerdown", (e) => {
+			if (e.pointerType === "mouse") return;
+			sx = e.clientX;
+			sy = e.clientY;
+			cancel();
+			timer = window.setTimeout(() => {
+				timer = null;
+				this.showTagMenu(post, sx, sy);
+			}, 450);
+		});
+		card.addEventListener("pointermove", (e) => {
+			if (
+				timer !== null &&
+				(Math.abs(e.clientX - sx) > 10 || Math.abs(e.clientY - sy) > 10)
+			)
+				cancel();
+		});
+		card.addEventListener("pointerup", cancel);
+		card.addEventListener("pointerleave", cancel);
+		card.addEventListener("pointercancel", cancel);
+	}
+
+	private showTagMenu(post: ThreadPost, x: number, y: number): void {
+		const menu = new Menu();
+		for (const name of summarizeThreads(this.posts).map((s) => s.name)) {
+			const tag = `#thread/${name}`;
+			menu.addItem((i) =>
+				i
+					.setTitle(tag)
+					.setIcon("messages-square")
+					.onClick(() => void this.applyTag(post, tag))
+			);
+		}
+		menu.addSeparator();
+		for (const period of THOUGHT_PERIODS) {
+			const tag = `#thought/${period}`;
+			menu.addItem((i) =>
+				i
+					.setTitle(tag)
+					.setIcon("hash")
+					.onClick(() => void this.applyTag(post, tag))
+			);
+		}
+		menu.showAtPosition({ x, y });
+	}
+
+	private async applyTag(post: ThreadPost, tag: string): Promise<void> {
+		try {
+			const changed = await this.service.appendTagToPost(post, tag);
+			new Notice(changed ? `Added ${tag}` : `${tag} already on that post`);
+			await this.refresh();
+		} catch (err) {
+			new Notice(err instanceof Error ? err.message : String(err));
+		}
 	}
 
 	// ---- helpers ----
