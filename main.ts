@@ -18,6 +18,7 @@ import { CaptureView, CAPTURE_VIEW_TYPE } from "./capture-view";
 import { SectionsView, SECTIONS_VIEW_TYPE } from "./sections-view";
 import { FocusView, FOCUS_VIEW_TYPE } from "./focus-view";
 import { VoiceView, VOICE_VIEW_TYPE } from "./voice-view";
+import { ThreadsView, THREADS_VIEW_TYPE } from "./threads-view";
 import type { CardsHost } from "./section-cards";
 
 export default class ShawnsToolboxPlugin extends Plugin {
@@ -124,6 +125,10 @@ export default class ShawnsToolboxPlugin extends Plugin {
 			VOICE_VIEW_TYPE,
 			(leaf: WorkspaceLeaf) => new VoiceView(leaf, host)
 		);
+		this.registerView(
+			THREADS_VIEW_TYPE,
+			(leaf: WorkspaceLeaf) => new ThreadsView(leaf, host)
+		);
 
 		this.addCommand({
 			id: "open-capture-view",
@@ -146,11 +151,19 @@ export default class ShawnsToolboxPlugin extends Plugin {
 			name: "Open voice capture panel",
 			callback: () => void this.activateView(VOICE_VIEW_TYPE, "right"),
 		});
+		this.addCommand({
+			id: "open-threads-panel",
+			name: "Open threads panel",
+			callback: () => void this.activateView(THREADS_VIEW_TYPE, "right"),
+		});
 		this.addRibbonIcon("zap", "Open capture view", () =>
 			void this.activateView(CAPTURE_VIEW_TYPE, "main")
 		);
 		this.addRibbonIcon("layout-list", "Open sections view", () =>
 			void this.activateView(SECTIONS_VIEW_TYPE, "main")
+		);
+		this.addRibbonIcon("messages-square", "Open threads panel", () =>
+			void this.activateView(THREADS_VIEW_TYPE, "right")
 		);
 
 		// "Go to today" — jumps to (logical) today's daily note from anywhere,
