@@ -28,6 +28,7 @@ import {
 } from "./capture-service";
 import { stepAnchorIso, formatDateLabel } from "./date-nav";
 import { EmbeddedMarkdownEditor, type LineOp } from "./embedded-editor";
+import type { PillarSource } from "./pillar-core";
 import type { ShawnsToolboxSettings } from "./settings";
 
 export interface CardsHost {
@@ -59,7 +60,9 @@ export class SectionCards extends Component {
 	constructor(
 		private host: CardsHost,
 		private containerEl: HTMLElement,
-		private surface: "main" | "focus"
+		private surface: "main" | "focus" | "pillar",
+		/** Only used by the "pillar" surface: the pillar ring to cycle through. */
+		private pillarSource?: PillarSource
 	) {
 		super();
 		this.scope =
@@ -138,6 +141,10 @@ export class SectionCards extends Component {
 	}
 
 	private notePath(): string {
+		if (this.surface === "pillar") {
+			const src = this.pillarSource;
+			return src?.notePathFor(src.currentIndex) ?? "";
+		}
 		return periodicNotePath(
 			this.host.getSettings(),
 			this.scope,
@@ -152,6 +159,8 @@ export class SectionCards extends Component {
 
 	private selection(): string[] {
 		const s = this.host.getSettings();
+		if (this.surface === "pillar")
+			return s.pillarSectionSelections[this.notePath()] ?? [];
 		const map =
 			this.surface === "focus"
 				? s.focusSectionSelections
@@ -161,6 +170,11 @@ export class SectionCards extends Component {
 
 	private async setSelection(specs: string[]): Promise<void> {
 		const s = this.host.getSettings();
+		if (this.surface === "pillar") {
+			s.pillarSectionSelections[this.notePath()] = specs;
+			await this.host.saveSettings();
+			return;
+		}
 		const map =
 			this.surface === "focus"
 				? s.focusSectionSelections
@@ -171,28 +185,30 @@ export class SectionCards extends Component {
 
 	private readingMode(): boolean {
 		const s = this.host.getSettings();
-		return this.surface === "focus"
-			? s.focusReadingMode
-			: s.sectionsReadingMode;
+		if (this.surface === "focus") return s.focusReadingMode;
+		if (this.surface === "pillar") return s.pillarReadingMode;
+		return s.sectionsReadingMode;
 	}
 
 	private async setReadingMode(v: boolean): Promise<void> {
 		const s = this.host.getSettings();
 		if (this.surface === "focus") s.focusReadingMode = v;
+		else if (this.surface === "pillar") s.pillarReadingMode = v;
 		else s.sectionsReadingMode = v;
 		await this.host.saveSettings();
 	}
 
 	private chipsCollapsed(): boolean {
 		const s = this.host.getSettings();
-		return this.surface === "focus"
-			? s.focusChipsCollapsed
-			: s.sectionsChipsCollapsed;
+		if (this.surface === "focus") return s.focusChipsCollapsed;
+		if (this.surface === "pillar") return s.pillarChipsCollapsed;
+		return s.sectionsChipsCollapsed;
 	}
 
 	private async setChipsCollapsed(v: boolean): Promise<void> {
 		const s = this.host.getSettings();
 		if (this.surface === "focus") s.focusChipsCollapsed = v;
+		else if (this.surface === "pillar") s.pillarChipsCollapsed = v;
 		else s.sectionsChipsCollapsed = v;
 		await this.host.saveSettings();
 	}
@@ -222,26 +238,32 @@ export class SectionCards extends Component {
 			await this.setChipsCollapsed(!this.chipsCollapsed());
 			void this.rebuild();
 		});
-		const scopeRow = toolbar.createDiv("stx-scope-row");
-		for (const scope of [
-			"day",
-			"week",
-			"month",
-			"quarter",
-			"year",
-		] as NoteScope[]) {
-			const btn = scopeRow.createEl("button", {
-				cls: "stx-scope-btn" + (scope === this.scope ? " is-active" : ""),
-				text: SCOPE_LABELS[scope],
-			});
-			btn.addEventListener("click", () => {
-				this.scope = scope;
-				if (this.surface === "focus") {
-					this.host.getSettings().focusScope = scope;
-					void this.host.saveSettings();
-				}
-				void this.rebuild();
-			});
+		if (this.surface === "pillar") {
+			this.buildPillarRow(toolbar);
+		} else {
+			const scopeRow = toolbar.createDiv("stx-scope-row");
+			for (const scope of [
+				"day",
+				"week",
+				"month",
+				"quarter",
+				"year",
+			] as NoteScope[]) {
+				const btn = scopeRow.createEl("button", {
+					cls:
+						"stx-scope-btn" +
+						(scope === this.scope ? " is-active" : ""),
+					text: SCOPE_LABELS[scope],
+				});
+				btn.addEventListener("click", () => {
+					this.scope = scope;
+					if (this.surface === "focus") {
+						this.host.getSettings().focusScope = scope;
+						void this.host.saveSettings();
+					}
+					void this.rebuild();
+				});
+			}
 		}
 		const readBtn = toolbar.createEl("button", {
 			cls:
@@ -255,7 +277,9 @@ export class SectionCards extends Component {
 			void this.rebuild();
 		});
 
-		this.buildNavRow();
+		// The date-nav row (◀ ▶ through days/weeks/…) is periodic-only; the
+		// pillar surface cycles pillars via its own row in the toolbar above.
+		if (this.surface !== "pillar") this.buildNavRow();
 
 		const chipsEl = this.containerEl.createDiv(
 			"stx-chips" + (collapsed ? " is-collapsed" : "")
@@ -269,7 +293,7 @@ export class SectionCards extends Component {
 		if (!file) {
 			this.cardsEl.createDiv({
 				cls: "stx-empty",
-				text: `No ${SCOPE_LABELS[this.scope].toLowerCase()} note (${this.notePath()})`,
+				text: this.emptyMessage(),
 			});
 			this.clampBottomPadding();
 			return;
@@ -312,6 +336,68 @@ export class SectionCards extends Component {
 		}
 		this.clampBottomPadding();
 		this.schedulePaddingClamp();
+	}
+
+	/** Empty-state text when the target note doesn't exist. */
+	private emptyMessage(): string {
+		if (this.surface === "pillar") {
+			const src = this.pillarSource;
+			if (!src || src.pillars.length === 0) {
+				return `No pillars found. Expected wikilinks under the ## subsections of "# Pillars" in ${this.host.getSettings().pillarsNotePath}.`;
+			}
+			const cur = src.pillars[src.currentIndex];
+			return `Note not found for "${cur?.display ?? "?"}".`;
+		}
+		return `No ${SCOPE_LABELS[this.scope].toLowerCase()} note (${this.notePath()})`;
+	}
+
+	/** ◀ [pillar dropdown] ▶ — the pillar-surface analogue of the scope row. */
+	private buildPillarRow(toolbar: HTMLElement): void {
+		const src = this.pillarSource;
+		const row = toolbar.createDiv("stx-pillar-row");
+		const navBtn = (aria: string, icon: string, cb: () => void) => {
+			const btn = row.createEl("button", {
+				cls: "stx-nav-btn",
+				attr: { "aria-label": aria },
+			});
+			setIcon(btn, icon);
+			btn.addEventListener("click", cb);
+			return btn;
+		};
+		navBtn("Previous pillar", "chevron-left", () => this.cyclePillar(-1));
+		const select = row.createEl("select", { cls: "stx-pillar-select" });
+		if (!src || src.pillars.length === 0) {
+			select.createEl("option", { text: "No pillars" });
+			select.disabled = true;
+		} else {
+			src.pillars.forEach((p, i) => {
+				const opt = select.createEl("option", {
+					text: p.display,
+					value: String(i),
+				});
+				if (i === src.currentIndex) opt.selected = true;
+			});
+			select.value = String(src.currentIndex);
+			select.addEventListener("change", () => {
+				void (async () => {
+					await src.setCurrentIndex(Number(select.value));
+					void this.rebuild();
+				})();
+			});
+		}
+		navBtn("Next pillar", "chevron-right", () => this.cyclePillar(1));
+	}
+
+	/** Step the pillar ring, wrapping at both ends. */
+	private cyclePillar(delta: number): void {
+		const src = this.pillarSource;
+		if (!src || src.pillars.length === 0) return;
+		const n = src.pillars.length;
+		const next = (((src.currentIndex + delta) % n) + n) % n;
+		void (async () => {
+			await src.setCurrentIndex(next);
+			void this.rebuild();
+		})();
 	}
 
 	/** ◀ note-label ▶ [today] — plus the line-edit cluster in edit mode. */

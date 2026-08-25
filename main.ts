@@ -19,6 +19,7 @@ import { SectionsView, SECTIONS_VIEW_TYPE } from "./sections-view";
 import { FocusView, FOCUS_VIEW_TYPE } from "./focus-view";
 import { VoiceView, VOICE_VIEW_TYPE } from "./voice-view";
 import { ThreadsView, THREADS_VIEW_TYPE } from "./threads-view";
+import { PillarsView, PILLARS_VIEW_TYPE } from "./pillars-view";
 import type { CardsHost } from "./section-cards";
 
 export default class ShawnsToolboxPlugin extends Plugin {
@@ -129,6 +130,10 @@ export default class ShawnsToolboxPlugin extends Plugin {
 			THREADS_VIEW_TYPE,
 			(leaf: WorkspaceLeaf) => new ThreadsView(leaf, host)
 		);
+		this.registerView(
+			PILLARS_VIEW_TYPE,
+			(leaf: WorkspaceLeaf) => new PillarsView(leaf, host)
+		);
 
 		this.addCommand({
 			id: "open-capture-view",
@@ -156,6 +161,11 @@ export default class ShawnsToolboxPlugin extends Plugin {
 			name: "Open threads panel",
 			callback: () => void this.activateView(THREADS_VIEW_TYPE, "right"),
 		});
+		this.addCommand({
+			id: "open-pillars-panel",
+			name: "Open pillars panel",
+			callback: () => void this.activateView(PILLARS_VIEW_TYPE, "right"),
+		});
 		this.addRibbonIcon("zap", "Open capture view", () =>
 			void this.activateView(CAPTURE_VIEW_TYPE, "main")
 		);
@@ -164,6 +174,9 @@ export default class ShawnsToolboxPlugin extends Plugin {
 		);
 		this.addRibbonIcon("messages-square", "Open threads panel", () =>
 			void this.activateView(THREADS_VIEW_TYPE, "right")
+		);
+		this.addRibbonIcon("layout-grid", "Open pillars panel", () =>
+			void this.activateView(PILLARS_VIEW_TYPE, "right")
 		);
 
 		// "Go to today" — jumps to (logical) today's daily note from anywhere,
@@ -258,6 +271,10 @@ export default class ShawnsToolboxPlugin extends Plugin {
 		this.settings.focusSectionSelections = {
 			...DEFAULT_SETTINGS.focusSectionSelections,
 			...this.settings.focusSectionSelections,
+		};
+		this.settings.pillarSectionSelections = {
+			...DEFAULT_SETTINGS.pillarSectionSelections,
+			...this.settings.pillarSectionSelections,
 		};
 		// v1.5.x migration: the Focus panel used to keep ONE selection across
 		// all scopes (focusSections) — seed it into the current scope's slot.

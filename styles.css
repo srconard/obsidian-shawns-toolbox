@@ -300,6 +300,21 @@
 	display: none;
 }
 
+/* Pillars panel (v1.11.0): ◀ [pillar dropdown] ▶ toolbar row. */
+.stx-pillar-row {
+	display: flex;
+	align-items: center;
+	gap: 0.1em;
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.stx-pillar-select {
+	flex: 1 1 auto;
+	min-width: 0;
+	font-size: var(--font-ui-small);
+}
+
 .stx-scope-btn {
 	background: transparent;
 	border: none;

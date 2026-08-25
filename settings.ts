@@ -41,6 +41,16 @@ export interface ShawnsToolboxSettings {
 	sectionsChipsCollapsed: boolean;
 	focusChipsCollapsed: boolean;
 
+	// Pillars panel
+	/** Note the pillar ring is parsed from (wikilinks under # Pillars). */
+	pillarsNotePath: string;
+	/** Persisted section chip selection per pillar note path. */
+	pillarSectionSelections: Record<string, string[]>;
+	pillarReadingMode: boolean;
+	pillarChipsCollapsed: boolean;
+	/** Last-viewed pillar (its wikilink text), restored across sessions. */
+	lastPillarLink: string;
+
 	// Voice capture
 	groqApiKey: string;
 	groqModel: string;
@@ -100,6 +110,12 @@ export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
 	focusReadingMode: false,
 	sectionsChipsCollapsed: false,
 	focusChipsCollapsed: false,
+
+	pillarsNotePath: "01. Default/Pillars.md",
+	pillarSectionSelections: {},
+	pillarReadingMode: false,
+	pillarChipsCollapsed: false,
+	lastPillarLink: "",
 
 	groqApiKey: "",
 	groqModel: "whisper-large-v3-turbo",
@@ -391,6 +407,31 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					})
 			);
+
+		// Pillars panel section
+		containerEl.createEl("h3", { text: "Pillars panel" });
+
+		containerEl.createEl("p", {
+			text: "The Pillars panel cycles through the pillar notes linked under the '# Pillars' section of this note, showing per-pillar the sections you pick (like the Focus panel).",
+			cls: "setting-item-description",
+		});
+
+		new Setting(containerEl)
+			.setName("Pillars note path")
+			.setDesc(
+				"The note whose '# Pillars' wikilinks form the ring (path with .md)."
+			)
+			.addText((text) => {
+				text
+					.setPlaceholder("01. Default/Pillars.md")
+					.setValue(this.plugin.settings.pillarsNotePath)
+					.onChange(async (value) => {
+						this.plugin.settings.pillarsNotePath =
+							value.trim() || DEFAULT_SETTINGS.pillarsNotePath;
+						await this.plugin.saveSettings();
+					});
+				text.inputEl.style.width = "300px";
+			});
 
 		// Voice capture section
 		containerEl.createEl("h3", { text: "Voice capture" });
