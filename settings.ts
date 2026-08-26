@@ -21,6 +21,8 @@ export interface ShawnsToolboxSettings {
 	// Threads panel
 	/** Folders the Threads panel does not scan for #thread/#thought posts. */
 	threadScanExcludeFolders: string[];
+	/** Thread names pinned to the top of the Threads list, persisted. */
+	pinnedThreads: string[];
 
 	// Capture & Sections
 	/** Full heading line each capture button appends under */
@@ -86,6 +88,7 @@ export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
 	statusExcludeFolders: ["00. Timeline", "AGENTS"],
 
 	threadScanExcludeFolders: ["AGENTS", "Settings"],
+	pinnedThreads: [],
 
 	captureTargets: {
 		thought: "# Thoughts",

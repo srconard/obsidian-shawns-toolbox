@@ -7,6 +7,7 @@ import type { CardsHost } from "./section-cards";
 import { ThreadService } from "./thread-service";
 import {
 	summarizeThreads,
+	orderThreadsByPin,
 	threadPosts,
 	replyCounts,
 	indexByBlock,
@@ -123,17 +124,30 @@ export class ThreadsView extends ItemView {
 			return;
 		}
 		if (summaries.length > 0) {
+			const pinned = this.pinnedThreads();
+			const ordered = orderThreadsByPin(summaries, pinned);
+			const pinnedSet = new Set(pinned);
 			const list = this.contentEl.createDiv({ cls: "stx-thread-list" });
-			for (const s of summaries) {
+			for (const s of ordered) {
 				const when = s.lastActiveTime
 					? `${s.lastActiveDate} ${s.lastActiveTime}`
 					: s.lastActiveDate;
-				this.listRow(list, s.name, when, s.postCount, () => {
-					this.activeThread = s.name;
-					this.threadPeriodFilter.clear();
-					this.replyOpenFor = null;
-					this.render();
-				});
+				const row = this.listRow(
+					list,
+					s.name,
+					when,
+					s.postCount,
+					() => {
+						this.activeThread = s.name;
+						this.threadPeriodFilter.clear();
+						this.replyOpenFor = null;
+						this.render();
+					},
+					pinnedSet.has(s.name)
+				);
+				this.wireLongPressMenu(row, (x, y, onHide) =>
+					this.showThreadMenu(s.name, x, y, onHide)
+				);
 			}
 		}
 		if (periods.length > 0) {
@@ -164,10 +178,17 @@ export class ThreadsView extends ItemView {
 		name: string,
 		when: string,
 		count: number,
-		onClick: () => void
-	): void {
+		onClick: () => void,
+		pinned = false
+	): HTMLElement {
 		const row = list.createDiv({ cls: "stx-thread-row" });
-		row.createDiv({ cls: "stx-thread-row-name", text: name });
+		if (pinned) row.addClass("is-pinned");
+		const nameEl = row.createDiv({ cls: "stx-thread-row-name" });
+		if (pinned) {
+			const pin = nameEl.createSpan({ cls: "stx-thread-row-pin" });
+			setIcon(pin, "pin");
+		}
+		nameEl.createSpan({ text: name });
 		const meta = row.createDiv({ cls: "stx-thread-row-meta" });
 		meta.createSpan({ cls: "stx-thread-row-date", text: when });
 		meta.createSpan({
@@ -175,6 +196,7 @@ export class ThreadsView extends ItemView {
 			text: `${count} post${count === 1 ? "" : "s"}`,
 		});
 		row.addEventListener("click", onClick);
+		return row;
 	}
 
 	// ---- periodic-thoughts detail ----
@@ -380,16 +402,29 @@ export class ThreadsView extends ItemView {
 	// ---- add-a-tag menu (long-press on touch, right-click on desktop) ----
 
 	private wireTagMenu(card: HTMLElement, post: ThreadPost): void {
-		// While the press is registered or the menu is open, the post is tinted
-		// (stx-post-pressed) as feedback. menuOpen keeps the tint through the
-		// pointerup that follows a successful long-press; the menu's onHide
-		// clears it.
+		this.wireLongPressMenu(card, (x, y, onHide) =>
+			this.showTagMenu(post, x, y, onHide)
+		);
+	}
+
+	/**
+	 * Attach a long-press (touch) / right-click (desktop) context menu to an
+	 * element. While the press is registered or the menu is open the element is
+	 * tinted (stx-post-pressed) as feedback; menuOpen keeps the tint through the
+	 * pointerup that follows a successful long-press, and the menu's onHide (via
+	 * the callback passed to buildMenu) clears it. buildMenu builds and shows the
+	 * menu at (x, y), calling onHide when it closes.
+	 */
+	private wireLongPressMenu(
+		el: HTMLElement,
+		buildMenu: (x: number, y: number, onHide: () => void) => void
+	): void {
 		let timer: number | null = null;
 		let menuOpen = false;
 		let sx = 0;
 		let sy = 0;
 		const clearTint = () => {
-			if (!menuOpen) card.removeClass("stx-post-pressed");
+			if (!menuOpen) el.removeClass("stx-post-pressed");
 		};
 		const cancel = () => {
 			if (timer !== null) {
@@ -400,40 +435,40 @@ export class ThreadsView extends ItemView {
 		};
 		const open = (x: number, y: number) => {
 			menuOpen = true;
-			card.addClass("stx-post-pressed");
-			this.showTagMenu(post, x, y, () => {
+			el.addClass("stx-post-pressed");
+			buildMenu(x, y, () => {
 				menuOpen = false;
-				card.removeClass("stx-post-pressed");
+				el.removeClass("stx-post-pressed");
 			});
 		};
-		card.addEventListener("contextmenu", (e) => {
+		el.addEventListener("contextmenu", (e) => {
 			e.preventDefault();
 			cancel();
 			open(e.clientX, e.clientY);
 		});
 		// Touch long-press — desktop right-click is handled above, so a mouse
 		// press is ignored here to avoid a double affordance.
-		card.addEventListener("pointerdown", (e) => {
+		el.addEventListener("pointerdown", (e) => {
 			if (e.pointerType === "mouse") return;
 			sx = e.clientX;
 			sy = e.clientY;
 			if (timer !== null) window.clearTimeout(timer);
-			card.addClass("stx-post-pressed");
+			el.addClass("stx-post-pressed");
 			timer = window.setTimeout(() => {
 				timer = null;
 				open(sx, sy);
 			}, 450);
 		});
-		card.addEventListener("pointermove", (e) => {
+		el.addEventListener("pointermove", (e) => {
 			if (
 				timer !== null &&
 				(Math.abs(e.clientX - sx) > 10 || Math.abs(e.clientY - sy) > 10)
 			)
 				cancel();
 		});
-		card.addEventListener("pointerup", cancel);
-		card.addEventListener("pointerleave", cancel);
-		card.addEventListener("pointercancel", cancel);
+		el.addEventListener("pointerup", cancel);
+		el.addEventListener("pointerleave", cancel);
+		el.addEventListener("pointercancel", cancel);
 	}
 
 	private showTagMenu(
@@ -475,6 +510,40 @@ export class ThreadsView extends ItemView {
 		} catch (err) {
 			new Notice(err instanceof Error ? err.message : String(err));
 		}
+	}
+
+	// ---- pin / unpin a thread (long-press / right-click a thread row) ----
+
+	private pinnedThreads(): string[] {
+		return this.host.getSettings().pinnedThreads ?? [];
+	}
+
+	private showThreadMenu(
+		name: string,
+		x: number,
+		y: number,
+		onHide?: () => void
+	): void {
+		const menu = new Menu();
+		const pinned = this.pinnedThreads().includes(name);
+		menu.addItem((i) =>
+			i
+				.setTitle(pinned ? "Unpin" : "Pin")
+				.setIcon(pinned ? "pin-off" : "pin")
+				.onClick(() => void this.togglePin(name))
+		);
+		if (onHide) menu.onHide(onHide);
+		menu.showAtPosition({ x, y });
+	}
+
+	private async togglePin(name: string): Promise<void> {
+		const settings = this.host.getSettings();
+		const current = settings.pinnedThreads ?? [];
+		settings.pinnedThreads = current.includes(name)
+			? current.filter((n) => n !== name)
+			: [...current, name];
+		await this.host.saveSettings();
+		this.render();
 	}
 
 	// ---- helpers ----

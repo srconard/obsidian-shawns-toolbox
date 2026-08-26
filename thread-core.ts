@@ -237,6 +237,26 @@ export function summarizeThreads(posts: ThreadPost[]): ThreadSummary[] {
 }
 
 /**
+ * Reorder thread summaries so pinned threads sort above unpinned ones, keeping
+ * the incoming (last-active) order within each group. `pinned` is the set of
+ * pinned thread names; unknown names are ignored. Pure — the view persists the
+ * pinned list in settings.
+ */
+export function orderThreadsByPin(
+	summaries: ThreadSummary[],
+	pinned: readonly string[]
+): ThreadSummary[] {
+	const pinnedSet = new Set(pinned);
+	const top: ThreadSummary[] = [];
+	const rest: ThreadSummary[] = [];
+	for (const s of summaries) {
+		if (pinnedSet.has(s.name)) top.push(s);
+		else rest.push(s);
+	}
+	return [...top, ...rest];
+}
+
+/**
  * Count replies per parent, keyed by "<note>::<blockId>". A post counts toward
  * its replyTo target regardless of thread, so cross-thread replies still show.
  */

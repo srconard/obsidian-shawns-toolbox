@@ -6,6 +6,7 @@ import {
 	extractBlockId,
 	threadPosts,
 	summarizeThreads,
+	orderThreadsByPin,
 	replyCounts,
 	indexByBlock,
 	targetKey,
@@ -167,6 +168,35 @@ describe("threadPosts + summarizeThreads", () => {
 		expect(summary.map((s) => s.name)).toEqual(["garden", "build"]);
 		expect(summary[0].postCount).toBe(2);
 		expect(summary[0].lastActiveTime).toBe("09:15");
+	});
+});
+
+describe("orderThreadsByPin", () => {
+	const all = [
+		...parseNotePosts("2026-08-24", "2026-08-24", NOTE_A),
+		...parseNotePosts("2026-08-25", "2026-08-25", NOTE_B),
+	];
+	const summaries = summarizeThreads(all); // ["garden", "build"] by last-active
+
+	it("moves pinned threads above unpinned, keeping last-active order otherwise", () => {
+		const ordered = orderThreadsByPin(summaries, ["build"]);
+		expect(ordered.map((s) => s.name)).toEqual(["build", "garden"]);
+	});
+
+	it("keeps last-active order within the pinned group", () => {
+		const ordered = orderThreadsByPin(summaries, ["build", "garden"]);
+		// both pinned → same relative order as the incoming (last-active) list
+		expect(ordered.map((s) => s.name)).toEqual(["garden", "build"]);
+	});
+
+	it("is a no-op when nothing is pinned", () => {
+		const ordered = orderThreadsByPin(summaries, []);
+		expect(ordered.map((s) => s.name)).toEqual(["garden", "build"]);
+	});
+
+	it("ignores pinned names that don't exist", () => {
+		const ordered = orderThreadsByPin(summaries, ["nonexistent"]);
+		expect(ordered.map((s) => s.name)).toEqual(["garden", "build"]);
 	});
 });
 

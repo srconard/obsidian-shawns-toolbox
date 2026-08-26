@@ -705,6 +705,19 @@ body.is-mobile .mobile-toolbar:not(:has(.mobile-toolbar-option)) {
 .stx-thread-row-name {
 	font-weight: 600;
 	color: var(--text-normal);
+	display: flex;
+	align-items: center;
+	gap: 0.4em;
+}
+
+.stx-thread-row-pin {
+	display: inline-flex;
+	align-items: center;
+	color: var(--text-accent);
+}
+.stx-thread-row-pin .svg-icon {
+	width: 0.9em;
+	height: 0.9em;
 }
 
 .stx-thread-row-meta {
