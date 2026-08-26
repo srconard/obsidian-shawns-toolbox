@@ -130,16 +130,16 @@ describe("wheelPosition — amplified reel spin (fractional, unwrapped)", () => 
 		expect(wheelPosition(5, 0, 16, 240)).toBe(5);
 	});
 
-	it("spins the reel to follow the finger: DOWN decreases, UP increases", () => {
-		// travel 240 over 16 items → 15px per item. Dragging DOWN spins earlier
-		// items into the centre (position decreases).
-		expect(wheelPosition(5, 30, 16, 240)).toBe(3); // +30px down → -2 items
-		expect(wheelPosition(5, -45, 16, 240)).toBe(8); // -45px up → +3 items
+	it("scrolls down with the finger: DOWN increases, UP decreases", () => {
+		// travel 240 over 16 items → 15px per item. Dragging DOWN scrolls down
+		// to later items (position increases).
+		expect(wheelPosition(5, 30, 16, 240)).toBe(7); // +30px down → +2 items
+		expect(wheelPosition(5, -45, 16, 240)).toBe(2); // -45px up → -3 items
 	});
 
 	it("is amplified: a full-travel drag spins a whole turn", () => {
-		expect(wheelPosition(0, -240, 16, 240)).toBe(16); // one full loop up
-		expect(wheelPosition(0, 240, 16, 240)).toBe(-16); // one full loop down
+		expect(wheelPosition(0, -240, 16, 240)).toBe(-16); // one full loop up
+		expect(wheelPosition(0, 240, 16, 240)).toBe(16); // one full loop down
 	});
 
 	it("returns 0 for an empty or single-item list", () => {
@@ -154,16 +154,16 @@ describe("wheelIndex — the pillar centred in the selector", () => {
 	});
 
 	it("wraps around endlessly so every item is reachable from any start", () => {
-		// Dragging UP from item 0 keeps advancing and loops past the end.
-		expect(wheelIndex(0, -240, 16, 240)).toBe(0); // exactly one loop
-		expect(wheelIndex(0, -270, 16, 240)).toBe(2); // one loop + 2
-		// Dragging DOWN from item 0 loops back to the end.
-		expect(wheelIndex(0, 30, 16, 240)).toBe(14); // -2 → wraps to 14
+		// Dragging DOWN from item 0 keeps advancing and loops past the end.
+		expect(wheelIndex(0, 240, 16, 240)).toBe(0); // exactly one loop
+		expect(wheelIndex(0, 270, 16, 240)).toBe(2); // one loop + 2
+		// Dragging UP from item 0 loops back to the end.
+		expect(wheelIndex(0, -30, 16, 240)).toBe(14); // -2 → wraps to 14
 	});
 
 	it("rounds to the nearest item", () => {
-		// 24px / 15px-per-item = 1.6 → -2 items (down decreases).
-		expect(wheelIndex(4, 24, 16, 240)).toBe(2);
+		// 24px / 15px-per-item = 1.6 → +2 items (down increases).
+		expect(wheelIndex(4, 24, 16, 240)).toBe(6);
 	});
 
 	it("returns 0 for an empty or single-item list", () => {

@@ -39,8 +39,9 @@ export interface PillarSource {
  * mapping is AMPLIFIED: `travel` is the finger distance that spins the reel a
  * FULL turn (all `count` items), giving `travel / count` pixels per item —
  * typically well under a row's height, so the reel moves faster than the finger.
- * The reel follows the finger: dragging DOWN (positive deltaY) spins earlier
- * items down into the centre (position DECREASES); UP brings later items up.
+ * Direction (direct-manipulation, per Shawn 2026-08-26): dragging DOWN (positive
+ * deltaY) scrolls DOWN through the list — later items spin into the centre
+ * (position INCREASES); dragging UP brings earlier items back.
  * Unwrapped and unrounded so the DOM layer can render a smooth sub-item offset.
  */
 export function wheelPosition(
@@ -51,7 +52,7 @@ export function wheelPosition(
 ): number {
 	if (count <= 1) return 0;
 	const perItem = travel / count;
-	return startIndex - (perItem > 0 ? deltaY / perItem : 0);
+	return startIndex + (perItem > 0 ? deltaY / perItem : 0);
 }
 
 /** Wrap any (possibly negative or out-of-range) index into `[0, count)`, like a
