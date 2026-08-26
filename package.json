@@ -1,6 +1,6 @@
 {
 	"name": "shawns-toolbox",
-	"version": "1.15.0",
+	"version": "1.15.1",
 	"description": "Note status control (phase + ongoing with change dates, plus a signed note-log entry per transition), checkbox completion stamping, and block summarizer.",
 	"main": "main.js",
 	"scripts": {

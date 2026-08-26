@@ -33,6 +33,11 @@ export class ThreadsView extends ItemView {
 	private threadPeriodFilter = new Set<string>();
 	private replyOpenFor: string | null = null;
 	private refreshTimer: number | null = null;
+	// Which surface the DOM currently shows, so render() can save the list's
+	// scroll offset before drilling into a thread/period and restore it on the
+	// way back (session-scoped; contentEl is the scroll container).
+	private renderedMode: "list" | "thread" | "period" | null = null;
+	private listScroll = 0;
 
 	constructor(leaf: WorkspaceLeaf, private host: CardsHost) {
 		super(leaf);
@@ -101,10 +106,31 @@ export class ThreadsView extends ItemView {
 	}
 
 	private render(): void {
+		// Remember the list's scroll offset before we tear it down, so returning
+		// from a thread/period (or re-rendering the list after a rescan) lands
+		// where Shawn was rather than at the top.
+		if (this.renderedMode === "list") {
+			this.listScroll = this.contentEl.scrollTop;
+		}
 		this.contentEl.empty();
-		if (this.activePeriod !== null) this.renderPeriod(this.activePeriod);
-		else if (this.activeThread !== null) this.renderThread(this.activeThread);
-		else this.renderList();
+		if (this.activePeriod !== null) {
+			this.renderedMode = "period";
+			this.renderPeriod(this.activePeriod);
+		} else if (this.activeThread !== null) {
+			this.renderedMode = "thread";
+			this.renderThread(this.activeThread);
+		} else {
+			this.renderedMode = "list";
+			this.renderList();
+			this.restoreListScroll();
+		}
+	}
+
+	private restoreListScroll(): void {
+		const apply = () => (this.contentEl.scrollTop = this.listScroll);
+		apply();
+		// Height isn't always settled synchronously on mobile; reapply next frame.
+		window.requestAnimationFrame(apply);
 	}
 
 	// ---- thread list ----
