@@ -52,3 +52,24 @@ export function failureAudioPath(
 	const name = failureAudioFilename(mime, at);
 	return clean ? `${clean}/${name}` : name;
 }
+
+/**
+ * Merge a fresh transcript into whatever the user has already typed, so a mic
+ * dictation appends rather than replaces. A single space joins non-empty parts;
+ * trailing whitespace on the existing buffer is normalised first.
+ */
+export function appendTranscript(existing: string, addition: string): string {
+	const add = addition.trim();
+	if (!add) return existing;
+	if (!existing.trim()) return add;
+	return existing.replace(/\s+$/, "") + " " + add;
+}
+
+/**
+ * The embed inserted into a capture buffer when transcription failed and the
+ * audio was parked in the vault — so the capture still lands and the recording
+ * can be transcribed later.
+ */
+export function failureEmbed(path: string): string {
+	return `![[${path}]]`;
+}

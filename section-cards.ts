@@ -420,7 +420,7 @@ export class SectionCards extends Component {
 			return;
 		}
 		const name = src?.pillars[src.currentIndex]?.display ?? "pillar";
-		new PillarInboxModal(this.host.app, name, (text) => {
+		new PillarInboxModal(this.host.app, name, this.host.getSettings(), (text) => {
 			const line = formatInboxLine(
 				text,
 				logicalTodayIso(this.host.getSettings())

@@ -1105,9 +1105,44 @@ body.is-mobile .mobile-toolbar:not(:has(.mobile-toolbar-option)) {
 .stx-pillar-add {
 	color: var(--text-accent);
 }
-.stx-pillar-inbox-input {
-	width: 100%;
+/* textarea + mic sit on one row; the textarea auto-grows (see modal JS) */
+.stx-pillar-inbox-field {
+	display: flex;
+	align-items: flex-end;
+	gap: 0.5em;
 	margin-bottom: 0.6em;
+}
+.stx-pillar-inbox-input {
+	flex: 1 1 auto;
+	width: 100%;
+	resize: none;
+	overflow-y: auto;
+	max-height: 40vh;
+	min-height: 2.2em;
+	line-height: 1.35;
+}
+.stx-inbox-mic {
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 2.4em;
+	height: 2.4em;
+	padding: 0;
+	cursor: pointer;
+}
+.stx-inbox-mic-icon {
+	display: inline-flex;
+}
+.stx-inbox-mic.is-recording {
+	background: rgba(var(--color-red-rgb), 0.15);
+	border-color: var(--color-red);
+	color: var(--color-red);
+	animation: stx-pulse 1.2s ease-in-out infinite;
+}
+.stx-inbox-mic.is-busy {
+	opacity: 0.6;
+	pointer-events: none;
 }
 .stx-pillar-inbox-row {
 	display: flex;
