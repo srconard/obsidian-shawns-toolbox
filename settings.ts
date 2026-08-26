@@ -18,6 +18,12 @@ export interface ShawnsToolboxSettings {
 	statusFooterEnabled: boolean;
 	statusExcludeFolders: string[];
 
+	// Rich mentions footer
+	/** Show the "Rich mentions" area (inline backlinks with context) on notes. */
+	mentionsFooterEnabled: boolean;
+	/** Folders whose notes never get the rich-mentions footer. */
+	mentionsExcludeFolders: string[];
+
 	// Threads panel
 	/** Folders the Threads panel does not scan for #thread/#thought posts. */
 	threadScanExcludeFolders: string[];
@@ -97,6 +103,9 @@ export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
 
 	statusFooterEnabled: true,
 	statusExcludeFolders: ["00. Timeline", "AGENTS"],
+
+	mentionsFooterEnabled: true,
+	mentionsExcludeFolders: [],
 
 	threadScanExcludeFolders: ["AGENTS", "Settings"],
 	pinnedThreads: [],
@@ -316,6 +325,50 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 					)
 					.onChange(async (value) => {
 						this.plugin.settings.statusExcludeFolders = value
+							.split("\n")
+							.map((p) => p.trim())
+							.filter((p) => p.length > 0);
+						await this.plugin.saveSettings();
+					});
+				text.inputEl.rows = 3;
+				text.inputEl.cols = 30;
+			});
+
+		// Rich mentions section
+		containerEl.createEl("h3", { text: "Rich mentions" });
+
+		containerEl.createEl("p", {
+			text: "Adds a 'Rich mentions' area at the bottom of a note listing every inline mention of it (a link inside a sentence or bullet, with the full line and any child bullets) — richer than the native backlink pane. Bare link-list entries are excluded.",
+			cls: "setting-item-description",
+		});
+
+		new Setting(containerEl)
+			.setName("Show rich mentions in notes")
+			.setDesc(
+				"Render the expandable rich-mentions area at the bottom of each note."
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.mentionsFooterEnabled)
+					.onChange(async (value) => {
+						this.plugin.settings.mentionsFooterEnabled = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Exclude folders")
+			.setDesc(
+				"Notes under these folders get no rich-mentions area. One per line."
+			)
+			.addTextArea((text) => {
+				text
+					.setPlaceholder("00. Timeline")
+					.setValue(
+						this.plugin.settings.mentionsExcludeFolders.join("\n")
+					)
+					.onChange(async (value) => {
+						this.plugin.settings.mentionsExcludeFolders = value
 							.split("\n")
 							.map((p) => p.trim())
 							.filter((p) => p.length > 0);

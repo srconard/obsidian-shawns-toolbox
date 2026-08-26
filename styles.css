@@ -1150,3 +1150,109 @@ body.is-mobile .mobile-toolbar:not(:has(.mobile-toolbar-option)) {
 	justify-content: flex-end;
 	margin-top: 0.3em;
 }
+
+/* Rich mentions footer (Feature A) */
+.stx-mentions-host {
+	margin: 1.5em 0 0.5em;
+}
+
+.stx-mentions {
+	border-top: 1px solid var(--background-modifier-border);
+	padding-top: 0.6em;
+}
+
+.stx-mentions-header {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	margin-bottom: 0.5em;
+}
+
+.stx-mentions-collapse {
+	cursor: pointer;
+	color: var(--text-faint);
+}
+.stx-mentions-collapse:hover {
+	color: var(--text-normal);
+}
+
+.stx-mentions-body {
+	display: flex;
+	flex-direction: column;
+	gap: 0.8em;
+}
+
+.stx-mentions-empty {
+	color: var(--text-faint);
+	font-size: var(--font-ui-smaller);
+	font-style: italic;
+}
+
+.stx-mentions-source-label {
+	color: var(--text-accent);
+	font-size: var(--font-ui-smaller);
+	font-weight: 600;
+	margin-bottom: 0.3em;
+}
+
+.stx-mentions-list {
+	display: flex;
+	flex-direction: column;
+	gap: 0.4em;
+}
+
+.stx-mention {
+	border-left: 2px solid var(--background-modifier-border);
+	padding-left: 0.6em;
+}
+
+.stx-mention-text {
+	color: var(--text-normal);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	cursor: pointer;
+}
+.stx-mention-text:hover {
+	color: var(--text-accent);
+}
+
+.stx-mention-subtree {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	margin: 0.25em 0 0;
+	padding: 0.3em 0.5em;
+	background: var(--background-secondary);
+	border-radius: 6px;
+}
+
+/* Inline ```threads code block (Feature B) */
+.stx-threads-block {
+	display: flex;
+	flex-direction: column;
+	gap: 0.8em;
+	margin: 0.5em 0;
+}
+
+.stx-threads-block-errors {
+	color: var(--text-error);
+	font-size: var(--font-ui-smaller);
+}
+
+.stx-threads-block-empty {
+	color: var(--text-faint);
+	font-size: var(--font-ui-smaller);
+	font-style: italic;
+}
+
+.stx-threads-block-head {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	margin-bottom: 0.3em;
+}

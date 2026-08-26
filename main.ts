@@ -11,6 +11,9 @@ import {
 } from "./settings";
 import { StatusView, STATUS_VIEW_TYPE } from "./status-view";
 import { StatusFooter } from "./status-footer";
+import { MentionsFooter } from "./mentions-footer";
+import { ThreadService } from "./thread-service";
+import { renderThreadsBlock } from "./threads-block-view";
 import { findConflicts, formatConflictReport } from "./status-conflicts";
 import { todayIso } from "./status-service";
 import { ensureDailyNote, logicalTodayIso } from "./capture-service";
@@ -30,6 +33,9 @@ export default class ShawnsToolboxPlugin extends Plugin {
 		enabled: true,
 	};
 	private statusFooter: StatusFooter | null = null;
+	private mentionsFooter: MentionsFooter | null = null;
+	/** Shared across ```threads block renders so the mtime cache persists. */
+	private threadService: ThreadService | null = null;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -218,6 +224,29 @@ export default class ShawnsToolboxPlugin extends Plugin {
 		);
 		this.app.workspace.onLayoutReady(() => footer.refreshAll());
 
+		this.mentionsFooter = new MentionsFooter(this.app, () => this.settings);
+		const mentions = this.mentionsFooter;
+		this.registerEvent(
+			this.app.workspace.on("layout-change", () => mentions.refreshAll())
+		);
+		this.registerEvent(
+			this.app.workspace.on("active-leaf-change", () =>
+				mentions.refreshAll()
+			)
+		);
+		this.registerEvent(
+			this.app.metadataCache.on("changed", () => mentions.refreshAll())
+		);
+		this.app.workspace.onLayoutReady(() => mentions.refreshAll());
+
+		// ```threads code block — inline thread views (Feature B). Shares one
+		// ThreadService so the per-file mtime cache persists across renders.
+		this.threadService = new ThreadService(this.app, () => this.settings);
+		const threadService = this.threadService;
+		this.registerMarkdownCodeBlockProcessor("threads", (source, el, ctx) => {
+			ctx.addChild(renderThreadsBlock(source, el, threadService));
+		});
+
 		// Add settings tab
 		this.addSettingTab(new ShawnsToolboxSettingTab(this.app, this));
 
@@ -226,6 +255,7 @@ export default class ShawnsToolboxPlugin extends Plugin {
 
 	onunload(): void {
 		this.statusFooter?.unmount();
+		this.mentionsFooter?.unmount();
 		console.log("Shawn's Toolbox unloaded");
 	}
 
@@ -308,5 +338,6 @@ export default class ShawnsToolboxPlugin extends Plugin {
 		this.handlerState.settings = this.settings;
 		this.handlerState.enabled = this.settings.checkboxStampingEnabled;
 		this.statusFooter?.refreshAll();
+		this.mentionsFooter?.refreshAll();
 	}
 }
