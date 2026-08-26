@@ -23,6 +23,7 @@ import {
 	type PeriodicPost,
 	type ThoughtPost,
 } from "./thread-core";
+import { parseThreadAreas, type ThreadArea } from "./thread-areas";
 
 const DAILY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -148,6 +149,18 @@ export class ThreadService {
 			settings.captureTargets.thought,
 			f.path
 		);
+	}
+
+	/**
+	 * Parse the thread-areas mapping note into ordered areas, read fresh each
+	 * call (a single note, cheap). Returns [] when the note doesn't exist yet, so
+	 * the list falls back to a flat, un-grouped view.
+	 */
+	async loadThreadAreas(): Promise<ThreadArea[]> {
+		const path = this.getSettings().threadAreasNotePath;
+		const f = this.app.vault.getAbstractFileByPath(path);
+		if (!(f instanceof TFile)) return [];
+		return parseThreadAreas(await this.app.vault.cachedRead(f));
 	}
 
 	/**

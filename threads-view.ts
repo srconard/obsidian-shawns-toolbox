@@ -19,7 +19,14 @@ import {
 	type ThreadPost,
 	type PeriodicPost,
 	type ThoughtPost,
+	type ThreadSummary,
 } from "./thread-core";
+import {
+	groupThreadsByArea,
+	isFlatGrouping,
+	type AreaGroup,
+	type ThreadArea,
+} from "./thread-areas";
 
 /** A post the add-tag menu can act on — a thread post, a periodic-thought post,
  *  or a today's-thought post; all carry the fields the service needs to locate
@@ -37,6 +44,8 @@ export class ThreadsView extends ItemView {
 	private posts: ThreadPost[] = [];
 	private periodic: PeriodicPost[] = [];
 	private today: ThoughtPost[] = [];
+	// Thread → area mapping, parsed from the Shawn-editable areas note.
+	private areas: ThreadArea[] = [];
 	private activeThread: string | null = null;
 	private activePeriod: string | null = null;
 	// "Today's thoughts" view (every top-level thought in today's note).
@@ -86,6 +95,23 @@ export class ThreadsView extends ItemView {
 				rescanOn(file);
 			})
 		);
+		// The areas note may sit in an excluded folder (so rescanOn skips it);
+		// refresh the grouping whenever it changes, mirroring the Pillars panel.
+		const onAreasFile = (f: { path: string }) => {
+			if (f.path === this.host.getSettings().threadAreasNotePath)
+				this.scheduleRefresh();
+		};
+		this.registerEvent(this.app.vault.on("modify", onAreasFile));
+		this.registerEvent(this.app.vault.on("create", onAreasFile));
+		this.registerEvent(
+			this.app.vault.on("rename", (f, oldPath) => {
+				if (
+					f.path === this.host.getSettings().threadAreasNotePath ||
+					oldPath === this.host.getSettings().threadAreasNotePath
+				)
+					this.scheduleRefresh();
+			})
+		);
 		await this.refresh();
 	}
 
@@ -119,6 +145,7 @@ export class ThreadsView extends ItemView {
 		this.posts = posts;
 		this.periodic = periodic;
 		this.today = await this.service.todayThoughtPosts();
+		this.areas = await this.service.loadThreadAreas();
 		this.render();
 	}
 
@@ -189,29 +216,17 @@ export class ThreadsView extends ItemView {
 		}
 		if (summaries.length > 0) {
 			const pinned = this.pinnedThreads();
-			const ordered = orderThreadsByPin(summaries, pinned);
 			const pinnedSet = new Set(pinned);
-			const list = this.contentEl.createDiv({ cls: "stx-thread-list" });
-			for (const s of ordered) {
-				const when = s.lastActiveTime
-					? `${s.lastActiveDate} ${s.lastActiveTime}`
-					: s.lastActiveDate;
-				const row = this.listRow(
-					list,
-					s.name,
-					when,
-					s.postCount,
-					() => {
-						this.activeThread = s.name;
-						this.threadPeriodFilter.clear();
-						this.replyOpenFor = null;
-						this.render();
-					},
-					pinnedSet.has(s.name)
-				);
-				this.wireLongPressMenu(row, (x, y, onHide) =>
-					this.showThreadMenu(s.name, x, y, onHide)
-				);
+			const groups = groupThreadsByArea(summaries, this.areas, pinned);
+			if (isFlatGrouping(groups)) {
+				// No areas organised yet — render one flat list (unchanged UX).
+				const flat = groups.length
+					? groups[0].threads
+					: orderThreadsByPin(summaries, pinned);
+				const list = this.contentEl.createDiv({ cls: "stx-thread-list" });
+				this.renderThreadRows(list, flat, pinnedSet);
+			} else {
+				for (const g of groups) this.renderAreaGroup(g, pinnedSet);
 			}
 		}
 		if (periods.length > 0) {
@@ -236,6 +251,70 @@ export class ThreadsView extends ItemView {
 				);
 			}
 		}
+	}
+
+	/** An area group: a collapsible header + (when expanded) its thread rows. */
+	private renderAreaGroup(group: AreaGroup, pinnedSet: Set<string>): void {
+		const collapsed = this.collapsedAreas().includes(group.area);
+		const sec = this.contentEl.createDiv({ cls: "stx-area-section" });
+		const header = sec.createDiv({ cls: "stx-area-head" });
+		if (collapsed) header.addClass("is-collapsed");
+		const chevron = header.createSpan({ cls: "stx-area-chevron" });
+		setIcon(chevron, collapsed ? "chevron-right" : "chevron-down");
+		header.createSpan({ cls: "stx-area-name", text: group.area });
+		header.createSpan({
+			cls: "stx-area-count",
+			text: String(group.threads.length),
+		});
+		header.addEventListener("click", () => void this.toggleArea(group.area));
+		if (!collapsed) {
+			const list = sec.createDiv({ cls: "stx-thread-list" });
+			this.renderThreadRows(list, group.threads, pinnedSet);
+		}
+	}
+
+	/** Render a run of thread rows into a list container (shared by the flat and
+	 *  grouped views). */
+	private renderThreadRows(
+		list: HTMLElement,
+		threads: ThreadSummary[],
+		pinnedSet: Set<string>
+	): void {
+		for (const s of threads) {
+			const when = s.lastActiveTime
+				? `${s.lastActiveDate} ${s.lastActiveTime}`
+				: s.lastActiveDate;
+			const row = this.listRow(
+				list,
+				s.name,
+				when,
+				s.postCount,
+				() => {
+					this.activeThread = s.name;
+					this.threadPeriodFilter.clear();
+					this.replyOpenFor = null;
+					this.render();
+				},
+				pinnedSet.has(s.name)
+			);
+			this.wireLongPressMenu(row, (x, y, onHide) =>
+				this.showThreadMenu(s.name, x, y, onHide)
+			);
+		}
+	}
+
+	private collapsedAreas(): string[] {
+		return this.host.getSettings().threadAreasCollapsed ?? [];
+	}
+
+	private async toggleArea(area: string): Promise<void> {
+		const settings = this.host.getSettings();
+		const current = settings.threadAreasCollapsed ?? [];
+		settings.threadAreasCollapsed = current.includes(area)
+			? current.filter((a) => a !== area)
+			: [...current, area];
+		await this.host.saveSettings();
+		this.render();
 	}
 
 	private listRow(
@@ -663,14 +742,29 @@ export class ThreadsView extends ItemView {
 				.setIcon("plus")
 				.onClick(() => this.promptNewThread(post))
 		);
-		for (const name of summarizeThreads(this.posts).map((s) => s.name)) {
-			const tag = `#thread/${name}`;
-			menu.addItem((i) =>
-				i
-					.setTitle(tag)
-					.setIcon("messages-square")
-					.onClick(() => void this.applyTag(post, tag))
-			);
+		// Show the existing threads grouped by area (matching the list), with a
+		// disabled label per area as a header. Until areas are organised the
+		// grouping is flat (one Unsorted group) and the headers are suppressed.
+		const groups = groupThreadsByArea(
+			summarizeThreads(this.posts),
+			this.areas,
+			this.pinnedThreads()
+		);
+		const flat = isFlatGrouping(groups);
+		for (const g of groups) {
+			if (!flat) {
+				menu.addSeparator();
+				menu.addItem((i) => i.setTitle(g.area).setIsLabel(true));
+			}
+			for (const t of g.threads) {
+				const tag = `#thread/${t.name}`;
+				menu.addItem((i) =>
+					i
+						.setTitle(tag)
+						.setIcon("messages-square")
+						.onClick(() => void this.applyTag(post, tag))
+				);
+			}
 		}
 		if (onHide) menu.onHide(onHide);
 		menu.showAtPosition({ x, y });

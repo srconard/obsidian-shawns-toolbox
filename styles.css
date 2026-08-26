@@ -806,6 +806,41 @@ body.is-mobile .mobile-toolbar:not(:has(.mobile-toolbar-option)) {
 	margin-top: 0.15em;
 }
 
+/* area groups (thread list grouped by the Thread Areas note) */
+.stx-area-section {
+	margin-top: 0.5em;
+}
+.stx-area-head {
+	display: flex;
+	align-items: center;
+	gap: 0.4em;
+	padding: 0.3em 0.4em;
+	border-radius: 6px;
+	cursor: pointer;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	font-weight: 600;
+}
+.stx-area-head:hover {
+	background: var(--background-modifier-hover);
+}
+.stx-area-chevron {
+	display: inline-flex;
+	align-items: center;
+}
+.stx-area-chevron .svg-icon {
+	width: 0.9em;
+	height: 0.9em;
+}
+.stx-area-name {
+	flex: 1;
+}
+.stx-area-count {
+	color: var(--text-faint);
+}
+
 /* thread detail */
 .stx-thread-posts {
 	display: flex;

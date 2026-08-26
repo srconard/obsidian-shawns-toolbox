@@ -23,6 +23,11 @@ export interface ShawnsToolboxSettings {
 	threadScanExcludeFolders: string[];
 	/** Thread names pinned to the top of the Threads list, persisted. */
 	pinnedThreads: string[];
+	/** Note mapping threads → areas (## area headings, bullets = thread names).
+	 *  The Threads list groups by these areas. */
+	threadAreasNotePath: string;
+	/** Area names whose group is collapsed in the Threads list, persisted. */
+	threadAreasCollapsed: string[];
 
 	// Capture & Sections
 	/** Full heading line each capture button appends under */
@@ -95,6 +100,8 @@ export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
 
 	threadScanExcludeFolders: ["AGENTS", "Settings"],
 	pinnedThreads: [],
+	threadAreasNotePath: "01. Default/Thread Areas.md",
+	threadAreasCollapsed: [],
 
 	captureTargets: {
 		thought: "# Thoughts",
@@ -346,6 +353,24 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 					});
 				text.inputEl.rows = 3;
 				text.inputEl.cols = 30;
+			});
+
+		new Setting(containerEl)
+			.setName("Thread areas note")
+			.setDesc(
+				"Note that groups threads into areas: '## Area' headings with a bullet per thread name under each. The Threads list groups by these areas; unlisted threads fall under 'Unsorted'."
+			)
+			.addText((text) => {
+				text
+					.setPlaceholder("01. Default/Thread Areas.md")
+					.setValue(this.plugin.settings.threadAreasNotePath)
+					.onChange(async (value) => {
+						this.plugin.settings.threadAreasNotePath =
+							value.trim() ||
+							DEFAULT_SETTINGS.threadAreasNotePath;
+						await this.plugin.saveSettings();
+					});
+				text.inputEl.style.width = "300px";
 			});
 
 		// Capture & Sections section
