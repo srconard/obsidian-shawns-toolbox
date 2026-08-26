@@ -20,6 +20,7 @@ import { FocusView, FOCUS_VIEW_TYPE } from "./focus-view";
 import { VoiceView, VOICE_VIEW_TYPE } from "./voice-view";
 import { ThreadsView, THREADS_VIEW_TYPE } from "./threads-view";
 import { PillarsView, PILLARS_VIEW_TYPE } from "./pillars-view";
+import { GuidingQuestionsView, GUIDING_VIEW_TYPE } from "./guiding-view";
 import type { CardsHost } from "./section-cards";
 
 export default class ShawnsToolboxPlugin extends Plugin {
@@ -134,6 +135,10 @@ export default class ShawnsToolboxPlugin extends Plugin {
 			PILLARS_VIEW_TYPE,
 			(leaf: WorkspaceLeaf) => new PillarsView(leaf, host)
 		);
+		this.registerView(
+			GUIDING_VIEW_TYPE,
+			(leaf: WorkspaceLeaf) => new GuidingQuestionsView(leaf, host)
+		);
 
 		this.addCommand({
 			id: "open-capture-view",
@@ -166,6 +171,11 @@ export default class ShawnsToolboxPlugin extends Plugin {
 			name: "Open pillars panel",
 			callback: () => void this.activateView(PILLARS_VIEW_TYPE, "right"),
 		});
+		this.addCommand({
+			id: "open-guiding-panel",
+			name: "Open guiding questions panel",
+			callback: () => void this.activateView(GUIDING_VIEW_TYPE, "right"),
+		});
 		this.addRibbonIcon("zap", "Open capture view", () =>
 			void this.activateView(CAPTURE_VIEW_TYPE, "main")
 		);
@@ -177,6 +187,9 @@ export default class ShawnsToolboxPlugin extends Plugin {
 		);
 		this.addRibbonIcon("layout-grid", "Open pillars panel", () =>
 			void this.activateView(PILLARS_VIEW_TYPE, "right")
+		);
+		this.addRibbonIcon("compass", "Open guiding questions panel", () =>
+			void this.activateView(GUIDING_VIEW_TYPE, "right")
 		);
 
 		// "Go to today" — jumps to (logical) today's daily note from anywhere,

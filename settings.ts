@@ -57,6 +57,12 @@ export interface ShawnsToolboxSettings {
 	/** Last-viewed pillar (its wikilink text), restored across sessions. */
 	lastPillarLink: string;
 
+	// Guiding Questions panel
+	/** Note the Guiding Questions panel flips through, section by section. */
+	guidingQuestionsNotePath: string;
+	/** Last-viewed guiding section (its title), restored across sessions. */
+	lastGuidingView: string;
+
 	// Voice capture
 	groqApiKey: string;
 	groqModel: string;
@@ -125,6 +131,9 @@ export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
 	pillarReadingMode: false,
 	pillarChipsCollapsed: false,
 	lastPillarLink: "",
+
+	guidingQuestionsNotePath: "03. Personal/Guiding Questions.md",
+	lastGuidingView: "",
 
 	groqApiKey: "",
 	groqModel: "whisper-large-v3-turbo",
@@ -469,6 +478,30 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 					.onChange(async (value) => {
 						this.plugin.settings.pillarsNotePath =
 							value.trim() || DEFAULT_SETTINGS.pillarsNotePath;
+						await this.plugin.saveSettings();
+					});
+				text.inputEl.style.width = "300px";
+			});
+
+		// Guiding Questions panel section
+		containerEl.createEl("h3", { text: "Guiding Questions panel" });
+
+		containerEl.createEl("p", {
+			text: "The Guiding Questions panel flips through this note one section at a time (◀ ▶ + dropdown). A note with no headings shows whole.",
+			cls: "setting-item-description",
+		});
+
+		new Setting(containerEl)
+			.setName("Guiding Questions note path")
+			.setDesc("The note the panel flips through (path with .md).")
+			.addText((text) => {
+				text
+					.setPlaceholder("03. Personal/Guiding Questions.md")
+					.setValue(this.plugin.settings.guidingQuestionsNotePath)
+					.onChange(async (value) => {
+						this.plugin.settings.guidingQuestionsNotePath =
+							value.trim() ||
+							DEFAULT_SETTINGS.guidingQuestionsNotePath;
 						await this.plugin.saveSettings();
 					});
 				text.inputEl.style.width = "300px";
