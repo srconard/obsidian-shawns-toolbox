@@ -1,5 +1,5 @@
-// threads-view.ts — the Threads side panel. Reads #thread posts from the
-// timeline folder (via ThreadService) and renders a thread list → flat
+// threads-view.ts — the Threads side panel. Reads #thread posts from every
+// note outside the excluded folders (via ThreadService) and renders a list → flat
 // chronological thread view (4chan-style) with reply indicators and a reply
 // action. Primary reading surface is the phone.
 import { ItemView, Menu, Notice, WorkspaceLeaf, TAbstractFile, setIcon } from "obsidian";
@@ -51,7 +51,7 @@ export class ThreadsView extends ItemView {
 	async onOpen(): Promise<void> {
 		this.contentEl.addClass("stx-threads");
 		const rescanOn = (file: TAbstractFile) => {
-			if (!this.service.isTimelineFile(file)) return;
+			if (!this.service.isScannableFile(file)) return;
 			this.service.invalidate(file.path);
 			this.scheduleRefresh();
 		};
@@ -118,7 +118,7 @@ export class ThreadsView extends ItemView {
 		if (summaries.length === 0 && periods.length === 0) {
 			this.contentEl.createDiv({
 				cls: "stx-threads-empty",
-				text: "No #thread or #thought posts found in the timeline yet.",
+				text: "No #thread or #thought posts found in your notes yet.",
 			});
 			return;
 		}
@@ -195,9 +195,7 @@ export class ThreadsView extends ItemView {
 		for (const post of posts) {
 			const card = listEl.createDiv({ cls: "stx-post" });
 			const dateLine = card.createDiv({ cls: "stx-post-date" });
-			dateLine.setText(
-				post.time ? `${post.dateIso} · ${post.time}` : post.dateIso
-			);
+			dateLine.setText(this.sourceLabel(post));
 			dateLine.addEventListener("click", async () => {
 				try {
 					await this.service.openPost(post);
@@ -291,11 +289,10 @@ export class ThreadsView extends ItemView {
 				});
 			}
 
-			// date/time — tapping opens the source note at the line
+			// date/time (or note name for non-timeline sources) — tapping opens
+			// the source note at the line
 			const dateLine = card.createDiv({ cls: "stx-post-date" });
-			dateLine.setText(
-				post.time ? `${post.dateIso} · ${post.time}` : post.dateIso
-			);
+			dateLine.setText(this.sourceLabel(post));
 			dateLine.addEventListener("click", async (e) => {
 				e.stopPropagation();
 				try {
@@ -481,6 +478,18 @@ export class ThreadsView extends ItemView {
 	}
 
 	// ---- helpers ----
+
+	/**
+	 * The label shown where a post's date sits. Timeline daily notes (basename is
+	 * a YYYY-MM-DD date) show the date; posts from any other note show the note
+	 * name instead, so a #thread line in "01. Default/walk dancing.md" reads
+	 * "walk dancing" rather than a meaningless file-mtime date. A time suffix is
+	 * appended when the line carries one either way.
+	 */
+	private sourceLabel(post: { note: string; dateIso: string; time: string | null }): string {
+		const base = /^\d{4}-\d{2}-\d{2}$/.test(post.note) ? post.dateIso : post.note;
+		return post.time ? `${base} · ${post.time}` : base;
+	}
 
 	private cardKey(post: ThreadPost): string {
 		return post.blockId

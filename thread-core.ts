@@ -9,8 +9,13 @@
 export interface ThreadPost {
 	/** Thread name from the #thread/<name> tag (first one on the line). */
 	thread: string;
-	/** Basename of the source daily note (no path, no .md), e.g. "2026-08-25". */
+	/** Basename of the source note (no path, no .md), e.g. "2026-08-25" or
+	 *  "walk dancing" — the display label / wikilink target. */
 	note: string;
+	/** Full vault path to the source note (with .md), e.g.
+	 *  "01. Default/walk dancing.md". Used to resolve the file for edits/opens
+	 *  now that posts can come from any folder, not just the timeline. */
+	path: string;
 	/** The note's date (YYYY-MM-DD) — used as the timestamp fallback. */
 	dateIso: string;
 	/** Zero-based line number of the post in its note. */
@@ -42,6 +47,8 @@ export interface PeriodicPost {
 	/** The #thread name if the line is also a thread post, else null. */
 	thread: string | null;
 	note: string;
+	/** Full vault path to the source note (with .md). */
+	path: string;
 	dateIso: string;
 	line: number;
 	time: string | null;
@@ -129,7 +136,8 @@ export function parsePostLine(
 	line: string,
 	note: string,
 	dateIso: string,
-	lineNo: number
+	lineNo: number,
+	path: string = note
 ): ThreadPost | null {
 	const clean = stripCr(line);
 	const tag = THREAD_TAG_RE.exec(clean);
@@ -139,6 +147,7 @@ export function parsePostLine(
 	return {
 		thread: tag[1],
 		note,
+		path,
 		dateIso,
 		line: lineNo,
 		time: timeM ? normalizeTime(timeM[1]) : null,
@@ -161,12 +170,13 @@ function normalizeTime(hm: string): string {
 export function parseNotePosts(
 	note: string,
 	dateIso: string,
-	content: string
+	content: string,
+	path: string = note
 ): ThreadPost[] {
 	const posts: ThreadPost[] = [];
 	const lines = content.split("\n");
 	for (let i = 0; i < lines.length; i++) {
-		const p = parsePostLine(lines[i], note, dateIso, i);
+		const p = parsePostLine(lines[i], note, dateIso, i, path);
 		if (p) posts.push(p);
 	}
 	return posts;
@@ -285,7 +295,8 @@ export function parsePeriodicPostLine(
 	line: string,
 	note: string,
 	dateIso: string,
-	lineNo: number
+	lineNo: number,
+	path: string = note
 ): PeriodicPost | null {
 	const clean = stripCr(line);
 	const periods = extractPeriods(clean);
@@ -296,6 +307,7 @@ export function parsePeriodicPostLine(
 		periods,
 		thread: tag ? tag[1] : null,
 		note,
+		path,
 		dateIso,
 		line: lineNo,
 		time: timeM ? normalizeTime(timeM[1]) : null,
@@ -309,12 +321,13 @@ export function parsePeriodicPostLine(
 export function parsePeriodicPosts(
 	note: string,
 	dateIso: string,
-	content: string
+	content: string,
+	path: string = note
 ): PeriodicPost[] {
 	const out: PeriodicPost[] = [];
 	const lines = content.split("\n");
 	for (let i = 0; i < lines.length; i++) {
-		const p = parsePeriodicPostLine(lines[i], note, dateIso, i);
+		const p = parsePeriodicPostLine(lines[i], note, dateIso, i, path);
 		if (p) out.push(p);
 	}
 	return out;

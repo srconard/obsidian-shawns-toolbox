@@ -18,6 +18,10 @@ export interface ShawnsToolboxSettings {
 	statusFooterEnabled: boolean;
 	statusExcludeFolders: string[];
 
+	// Threads panel
+	/** Folders the Threads panel does not scan for #thread/#thought posts. */
+	threadScanExcludeFolders: string[];
+
 	// Capture & Sections
 	/** Full heading line each capture button appends under */
 	captureTargets: Record<CaptureKind, string>;
@@ -81,6 +85,8 @@ export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
 	statusFooterEnabled: true,
 	statusExcludeFolders: ["00. Timeline", "AGENTS"],
 
+	threadScanExcludeFolders: ["AGENTS", "Settings"],
+
 	captureTargets: {
 		thought: "# Thoughts",
 		doToday: "### Do Today",
@@ -140,7 +146,9 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 
 		containerEl.empty();
 
-		containerEl.createEl("h2", { text: "Shawn's Toolbox Settings" });
+		containerEl.createEl("h2", {
+			text: `Shawn's Toolbox Settings — v${this.plugin.manifest.version}`,
+		});
 
 		// Checkbox Completion Stamping section
 		containerEl.createEl("h3", { text: "Checkbox Completion Stamping" });
@@ -289,6 +297,36 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 					)
 					.onChange(async (value) => {
 						this.plugin.settings.statusExcludeFolders = value
+							.split("\n")
+							.map((p) => p.trim())
+							.filter((p) => p.length > 0);
+						await this.plugin.saveSettings();
+					});
+				text.inputEl.rows = 3;
+				text.inputEl.cols = 30;
+			});
+
+		// Threads panel section
+		containerEl.createEl("h3", { text: "Threads panel" });
+
+		containerEl.createEl("p", {
+			text: "The Threads panel scans every note for #thread/<name> and #thought/<period> lines, except notes under the folders listed here.",
+			cls: "setting-item-description",
+		});
+
+		new Setting(containerEl)
+			.setName("Exclude folders")
+			.setDesc(
+				"Notes under these folders are not scanned for thread posts. One per line."
+			)
+			.addTextArea((text) => {
+				text
+					.setPlaceholder("AGENTS\nSettings")
+					.setValue(
+						this.plugin.settings.threadScanExcludeFolders.join("\n")
+					)
+					.onChange(async (value) => {
+						this.plugin.settings.threadScanExcludeFolders = value
 							.split("\n")
 							.map((p) => p.trim())
 							.filter((p) => p.length > 0);

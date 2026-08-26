@@ -24,6 +24,9 @@ import {
 
 const DAILY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+/** Folders whose notes are never scanned when no setting is configured. */
+export const DEFAULT_THREAD_EXCLUDES = ["AGENTS", "Settings"];
+
 export class ThreadService {
 	private cache = new Map<
 		string,
@@ -47,12 +50,22 @@ export class ThreadService {
 		return f ? f + "/" : "";
 	}
 
-	isTimelineFile(file: TAbstractFile): boolean {
-		return (
-			file instanceof TFile &&
-			file.extension === "md" &&
-			file.path.startsWith(this.prefix())
+	/** Folder prefixes excluded from the scan (path segments, no trailing /). */
+	private excludes(): string[] {
+		const configured = this.getSettings().threadScanExcludeFolders;
+		return configured && configured.length ? configured : DEFAULT_THREAD_EXCLUDES;
+	}
+
+	/** A markdown path is scannable unless it sits in an excluded folder. */
+	isScannablePath(path: string): boolean {
+		if (!path.endsWith(".md")) return false;
+		return this.excludes().every(
+			(dir) => path !== dir && !path.startsWith(dir + "/")
 		);
+	}
+
+	isScannableFile(file: TAbstractFile): boolean {
+		return file instanceof TFile && this.isScannablePath(file.path);
 	}
 
 	invalidate(path: string): void {
@@ -65,22 +78,30 @@ export class ThreadService {
 			: moment(file.stat.mtime).format("YYYY-MM-DD");
 	}
 
-	private noteFile(basename: string): TFile | null {
-		const path = this.prefix() + basename + ".md";
-		const f = this.app.vault.getAbstractFileByPath(path);
+	/** Resolve a post's source file: by its full path first (posts now come from
+	 *  any folder), falling back to the legacy timeline-basename lookup. */
+	private resolveFile(post: { path?: string; note: string }): TFile | null {
+		if (post.path) {
+			const f = this.app.vault.getAbstractFileByPath(post.path);
+			if (f instanceof TFile) return f;
+		}
+		const legacy = this.prefix() + post.note + ".md";
+		const f = this.app.vault.getAbstractFileByPath(legacy);
 		return f instanceof TFile ? f : null;
 	}
 
 	/**
-	 * Scan every timeline note for #thread posts and #thought/<period> posts in
-	 * one pass, reusing the cache where mtime holds so a rescan only re-reads
-	 * changed notes.
+	 * Scan every scannable note (all markdown outside the excluded folders) for
+	 * #thread posts and #thought/<period> posts in one pass, reusing the cache
+	 * where mtime holds so a rescan only re-reads changed notes. Reading content
+	 * is required (the parser needs line numbers, raw lines, and trailing block
+	 * ids for edits), but the per-file mtime cache keeps a widened, whole-vault
+	 * scan cheap: unchanged files are never re-read.
 	 */
 	async scanAll(): Promise<{ posts: ThreadPost[]; periodic: PeriodicPost[] }> {
-		const prefix = this.prefix();
 		const files = this.app.vault
 			.getMarkdownFiles()
-			.filter((f) => f.path.startsWith(prefix));
+			.filter((f) => this.isScannablePath(f.path));
 		const live = new Set(files.map((f) => f.path));
 		for (const path of [...this.cache.keys()]) {
 			if (!live.has(path)) this.cache.delete(path);
@@ -96,8 +117,8 @@ export class ThreadService {
 			}
 			const date = this.noteDate(f);
 			const content = await this.app.vault.cachedRead(f);
-			const p = parseNotePosts(f.basename, date, content);
-			const pp = parsePeriodicPosts(f.basename, date, content);
+			const p = parseNotePosts(f.basename, date, content, f.path);
+			const pp = parsePeriodicPosts(f.basename, date, content, f.path);
 			this.cache.set(f.path, { mtime: f.stat.mtime, posts: p, periodic: pp });
 			posts.push(...p);
 			periodic.push(...pp);
@@ -112,7 +133,7 @@ export class ThreadService {
 	 */
 	async ensureParentBlockId(post: ThreadPost): Promise<string> {
 		if (post.blockId) return post.blockId;
-		const file = this.noteFile(post.note);
+		const file = this.resolveFile(post);
 		if (!file) throw new Error(`Parent note not found: ${post.note}`);
 		let assigned = generateBlockId();
 		await this.app.vault.process(file, (content) => {
@@ -160,7 +181,7 @@ export class ThreadService {
 			appendToSection(content, settings.captureTargets.thought, line)
 		);
 		this.invalidate(file.path);
-		this.invalidate(this.noteFile(post.note)?.path ?? "");
+		this.invalidate(this.resolveFile(post)?.path ?? "");
 		return parentId;
 	}
 
@@ -172,7 +193,7 @@ export class ThreadService {
 	 * edit since the scan still resolves. Returns whether the line changed.
 	 */
 	async appendTagToPost(post: ThreadPost, tag: string): Promise<boolean> {
-		const file = this.noteFile(post.note);
+		const file = this.resolveFile(post);
 		if (!file) throw new Error(`Note not found: ${post.note}`);
 		let changed = false;
 		await this.app.vault.process(file, (content) => {
@@ -191,8 +212,8 @@ export class ThreadService {
 	}
 
 	/** Open a post's source note and put the cursor on its line. */
-	async openPost(post: { note: string; line: number }): Promise<void> {
-		const file = this.noteFile(post.note);
+	async openPost(post: { path?: string; note: string; line: number }): Promise<void> {
+		const file = this.resolveFile(post);
 		if (!file) throw new Error(`Note not found: ${post.note}`);
 		const leaf = this.app.workspace.getLeaf(false);
 		await leaf.openFile(file, { eState: { line: post.line } });

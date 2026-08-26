@@ -122,6 +122,34 @@ describe("parseNotePosts", () => {
 	});
 });
 
+describe("path propagation", () => {
+	it("carries an explicit source path onto every parsed thread post", () => {
+		const posts = parseNotePosts(
+			"walk dancing",
+			"2026-08-25",
+			"- 09:00 a thought #thread/build",
+			"01. Default/walk dancing.md"
+		);
+		expect(posts[0].path).toBe("01. Default/walk dancing.md");
+		expect(posts[0].note).toBe("walk dancing");
+	});
+
+	it("carries the source path onto periodic posts too", () => {
+		const posts = parsePeriodicPosts(
+			"walk dancing",
+			"2026-08-25",
+			"- 09:00 a thought #thought/weekly",
+			"01. Default/walk dancing.md"
+		);
+		expect(posts[0].path).toBe("01. Default/walk dancing.md");
+	});
+
+	it("defaults path to the note basename when not supplied", () => {
+		const posts = parseNotePosts("2026-08-25", "2026-08-25", "- 09:00 x #thread/build");
+		expect(posts[0].path).toBe("2026-08-25");
+	});
+});
+
 describe("threadPosts + summarizeThreads", () => {
 	const all = [
 		...parseNotePosts("2026-08-24", "2026-08-24", NOTE_A),

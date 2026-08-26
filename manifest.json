@@ -1,9 +1,9 @@
 {
 	"id": "shawns-toolbox",
 	"name": "Shawn's Toolbox",
-	"version": "1.13.0",
+	"version": "1.14.0",
 	"minAppVersion": "1.4.0",
-	"description": "Pillars panel (cycle life pillars → per-pillar section cards), threads panel (#thread reading + reply + add-tag menu, periodic-thought views + cadence filter), capture view (blank screen → daily-note sections), editable section cards, focus & voice panels, note status control, checkbox completion stamping, and block summarizer.",
+	"description": "Pillars panel (cycle life pillars → per-pillar section cards), threads panel (#thread reading + reply + add-tag menu, periodic-thought views + cadence filter, whole-vault scan), capture view (blank screen → daily-note sections), editable section cards, focus & voice panels, note status control, checkbox completion stamping, and block summarizer.",
 	"author": "Shawn",
 	"isDesktopOnly": false
 }
