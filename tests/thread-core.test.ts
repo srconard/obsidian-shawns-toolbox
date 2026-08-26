@@ -19,6 +19,7 @@ import {
 	parsePeriodicPosts,
 	periodicPosts,
 	summarizePeriods,
+	normalizeThreadName,
 	THOUGHT_PERIODS,
 } from "../thread-core";
 
@@ -391,5 +392,23 @@ describe("periodicPosts + summarizePeriods", () => {
 		expect(sum.map((s) => s.period)).toEqual(["weekly", "quarterly", "yearly"]);
 		expect(sum.find((s) => s.period === "quarterly")!.postCount).toBe(3);
 		expect(sum.find((s) => s.period === "weekly")!.postCount).toBe(1);
+	});
+});
+
+describe("normalizeThreadName", () => {
+	it("lowercases and folds whitespace to dashes", () => {
+		expect(normalizeThreadName("  Walk Dancing ")).toBe("walk-dancing");
+	});
+	it("drops characters outside the thread-name alphabet", () => {
+		expect(normalizeThreadName("Idea!! #2 (draft)")).toBe("idea-2-draft");
+	});
+	it("collapses dash and slash runs and trims edges", () => {
+		expect(normalizeThreadName("--practice//flare--")).toBe("practice/flare");
+	});
+	it("keeps digits, underscores, and existing kebab names verbatim", () => {
+		expect(normalizeThreadName("focus-practice_2")).toBe("focus-practice_2");
+	});
+	it("returns empty string when nothing usable remains", () => {
+		expect(normalizeThreadName("   !!!   ")).toBe("");
 	});
 });

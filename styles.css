@@ -879,3 +879,9 @@ body.is-mobile .mobile-toolbar:not(:has(.mobile-toolbar-option)) {
 	justify-content: flex-end;
 	margin-top: 0.3em;
 }
+
+/* new-thread prompt modal (add-tag menu → New thread…) */
+.stx-new-thread-input {
+	width: 100%;
+	margin-bottom: 0.6em;
+}

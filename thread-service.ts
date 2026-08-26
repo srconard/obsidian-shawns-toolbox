@@ -148,7 +148,7 @@ export class ThreadService {
 		return assigned;
 	}
 
-	private locateLine(lines: string[], post: ThreadPost): number {
+	private locateLine(lines: string[], post: { line: number; raw: string }): number {
 		const strip = (l: string) => (l.endsWith("\r") ? l.slice(0, -1) : l);
 		if (strip(lines[post.line] ?? "") === post.raw) return post.line;
 		return lines.findIndex((l) => strip(l) === post.raw);
@@ -192,7 +192,10 @@ export class ThreadService {
 	 * number with a content-match fallback (same as ensureParentBlockId), so an
 	 * edit since the scan still resolves. Returns whether the line changed.
 	 */
-	async appendTagToPost(post: ThreadPost, tag: string): Promise<boolean> {
+	async appendTagToPost(
+		post: { path?: string; note: string; line: number; raw: string },
+		tag: string
+	): Promise<boolean> {
 		const file = this.resolveFile(post);
 		if (!file) throw new Error(`Note not found: ${post.note}`);
 		let changed = false;

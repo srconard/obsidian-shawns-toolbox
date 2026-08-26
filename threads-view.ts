@@ -2,7 +2,7 @@
 // note outside the excluded folders (via ThreadService) and renders a list → flat
 // chronological thread view (4chan-style) with reply indicators and a reply
 // action. Primary reading surface is the phone.
-import { ItemView, Menu, Notice, WorkspaceLeaf, TAbstractFile, setIcon } from "obsidian";
+import { App, ItemView, Menu, Modal, Notice, WorkspaceLeaf, TAbstractFile, setIcon } from "obsidian";
 import type { CardsHost } from "./section-cards";
 import { ThreadService } from "./thread-service";
 import {
@@ -14,10 +14,16 @@ import {
 	targetKey,
 	periodicPosts,
 	summarizePeriods,
+	normalizeThreadName,
 	THOUGHT_PERIODS,
 	type ThreadPost,
 	type PeriodicPost,
 } from "./thread-core";
+
+/** A post the add-tag menu can act on — either a thread post or a periodic one;
+ *  both carry the fields the service needs to locate and edit the source line. */
+type TaggablePost = ThreadPost | PeriodicPost;
+type PeriodTagFilter = "all" | "tagged" | "untagged";
 
 export const THREADS_VIEW_TYPE = "shawns-toolbox-threads";
 
@@ -31,6 +37,9 @@ export class ThreadsView extends ItemView {
 	private activeThread: string | null = null;
 	private activePeriod: string | null = null;
 	private threadPeriodFilter = new Set<string>();
+	// Periodic-thoughts view: show all posts, only those already carrying a
+	// #thread/ tag, or only untagged ones (Shawn's "not yet processed" set).
+	private periodTagFilter: PeriodTagFilter = "all";
 	private replyOpenFor: string | null = null;
 	private refreshTimer: number | null = null;
 	// Which surface the DOM currently shows, so render() can save the list's
@@ -191,6 +200,7 @@ export class ThreadsView extends ItemView {
 					s.postCount,
 					() => {
 						this.activePeriod = s.period;
+						this.periodTagFilter = "all";
 						this.replyOpenFor = null;
 						this.render();
 					}
@@ -238,10 +248,37 @@ export class ThreadsView extends ItemView {
 			text: `${cap(period)} thoughts`,
 		});
 
-		const posts = periodicPosts(this.periodic, period);
+		// Tagged / untagged filter: "untagged" = no #thread/ tag yet, i.e. not
+		// yet processed into a thread — the set Shawn works through.
+		const all = periodicPosts(this.periodic, period);
+		const filterBar = this.contentEl.createDiv({ cls: "stx-period-filter" });
+		const opts: Array<[PeriodTagFilter, string]> = [
+			["all", "All"],
+			["tagged", "Tagged"],
+			["untagged", "Untagged"],
+		];
+		for (const [key, label] of opts) {
+			const chip = filterBar.createEl("button", {
+				cls: "stx-period-chip",
+				text: label,
+			});
+			if (this.periodTagFilter === key) chip.addClass("is-active");
+			chip.addEventListener("click", () => {
+				this.periodTagFilter = key;
+				this.render();
+			});
+		}
+		const posts =
+			this.periodTagFilter === "tagged"
+				? all.filter((p) => p.thread !== null)
+				: this.periodTagFilter === "untagged"
+				  ? all.filter((p) => p.thread === null)
+				  : all;
+
 		const listEl = this.contentEl.createDiv({ cls: "stx-thread-posts" });
 		for (const post of posts) {
 			const card = listEl.createDiv({ cls: "stx-post" });
+			this.wireTagMenu(card, post);
 			const dateLine = card.createDiv({ cls: "stx-post-date" });
 			dateLine.setText(this.sourceLabel(post));
 			dateLine.addEventListener("click", async () => {
@@ -427,7 +464,7 @@ export class ThreadsView extends ItemView {
 
 	// ---- add-a-tag menu (long-press on touch, right-click on desktop) ----
 
-	private wireTagMenu(card: HTMLElement, post: ThreadPost): void {
+	private wireTagMenu(card: HTMLElement, post: TaggablePost): void {
 		this.wireLongPressMenu(card, (x, y, onHide) =>
 			this.showTagMenu(post, x, y, onHide)
 		);
@@ -498,7 +535,7 @@ export class ThreadsView extends ItemView {
 	}
 
 	private showTagMenu(
-		post: ThreadPost,
+		post: TaggablePost,
 		x: number,
 		y: number,
 		onHide?: () => void
@@ -515,6 +552,12 @@ export class ThreadsView extends ItemView {
 			);
 		}
 		menu.addSeparator();
+		menu.addItem((i) =>
+			i
+				.setTitle("New thread…")
+				.setIcon("plus")
+				.onClick(() => this.promptNewThread(post))
+		);
 		for (const name of summarizeThreads(this.posts).map((s) => s.name)) {
 			const tag = `#thread/${name}`;
 			menu.addItem((i) =>
@@ -528,7 +571,24 @@ export class ThreadsView extends ItemView {
 		menu.showAtPosition({ x, y });
 	}
 
-	private async applyTag(post: ThreadPost, tag: string): Promise<void> {
+	/**
+	 * Prompt for a new thread name, normalize it to the tag convention, and
+	 * append #thread/<name> to the post's source line. Empty input is a no-op;
+	 * a name that matches an existing thread just reuses it (applyTag no-ops if
+	 * the exact tag is already present).
+	 */
+	private promptNewThread(post: TaggablePost): void {
+		new NewThreadModal(this.app, (raw) => {
+			const name = normalizeThreadName(raw);
+			if (!name) {
+				new Notice("Enter a thread name");
+				return;
+			}
+			void this.applyTag(post, `#thread/${name}`);
+		}).open();
+	}
+
+	private async applyTag(post: TaggablePost, tag: string): Promise<void> {
 		try {
 			const changed = await this.service.appendTagToPost(post, tag);
 			new Notice(changed ? `Added ${tag}` : `${tag} already on that post`);
@@ -638,4 +698,43 @@ export class ThreadsView extends ItemView {
 
 function cap(s: string): string {
 	return s.length ? s[0].toUpperCase() + s.slice(1) : s;
+}
+
+/** A minimal single-field prompt for naming a new thread. Enter or Create
+ *  submits the raw text (the caller normalizes it); Escape/Cancel closes. */
+class NewThreadModal extends Modal {
+	constructor(app: App, private onSubmit: (raw: string) => void) {
+		super(app);
+	}
+
+	onOpen(): void {
+		const { contentEl } = this;
+		contentEl.addClass("stx-new-thread");
+		contentEl.createEl("h3", { text: "New thread" });
+		const input = contentEl.createEl("input", {
+			cls: "stx-new-thread-input",
+			attr: { type: "text", placeholder: "thread name" },
+		});
+		input.addEventListener("keydown", (e) => {
+			if (e.key === "Enter") {
+				e.preventDefault();
+				this.submit(input.value);
+			}
+		});
+		const row = contentEl.createDiv({ cls: "stx-thread-reply-row" });
+		const create = row.createEl("button", { cls: "mod-cta", text: "Create" });
+		create.addEventListener("click", () => this.submit(input.value));
+		const cancel = row.createEl("button", { text: "Cancel" });
+		cancel.addEventListener("click", () => this.close());
+		window.setTimeout(() => input.focus(), 0);
+	}
+
+	private submit(raw: string): void {
+		this.close();
+		this.onSubmit(raw);
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
 }

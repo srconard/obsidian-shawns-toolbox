@@ -417,6 +417,25 @@ export function appendTag(line: string, tag: string): string {
 }
 
 /**
+ * Normalize free-typed text into a #thread/<name> tag name, matching the
+ * convention names already use ([A-Za-z0-9_/-]): lowercased, whitespace folded
+ * to dashes, characters outside the alphabet dropped, runs of dashes collapsed,
+ * and leading/trailing dashes or slashes trimmed. Returns "" when nothing
+ * usable remains, which the caller treats as "cancel". Slashes are kept so a
+ * sub-tag like "practice/flare" can be typed.
+ */
+export function normalizeThreadName(input: string): string {
+	return input
+		.trim()
+		.toLowerCase()
+		.replace(/\s+/g, "-")
+		.replace(/[^a-z0-9_/-]/g, "")
+		.replace(/\/{2,}/g, "/")
+		.replace(/-{2,}/g, "-")
+		.replace(/^[-/]+|[-/]+$/g, "");
+}
+
+/**
  * Build the reply line appended to today's daily note under # Thoughts:
  * "- HH:MM <text> #thread/<name> ↩ [[<parentNote>#^<id>]]".
  */
