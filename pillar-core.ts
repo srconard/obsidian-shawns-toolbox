@@ -30,24 +30,48 @@ export interface PillarSource {
 }
 
 /**
- * Highlighted index for the hold-and-drag scrub selector (v1.18.0). A modest
- * vertical thumb travel should traverse the whole list, so the finger→index
- * mapping is AMPLIFIED: `travel` is the pixel distance that spans the full list
- * (top→bottom), giving `travel / (count - 1)` pixels per item — typically well
- * under a row's height, so the list moves faster than the finger. Dragging DOWN
- * (positive deltaY) advances the index; UP retreats it. The result is rounded
- * and clamped to a valid index; an empty/singleton list is always 0.
+ * Slot-reel wheel selector (v1.21.0). The pillar list spins UNDER the finger
+ * past a fixed centre selector, and wraps around like a slot reel, so every
+ * pillar is reachable from any starting touch position (the v1.18.0 anchored
+ * scrub couldn't reach items above the press point).
+ *
+ * `wheelPosition` is the fractional list position the finger has spun to. The
+ * mapping is AMPLIFIED: `travel` is the finger distance that spins the reel a
+ * FULL turn (all `count` items), giving `travel / count` pixels per item —
+ * typically well under a row's height, so the reel moves faster than the finger.
+ * The reel follows the finger: dragging DOWN (positive deltaY) spins earlier
+ * items down into the centre (position DECREASES); UP brings later items up.
+ * Unwrapped and unrounded so the DOM layer can render a smooth sub-item offset.
  */
-export function scrubIndex(
+export function wheelPosition(
 	startIndex: number,
 	deltaY: number,
 	count: number,
 	travel: number
 ): number {
 	if (count <= 1) return 0;
-	const perItem = travel / (count - 1);
-	const raw = startIndex + (perItem > 0 ? deltaY / perItem : 0);
-	return Math.min(count - 1, Math.max(0, Math.round(raw)));
+	const perItem = travel / count;
+	return startIndex - (perItem > 0 ? deltaY / perItem : 0);
+}
+
+/** Wrap any (possibly negative or out-of-range) index into `[0, count)`, like a
+ *  slot reel's endless loop. Rounds first, so a fractional position resolves to
+ *  its nearest item. An empty list is always 0. */
+export function wrapIndex(index: number, count: number): number {
+	if (count <= 0) return 0;
+	return ((Math.round(index) % count) + count) % count;
+}
+
+/** The pillar sitting in the centre selector for a given finger drag — the
+ *  wrapped, rounded `wheelPosition`. */
+export function wheelIndex(
+	startIndex: number,
+	deltaY: number,
+	count: number,
+	travel: number
+): number {
+	if (count <= 1) return 0;
+	return wrapIndex(wheelPosition(startIndex, deltaY, count, travel), count);
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;

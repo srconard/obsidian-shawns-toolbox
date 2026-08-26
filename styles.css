@@ -309,8 +309,9 @@
 	min-width: 0;
 }
 
-/* The pillar selector button (v1.18.0): tap to open the list, hold to scrub.
-   touch-action:none keeps a vertical drag from scrolling the panel. */
+/* The pillar selector button (v1.18.0, reel rework v1.21.0): tap to open the
+   list, hold to spin the reel. touch-action:none keeps a vertical drag from
+   scrolling the panel. */
 .stx-pillar-select {
 	flex: 1 1 auto;
 	min-width: 0;
@@ -327,7 +328,7 @@
 	color: var(--text-on-accent);
 }
 
-/* Hold-and-drag scrub overlay + its tap-to-pick list. */
+/* Reel overlay (hold gesture) + the tap-to-pick list (quick tap). */
 .stx-pillar-scrub-backdrop {
 	position: fixed;
 	inset: 0;
@@ -337,6 +338,7 @@
 	justify-content: center;
 }
 
+/* Quick-tap list. */
 .stx-pillar-scrub {
 	max-height: 60vh;
 	width: min(280px, 82vw);
@@ -353,10 +355,6 @@
 	display: none;
 }
 
-.stx-pillar-scrub.is-aborting {
-	opacity: 0.45;
-}
-
 .stx-pillar-scrub-item {
 	padding: 0.5em 0.9em;
 	font-size: var(--font-ui-small);
@@ -371,6 +369,60 @@
 	background: var(--interactive-accent);
 	color: var(--text-on-accent);
 	font-weight: 600;
+}
+
+/* Slot-reel (hold to spin): a fixed window with a stationary centre selector
+   band and a strip of rows that translates under it. */
+.stx-pillar-reel {
+	position: relative;
+	width: min(280px, 82vw);
+	overflow: hidden;
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	box-shadow: var(--shadow-s);
+}
+
+.stx-pillar-reel.is-aborting {
+	opacity: 0.45;
+}
+
+/* The stationary centre selector band the reel spins past. */
+.stx-pillar-reel-selector {
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 50%;
+	transform: translateY(-50%);
+	background: var(--interactive-accent);
+	opacity: 0.18;
+	border-top: 1px solid var(--interactive-accent);
+	border-bottom: 1px solid var(--interactive-accent);
+	pointer-events: none;
+	z-index: 1;
+}
+
+.stx-pillar-reel-strip {
+	position: relative;
+	z-index: 0;
+}
+
+.stx-pillar-reel-item {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0 0.9em;
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* The row sitting in the centre selector — the one release would pick. */
+.stx-pillar-reel-item.is-center {
+	color: var(--text-normal);
+	font-weight: 700;
 }
 
 .stx-scope-btn {
