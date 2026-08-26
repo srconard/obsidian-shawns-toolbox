@@ -1057,3 +1057,18 @@ body.is-mobile .mobile-toolbar:not(:has(.mobile-toolbar-option)) {
 	width: 100%;
 	margin-bottom: 0.6em;
 }
+
+/* pillar-inbox quick-capture: "+" button + prompt modal */
+.stx-pillar-add {
+	color: var(--text-accent);
+}
+.stx-pillar-inbox-input {
+	width: 100%;
+	margin-bottom: 0.6em;
+}
+.stx-pillar-inbox-row {
+	display: flex;
+	gap: 0.5em;
+	justify-content: flex-end;
+	margin-top: 0.3em;
+}

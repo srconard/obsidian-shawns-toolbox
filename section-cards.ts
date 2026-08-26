@@ -18,8 +18,11 @@ import {
 	parseSections,
 	sliceSection,
 	replaceSection,
+	appendToSection,
 	type Section,
 } from "./section-core";
+import { formatInboxLine, PILLAR_INBOX_SPEC } from "./pillar-inbox";
+import { PillarInboxModal } from "./pillar-inbox-modal";
 import {
 	SCOPE_LABELS,
 	logicalTodayIso,
@@ -390,6 +393,45 @@ export class SectionCards extends Component {
 			});
 		}
 		navBtn("Next pillar", "chevron-right", () => this.cyclePillar(1));
+		// Quick-capture "+": drop a plain dated bullet into this pillar's Inbox.
+		const add = navBtn("Quick-capture to this pillar's inbox", "plus", () =>
+			this.openInboxCapture()
+		);
+		add.addClass("stx-pillar-add");
+		if (!src || src.pillars.length === 0) add.disabled = true;
+	}
+
+	/**
+	 * Prompt for a quick note and append it to the current pillar note's Inbox
+	 * as a plain, dated bullet (never a checkbox — capture ≠ commitment). The
+	 * Inbox section is created if the pillar note lacks one. Intelligence about
+	 * where the item really belongs happens at Sunday review, not here.
+	 */
+	private openInboxCapture(): void {
+		const src = this.pillarSource;
+		const path = src?.notePathFor(src.currentIndex);
+		if (!path) {
+			new Notice("No pillar note to capture into.");
+			return;
+		}
+		const file = this.host.app.vault.getAbstractFileByPath(path);
+		if (!(file instanceof TFile)) {
+			new Notice("Pillar note not found.");
+			return;
+		}
+		const name = src?.pillars[src.currentIndex]?.display ?? "pillar";
+		new PillarInboxModal(this.host.app, name, (text) => {
+			const line = formatInboxLine(
+				text,
+				logicalTodayIso(this.host.getSettings())
+			);
+			void (async () => {
+				await this.host.app.vault.process(file, (content) =>
+					appendToSection(content, PILLAR_INBOX_SPEC, line)
+				);
+				new Notice(`Added to ${name} inbox`);
+			})();
+		}).open();
 	}
 
 	/** Step the pillar ring, wrapping at both ends. */

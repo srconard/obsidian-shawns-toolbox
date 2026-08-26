@@ -1,9 +1,9 @@
 {
 	"id": "shawns-toolbox",
 	"name": "Shawn's Toolbox",
-	"version": "1.23.0",
+	"version": "1.24.0",
 	"minAppVersion": "1.4.0",
-	"description": "Guiding-questions panel (flip through a note's sections, whole-note fallback), pillars panel (cycle life pillars → per-pillar section cards, slot-reel wheel selector), threads panel (thread areas grouping from an editable mapping note, Today's-thoughts processing view, #thread reading + reply + add-tag menu with new-thread creation, periodic-thought views + cadence + tagged/untagged filters, whole-vault scan, pin threads to top), capture view (blank screen → daily-note sections), editable section cards, focus & voice panels, note status control, checkbox completion stamping, and block summarizer.",
+	"description": "Guiding-questions panel (flip through a note's sections, whole-note fallback), pillars panel (cycle life pillars → per-pillar section cards, slot-reel wheel selector, per-pillar quick-capture inbox), threads panel (thread areas grouping from an editable mapping note, Today's-thoughts processing view, #thread reading + reply + add-tag menu with new-thread creation, periodic-thought views + cadence + tagged/untagged filters, whole-vault scan, pin threads to top), capture view (blank screen → daily-note sections), editable section cards, focus & voice panels, note status control, checkbox completion stamping, and block summarizer.",
 	"author": "Shawn",
 	"isDesktopOnly": false
 }
