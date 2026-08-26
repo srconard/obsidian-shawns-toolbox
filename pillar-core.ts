@@ -29,6 +29,27 @@ export interface PillarSource {
 	setCurrentIndex(index: number): Promise<void>;
 }
 
+/**
+ * Highlighted index for the hold-and-drag scrub selector (v1.18.0). A modest
+ * vertical thumb travel should traverse the whole list, so the finger→index
+ * mapping is AMPLIFIED: `travel` is the pixel distance that spans the full list
+ * (top→bottom), giving `travel / (count - 1)` pixels per item — typically well
+ * under a row's height, so the list moves faster than the finger. Dragging DOWN
+ * (positive deltaY) advances the index; UP retreats it. The result is rounded
+ * and clamped to a valid index; an empty/singleton list is always 0.
+ */
+export function scrubIndex(
+	startIndex: number,
+	deltaY: number,
+	count: number,
+	travel: number
+): number {
+	if (count <= 1) return 0;
+	const perItem = travel / (count - 1);
+	const raw = startIndex + (perItem > 0 ? deltaY / perItem : 0);
+	return Math.min(count - 1, Math.max(0, Math.round(raw)));
+}
+
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const H1_RE = /^#\s/; // a level-1 heading line
 const H2_RE = /^##\s/; // a level-2 subsection heading

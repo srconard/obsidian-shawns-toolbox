@@ -29,6 +29,7 @@ import {
 import { stepAnchorIso, formatDateLabel } from "./date-nav";
 import { EmbeddedMarkdownEditor, type LineOp } from "./embedded-editor";
 import type { PillarSource } from "./pillar-core";
+import { wirePillarScrub } from "./pillar-scrub";
 import type { ShawnsToolboxSettings } from "./settings";
 
 export interface CardsHost {
@@ -365,24 +366,27 @@ export class SectionCards extends Component {
 			return btn;
 		};
 		navBtn("Previous pillar", "chevron-left", () => this.cyclePillar(-1));
-		const select = row.createEl("select", { cls: "stx-pillar-select" });
+		// The pillar selector: a quick tap opens the list to pick from; a
+		// press-and-hold opens a scrub overlay you drag through (amplified) and
+		// release to select — one continuous gesture (see pillar-scrub.ts).
+		const select = row.createEl("button", {
+			cls: "stx-pillar-select",
+			attr: { "aria-label": "Select pillar (tap for list, hold to scrub)" },
+		});
 		if (!src || src.pillars.length === 0) {
-			select.createEl("option", { text: "No pillars" });
+			select.setText("No pillars");
 			select.disabled = true;
 		} else {
-			src.pillars.forEach((p, i) => {
-				const opt = select.createEl("option", {
-					text: p.display,
-					value: String(i),
-				});
-				if (i === src.currentIndex) opt.selected = true;
-			});
-			select.value = String(src.currentIndex);
-			select.addEventListener("change", () => {
-				void (async () => {
-					await src.setCurrentIndex(Number(select.value));
-					void this.rebuild();
-				})();
+			select.setText(src.pillars[src.currentIndex]?.display ?? "Pillars");
+			wirePillarScrub(select, {
+				getItems: () => src.pillars,
+				getCurrentIndex: () => src.currentIndex,
+				onSelect: (index) => {
+					void (async () => {
+						await src.setCurrentIndex(index);
+						void this.rebuild();
+					})();
+				},
 			});
 		}
 		navBtn("Next pillar", "chevron-right", () => this.cyclePillar(1));

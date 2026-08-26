@@ -309,10 +309,68 @@
 	min-width: 0;
 }
 
+/* The pillar selector button (v1.18.0): tap to open the list, hold to scrub.
+   touch-action:none keeps a vertical drag from scrolling the panel. */
 .stx-pillar-select {
 	flex: 1 1 auto;
 	min-width: 0;
 	font-size: var(--font-ui-small);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	touch-action: none;
+	cursor: pointer;
+}
+
+.stx-pillar-select.stx-pillar-pressed {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+/* Hold-and-drag scrub overlay + its tap-to-pick list. */
+.stx-pillar-scrub-backdrop {
+	position: fixed;
+	inset: 0;
+	z-index: var(--layer-menu, 100);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.stx-pillar-scrub {
+	max-height: 60vh;
+	width: min(280px, 82vw);
+	overflow-y: auto;
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	box-shadow: var(--shadow-s);
+	padding: 0.25em 0;
+	scrollbar-width: none;
+}
+
+.stx-pillar-scrub::-webkit-scrollbar {
+	display: none;
+}
+
+.stx-pillar-scrub.is-aborting {
+	opacity: 0.45;
+}
+
+.stx-pillar-scrub-item {
+	padding: 0.5em 0.9em;
+	font-size: var(--font-ui-small);
+	color: var(--text-normal);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	cursor: pointer;
+}
+
+.stx-pillar-scrub-item.is-active {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	font-weight: 600;
 }
 
 .stx-scope-btn {
