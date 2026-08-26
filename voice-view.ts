@@ -28,10 +28,20 @@ import {
 } from "./ai-bullets";
 import { createDateBar, wireLongPress, type DateBar } from "./date-bar";
 import type { CardsHost } from "./section-cards";
+import { THOUGHT_PERIODS, applyPeriodTags } from "./thread-core";
 
 export const VOICE_VIEW_TYPE = "shawns-toolbox-voice";
 
 const KINDS: CaptureKind[] = ["thought", "doToday", "otherTask", "log"];
+
+/** Periodic cadence a thought can be armed with while recording. */
+type Period = (typeof THOUGHT_PERIODS)[number];
+const PERIOD_LABELS: Record<Period, string> = {
+	weekly: "Weekly",
+	monthly: "Monthly",
+	quarterly: "Quarterly",
+	yearly: "Yearly",
+};
 
 /** The voice panel's buttons: the four capture kinds plus AI bullets. */
 type VoiceKind = CaptureKind | "aiThought";
@@ -69,6 +79,12 @@ export class VoiceView extends ItemView {
 	private lastLongPress = 0;
 	/** Kind the in-flight recording will finish as (mid-recording switching). */
 	private liveKind: VoiceKind | null = null;
+	/** Cadence tags armed for the thought currently being recorded. Toggled by
+	 *  the period buttons (before or mid-recording); applied to the thought line
+	 *  when a thought/aiThought recording lands, then cleared. */
+	private armedPeriods = new Set<Period>();
+	private periodBtns: Partial<Record<Period, HTMLButtonElement>> = {};
+	private periodRow: HTMLElement | null = null;
 
 	constructor(leaf: WorkspaceLeaf, private host: CardsHost) {
 		super(leaf);
@@ -151,6 +167,46 @@ export class VoiceView extends ItemView {
 			void this.toggle("aiThought");
 		});
 		this.buttons.aiThought = { btn: aiBtn, icon: aiIcon };
+
+		// Cadence row — arm a periodic tag (#thought/<period>) for the thought
+		// currently (or about to be) recorded. Tappable any time, including
+		// mid-recording; the armed set is stamped onto the thought line when a
+		// Thought / AI Thought recording lands, then cleared. While a recording
+		// is live the row shows the pulsing dashed cue (mirrors the v1.8.1
+		// Thought⇄AI switch affordance) — "tap to tag this recording".
+		const periodRow = root.createDiv("stx-voice-periods");
+		this.periodRow = periodRow;
+		for (const period of THOUGHT_PERIODS) {
+			const pbtn = periodRow.createEl("button", {
+				cls: "stx-voice-period",
+				text: PERIOD_LABELS[period],
+			});
+			pbtn.addEventListener("click", () => this.togglePeriod(period));
+			this.periodBtns[period] = pbtn;
+		}
+	}
+
+	/** Toggle a cadence tag armed for the recording; refresh its button state. */
+	private togglePeriod(period: Period): void {
+		if (this.armedPeriods.has(period)) this.armedPeriods.delete(period);
+		else this.armedPeriods.add(period);
+		this.periodBtns[period]?.toggleClass(
+			"is-armed",
+			this.armedPeriods.has(period)
+		);
+	}
+
+	/** Clear all armed cadence tags and their button highlights. */
+	private clearPeriods(): void {
+		this.armedPeriods.clear();
+		for (const period of THOUGHT_PERIODS) {
+			this.periodBtns[period]?.removeClass("is-armed");
+		}
+	}
+
+	/** Toggle the "recording live" pulsing cue on the cadence row. */
+	private setPeriodsLive(live: boolean): void {
+		this.periodRow?.toggleClass("is-live", live);
 	}
 
 	async onClose(): Promise<void> {
@@ -276,12 +332,18 @@ export class VoiceView extends ItemView {
 		ui.btn.addClass("is-recording");
 		setIcon(ui.icon, "square");
 		this.setSwitchAffordance(kind);
+		this.setPeriodsLive(true);
 		recorder.start();
 	}
 
 	private async finish(kind: VoiceKind, blob: Blob): Promise<void> {
+		this.setPeriodsLive(false);
 		const dateIso = this.targetDates[kind];
 		delete this.targetDates[kind];
+		// Cadence tags armed for this recording. Only thought/aiThought lines
+		// take #thought/<period> tags; a Do Today / Log capture leaves the arm
+		// intact (nothing consumed it).
+		const periods = [...this.armedPeriods];
 		if (blob.size === 0) {
 			new Notice("No audio captured");
 			return;
@@ -306,18 +368,24 @@ export class VoiceView extends ItemView {
 					? dateIso
 					: nowHm();
 			if (kind === "aiThought") {
-				await this.finishAiThought(text, dateIso, when);
+				await this.finishAiThought(text, dateIso, when, periods);
+				this.clearPeriods();
 				return;
 			}
+			// A plain Thought takes the armed cadence tags on its own line; other
+			// kinds (Do Today / Other Task / Log) don't carry #thought tags.
+			const capText =
+				kind === "thought" ? applyPeriodTags(text, periods) : text;
 			const target = await routeCapture(
 				this.app,
 				settings,
 				kind,
-				text,
+				capText,
 				dateIso
 			);
+			if (kind === "thought") this.clearPeriods();
 			// receipt carries the transcript so garbage is catchable
-			new Notice(`→ ${target} ${when}\n${text}`, 6000);
+			new Notice(`→ ${target} ${when}\n${capText}`, 6000);
 		} catch (e) {
 			new Notice(
 				"Voice capture failed: " +
@@ -425,7 +493,8 @@ export class VoiceView extends ItemView {
 	private async finishAiThought(
 		text: string,
 		dateIso: string | undefined,
-		when: string
+		when: string,
+		periods: Period[]
 	): Promise<void> {
 		const settings = this.host.getSettings();
 		const heading = settings.captureTargets.thought;
@@ -465,11 +534,12 @@ export class VoiceView extends ItemView {
 			}
 		}
 		if (block !== null) {
+			// Cadence tags ride on the summary line (block's first line).
 			const target = await routePreformatted(
 				this.app,
 				settings,
 				heading,
-				block,
+				applyPeriodTags(block, periods),
 				dateIso
 			);
 			new Notice(`→ ${target} ${when}\n${aiNote}`, 6000);
@@ -478,7 +548,7 @@ export class VoiceView extends ItemView {
 				this.app,
 				settings,
 				"thought",
-				text,
+				applyPeriodTags(text, periods),
 				dateIso
 			);
 			new Notice(

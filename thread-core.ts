@@ -488,6 +488,26 @@ export function appendTag(line: string, tag: string): string {
 }
 
 /**
+ * Append #thought/<period> cadence tags to the FIRST line of a capture block,
+ * in THOUGHT_PERIODS (horizon) order, each a no-op if already present. Used by
+ * the voice panel to stamp the cadence buttons armed while recording onto the
+ * thought's own bullet line as it lands. Multi-line blocks (an AI thought's
+ * summary + children) keep every continuation line untouched — the cadence tag
+ * belongs on the thought line, not on a child bullet.
+ */
+export function applyPeriodTags(
+	block: string,
+	periods: readonly string[]
+): string {
+	const ordered = THOUGHT_PERIODS.filter((p) => periods.includes(p));
+	if (ordered.length === 0) return block;
+	const [head, ...rest] = block.split("\n");
+	let tagged = head;
+	for (const p of ordered) tagged = appendTag(tagged, `#thought/${p}`);
+	return [tagged, ...rest].join("\n");
+}
+
+/**
  * Normalize free-typed text into a #thread/<name> tag name, matching the
  * convention names already use ([A-Za-z0-9_/-]): lowercased, whitespace folded
  * to dashes, characters outside the alphabet dropped, runs of dashes collapsed,

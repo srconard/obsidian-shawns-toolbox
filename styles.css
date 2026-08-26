@@ -751,6 +751,49 @@ body.is-mobile .mobile-toolbar:not(:has(.mobile-toolbar-option)) {
 	50% { outline-color: transparent; }
 }
 
+/* Cadence-tag row (v1.25.0): arm a #thought/<period> for the thought being
+   recorded. Sits under the voice buttons; tappable any time. While a recording
+   is live the row pulses a dashed accent outline (same cue language as the
+   Thought⇄AI switch) — "tap to tag this recording". */
+.stx-voice-periods {
+	flex: 0 0 auto;
+	display: flex;
+	gap: 0.4em;
+	padding: 0 0.8em 0.8em;
+	border-radius: var(--radius-m);
+}
+
+.stx-voice-period {
+	flex: 1 1 0;
+	min-height: 2.4em;
+	font-size: var(--font-ui-smaller);
+	border-radius: var(--radius-m);
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	color: var(--text-muted);
+	cursor: pointer;
+	user-select: none;
+	-webkit-user-select: none;
+	touch-action: manipulation;
+}
+
+.stx-voice-period:hover {
+	background: var(--background-modifier-hover);
+}
+
+.stx-voice-period.is-armed {
+	background: var(--interactive-accent);
+	border-color: var(--interactive-accent);
+	color: var(--text-on-accent);
+	font-weight: 600;
+}
+
+.stx-voice-periods.is-live .stx-voice-period {
+	outline: 2px dashed var(--interactive-accent);
+	outline-offset: 2px;
+	animation: stx-switch-pulse 1.2s ease-in-out infinite;
+}
+
 /* ---- Threads panel (v1.10.0) ---- */
 
 .stx-threads {

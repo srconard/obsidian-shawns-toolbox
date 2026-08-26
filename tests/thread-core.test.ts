@@ -15,6 +15,7 @@ import {
 	formatReplyLine,
 	hasTag,
 	appendTag,
+	applyPeriodTags,
 	extractPeriods,
 	parsePeriodicPosts,
 	periodicPosts,
@@ -309,6 +310,40 @@ describe("appendTag", () => {
 	it("preserves a CR-terminated no-op line verbatim", () => {
 		const line = "- 09:00 a thought #thought/weekly\r";
 		expect(appendTag(line, "#thought/weekly")).toBe(line);
+	});
+});
+
+describe("applyPeriodTags", () => {
+	it("returns the block unchanged when no periods are armed", () => {
+		const line = "- 09:00 a thought";
+		expect(applyPeriodTags(line, [])).toBe(line);
+	});
+	it("appends one cadence tag to a plain thought line", () => {
+		expect(applyPeriodTags("- 09:00 a thought", ["weekly"])).toBe(
+			"- 09:00 a thought #thought/weekly"
+		);
+	});
+	it("appends multiple tags in THOUGHT_PERIODS (horizon) order, not arm order", () => {
+		expect(
+			applyPeriodTags("- 09:00 a thought", ["yearly", "weekly", "monthly"])
+		).toBe("- 09:00 a thought #thought/weekly #thought/monthly #thought/yearly");
+	});
+	it("is a no-op for a cadence already present but still adds the others", () => {
+		expect(
+			applyPeriodTags("- 09:00 a thought #thought/weekly", ["weekly", "quarterly"])
+		).toBe("- 09:00 a thought #thought/weekly #thought/quarterly");
+	});
+	it("tags only the first line of a multi-line block, children untouched", () => {
+		const block = "- 09:00 **summary**\n\t- a bullet\n\t- raw: the ramble";
+		expect(applyPeriodTags(block, ["monthly"])).toBe(
+			"- 09:00 **summary** #thought/monthly\n\t- a bullet\n\t- raw: the ramble"
+		);
+	});
+	it("ignores unknown period strings", () => {
+		const line = "- 09:00 a thought";
+		expect(applyPeriodTags(line, ["daily", "weekly"])).toBe(
+			"- 09:00 a thought #thought/weekly"
+		);
 	});
 });
 
