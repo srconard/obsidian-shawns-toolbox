@@ -18,11 +18,13 @@ import {
 	THOUGHT_PERIODS,
 	type ThreadPost,
 	type PeriodicPost,
+	type ThoughtPost,
 } from "./thread-core";
 
-/** A post the add-tag menu can act on — either a thread post or a periodic one;
- *  both carry the fields the service needs to locate and edit the source line. */
-type TaggablePost = ThreadPost | PeriodicPost;
+/** A post the add-tag menu can act on — a thread post, a periodic-thought post,
+ *  or a today's-thought post; all carry the fields the service needs to locate
+ *  and edit the source line. */
+type TaggablePost = ThreadPost | PeriodicPost | ThoughtPost;
 type PeriodTagFilter = "all" | "tagged" | "untagged";
 
 export const THREADS_VIEW_TYPE = "shawns-toolbox-threads";
@@ -34,18 +36,23 @@ export class ThreadsView extends ItemView {
 	private service: ThreadService;
 	private posts: ThreadPost[] = [];
 	private periodic: PeriodicPost[] = [];
+	private today: ThoughtPost[] = [];
 	private activeThread: string | null = null;
 	private activePeriod: string | null = null;
+	// "Today's thoughts" view (every top-level thought in today's note).
+	private activeToday = false;
 	private threadPeriodFilter = new Set<string>();
 	// Periodic-thoughts view: show all posts, only those already carrying a
 	// #thread/ tag, or only untagged ones (Shawn's "not yet processed" set).
 	private periodTagFilter: PeriodTagFilter = "all";
+	// Same tagged/untagged filter for the "Today's thoughts" processing pass.
+	private todayTagFilter: PeriodTagFilter = "all";
 	private replyOpenFor: string | null = null;
 	private refreshTimer: number | null = null;
 	// Which surface the DOM currently shows, so render() can save the list's
 	// scroll offset before drilling into a thread/period and restore it on the
 	// way back (session-scoped; contentEl is the scroll container).
-	private renderedMode: "list" | "thread" | "period" | null = null;
+	private renderedMode: "list" | "thread" | "period" | "today" | null = null;
 	private listScroll = 0;
 
 	constructor(leaf: WorkspaceLeaf, private host: CardsHost) {
@@ -111,6 +118,7 @@ export class ThreadsView extends ItemView {
 		const { posts, periodic } = await this.service.scanAll();
 		this.posts = posts;
 		this.periodic = periodic;
+		this.today = await this.service.todayThoughtPosts();
 		this.render();
 	}
 
@@ -122,7 +130,10 @@ export class ThreadsView extends ItemView {
 			this.listScroll = this.contentEl.scrollTop;
 		}
 		this.contentEl.empty();
-		if (this.activePeriod !== null) {
+		if (this.activeToday) {
+			this.renderedMode = "today";
+			this.renderToday();
+		} else if (this.activePeriod !== null) {
 			this.renderedMode = "period";
 			this.renderPeriod(this.activePeriod);
 		} else if (this.activeThread !== null) {
@@ -145,6 +156,24 @@ export class ThreadsView extends ItemView {
 	// ---- thread list ----
 
 	private renderList(): void {
+		// Top of the main page: jump into today's thoughts (the capture→process
+		// bridge). Shown regardless of whether any threads exist yet.
+		const untagged = this.today.filter((p) => p.thread === null).length;
+		const todayBtn = this.contentEl.createEl("button", {
+			cls: "stx-today-btn",
+			text:
+				untagged > 0
+					? `Today's thoughts · ${untagged} untagged`
+					: "Today's thoughts",
+		});
+		todayBtn.addEventListener("click", () => {
+			this.activeToday = true;
+			this.activeThread = null;
+			this.activePeriod = null;
+			this.todayTagFilter = "all";
+			this.render();
+		});
+
 		const head = this.contentEl.createDiv({ cls: "stx-threads-head" });
 		head.createSpan({ cls: "stx-threads-title", text: "Threads" });
 		this.iconButton(head, "refresh-cw", "Rescan", () => void this.refresh());
@@ -233,6 +262,82 @@ export class ThreadsView extends ItemView {
 		});
 		row.addEventListener("click", onClick);
 		return row;
+	}
+
+	// ---- today's thoughts ----
+
+	private renderToday(): void {
+		const head = this.contentEl.createDiv({ cls: "stx-threads-head" });
+		this.iconButton(head, "arrow-left", "Back", () => {
+			this.activeToday = false;
+			this.render();
+		});
+		head.createSpan({ cls: "stx-threads-title", text: "Today's thoughts" });
+
+		// Same All / Tagged / Untagged filter as the periodic views, so this view
+		// doubles as a processing pass (Untagged = no #thread/ tag yet).
+		const all = this.today;
+		const filterBar = this.contentEl.createDiv({ cls: "stx-period-filter" });
+		const opts: Array<[PeriodTagFilter, string]> = [
+			["all", "All"],
+			["tagged", "Tagged"],
+			["untagged", "Untagged"],
+		];
+		for (const [key, label] of opts) {
+			const chip = filterBar.createEl("button", {
+				cls: "stx-period-chip",
+				text: label,
+			});
+			if (this.todayTagFilter === key) chip.addClass("is-active");
+			chip.addEventListener("click", () => {
+				this.todayTagFilter = key;
+				this.render();
+			});
+		}
+		const posts =
+			this.todayTagFilter === "tagged"
+				? all.filter((p) => p.thread !== null)
+				: this.todayTagFilter === "untagged"
+				  ? all.filter((p) => p.thread === null)
+				  : all;
+
+		if (posts.length === 0) {
+			this.contentEl.createDiv({
+				cls: "stx-threads-empty",
+				text:
+					all.length === 0
+						? "No thoughts in today's note yet."
+						: "No thoughts match this filter.",
+			});
+			return;
+		}
+
+		const listEl = this.contentEl.createDiv({ cls: "stx-thread-posts" });
+		for (const post of posts) {
+			const card = listEl.createDiv({ cls: "stx-post" });
+			this.wireTagMenu(card, post);
+			const dateLine = card.createDiv({ cls: "stx-post-date" });
+			dateLine.setText(this.sourceLabel(post));
+			dateLine.addEventListener("click", async () => {
+				try {
+					await this.service.openPost(post);
+				} catch (err) {
+					new Notice(err instanceof Error ? err.message : String(err));
+				}
+			});
+			card.createDiv({ cls: "stx-post-text", text: post.text });
+			if (post.thread) {
+				const threadName = post.thread;
+				const t = card.createDiv({ cls: "stx-post-thread" });
+				t.setText(`#thread/${threadName}`);
+				t.addEventListener("click", () => {
+					this.activeToday = false;
+					this.activeThread = threadName;
+					this.threadPeriodFilter.clear();
+					this.render();
+				});
+			}
+		}
 	}
 
 	// ---- periodic-thoughts detail ----

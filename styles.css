@@ -706,6 +706,26 @@ body.is-mobile .mobile-toolbar:not(:has(.mobile-toolbar-option)) {
 	font-size: var(--font-ui-small);
 }
 
+/* "Today's thoughts" button at the top of the threads list (v1.19.0) */
+.stx-today-btn {
+	display: block;
+	width: 100%;
+	text-align: left;
+	padding: 0.6em 0.7em;
+	margin-bottom: 0.5em;
+	background: var(--background-modifier-hover);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	color: var(--text-normal);
+	font-weight: 600;
+	font-size: var(--font-ui-medium);
+	cursor: pointer;
+}
+.stx-today-btn:hover {
+	border-color: var(--interactive-accent);
+	color: var(--text-normal);
+}
+
 .stx-threads-head {
 	display: flex;
 	align-items: center;

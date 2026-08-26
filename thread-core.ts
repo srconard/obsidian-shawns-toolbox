@@ -4,6 +4,7 @@
 // A "post" is any line in a daily note carrying a #thread/<name> tag. Daily
 // notes stay the single source of truth — this module only reads their text
 // and computes the thread/reply structure the panel renders.
+import { findSection, splitLines } from "./section-core";
 
 /** A single tagged line, resolved into structured form. */
 export interface ThreadPost {
@@ -46,6 +47,29 @@ export interface PeriodicPost {
 	periods: string[];
 	/** The #thread name if the line is also a thread post, else null. */
 	thread: string | null;
+	note: string;
+	/** Full vault path to the source note (with .md). */
+	path: string;
+	dateIso: string;
+	line: number;
+	time: string | null;
+	text: string;
+	blockId: string | null;
+	raw: string;
+}
+
+/**
+ * A top-level thought line from a daily note's # Thoughts section — tagged or
+ * not. The "Today's thoughts" view lists every one of these so Shawn can read
+ * the day's thoughts and tag them into threads. Structurally a superset of
+ * PeriodicPost (carries the fields the service needs to locate + edit the
+ * source line), plus a nullable `thread` so the tagged/untagged filter works.
+ */
+export interface ThoughtPost {
+	/** The #thread name if the line already carries one, else null. */
+	thread: string | null;
+	/** The cadence tags on this line (subset of THOUGHT_PERIODS, horizon order). */
+	periods: string[];
 	note: string;
 	/** Full vault path to the source note (with .md). */
 	path: string;
@@ -376,6 +400,53 @@ export function summarizePeriods(posts: PeriodicPost[]): PeriodSummary[] {
 			postCount: list.length,
 			lastActiveDate: last.dateIso,
 			lastActiveTime: last.time,
+		});
+	}
+	return out;
+}
+
+// ---- today's thoughts (every top-level bullet under # Thoughts) ----
+
+// A top-level list bullet: "- ", "* ", or "+ " at column 0. Child/continuation
+// lines are indented (leading whitespace), so they belong to their parent
+// thought rather than being separate thoughts.
+const TOP_BULLET_RE = /^[-*+]\s+/;
+
+/**
+ * Parse every top-level thought line under a daily note's # Thoughts section
+ * (heading given by `headingSpec`, default "# Thoughts") — tagged or not. Each
+ * top-level bullet is one thought; indented children and blank/placeholder
+ * ("- ") bullets are skipped. Returns [] if the note has no such section. Line
+ * numbers are file-absolute so the add-tag menu can edit the right line.
+ */
+export function parseThoughtPosts(
+	note: string,
+	dateIso: string,
+	content: string,
+	headingSpec: string = "# Thoughts",
+	path: string = note
+): ThoughtPost[] {
+	const sec = findSection(content, headingSpec);
+	if (!sec) return [];
+	const lines = splitLines(content);
+	const out: ThoughtPost[] = [];
+	for (let i = sec.start; i < sec.end; i++) {
+		const clean = stripCr(lines[i] ?? "");
+		if (!TOP_BULLET_RE.test(clean)) continue;
+		if (clean.replace(TOP_BULLET_RE, "").trim() === "") continue;
+		const tag = THREAD_TAG_RE.exec(clean);
+		const timeM = LEADING_TIME_RE.exec(clean);
+		out.push({
+			thread: tag ? tag[1] : null,
+			periods: extractPeriods(clean),
+			note,
+			path,
+			dateIso,
+			line: i,
+			time: timeM ? normalizeTime(timeM[1]) : null,
+			text: postDisplayText(clean),
+			blockId: extractBlockId(clean),
+			raw: clean,
 		});
 	}
 	return out;

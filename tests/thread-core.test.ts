@@ -20,6 +20,7 @@ import {
 	periodicPosts,
 	summarizePeriods,
 	normalizeThreadName,
+	parseThoughtPosts,
 	THOUGHT_PERIODS,
 } from "../thread-core";
 
@@ -410,5 +411,71 @@ describe("normalizeThreadName", () => {
 	});
 	it("returns empty string when nothing usable remains", () => {
 		expect(normalizeThreadName("   !!!   ")).toBe("");
+	});
+});
+
+const TNOTE = [
+	"---",
+	"DateCreated: 2026-08-25",
+	"---",
+	"# Thoughts",
+	"- 06:48 morning walk thought",
+	"- eco",
+	"\t- 07:26 child idea under eco",
+	"- 12:26 a guiding question #question/guiding",
+	"- 19:41 camping idea #thread/nature-spots ↩ [[2026-04-14#^tg819vn]]",
+	"- 21:21 people memory #thought/quarterly #thread/people-memory ^tp1",
+	"- ",
+	"",
+	"# Night Session Direction",
+	"- not a thought",
+].join("\n");
+
+describe("parseThoughtPosts", () => {
+	const posts = parseThoughtPosts("2026-08-25", "2026-08-25", TNOTE);
+
+	it("returns every top-level bullet under # Thoughts (skips children/placeholders/other sections)", () => {
+		expect(posts.map((p) => p.line)).toEqual([4, 5, 7, 8, 9]);
+	});
+	it("includes untagged thoughts, with thread null", () => {
+		const eco = posts.find((p) => p.line === 5)!;
+		expect(eco.thread).toBeNull();
+		expect(eco.text).toBe("eco");
+		expect(eco.time).toBeNull();
+	});
+	it("keeps non-thread/thought tags in the display text", () => {
+		expect(posts.find((p) => p.line === 7)!.text).toContain("#question/guiding");
+	});
+	it("records the #thread name and strips the tag + reply link from text", () => {
+		const camp = posts.find((p) => p.line === 8)!;
+		expect(camp.thread).toBe("nature-spots");
+		expect(camp.text).toBe("camping idea");
+	});
+	it("carries periods, block id, and time", () => {
+		const ppl = posts.find((p) => p.line === 9)!;
+		expect(ppl.thread).toBe("people-memory");
+		expect(ppl.periods).toEqual(["quarterly"]);
+		expect(ppl.blockId).toBe("tp1");
+		expect(ppl.time).toBe("21:21");
+		expect(ppl.text).toBe("people memory");
+	});
+	it("threads the source path through for edits", () => {
+		const posts2 = parseThoughtPosts(
+			"2026-08-25",
+			"2026-08-25",
+			TNOTE,
+			"# Thoughts",
+			"00. Timeline/2026-08-25.md"
+		);
+		expect(posts2[0].path).toBe("00. Timeline/2026-08-25.md");
+	});
+	it("returns [] when the note has no Thoughts section", () => {
+		expect(parseThoughtPosts("x", "2026-08-25", "# Other\n- a bullet")).toEqual([]);
+	});
+	it("honours a custom heading spec", () => {
+		const custom = "## Ideas\n- 08:00 one idea\n";
+		expect(parseThoughtPosts("x", "2026-08-25", custom, "## Ideas").map((p) => p.text)).toEqual([
+			"one idea",
+		]);
 	});
 });

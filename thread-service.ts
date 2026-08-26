@@ -14,12 +14,14 @@ import { appendToSection } from "./section-core";
 import {
 	parseNotePosts,
 	parsePeriodicPosts,
+	parseThoughtPosts,
 	ensureBlockId,
 	generateBlockId,
 	formatReplyLine,
 	appendTag,
 	type ThreadPost,
 	type PeriodicPost,
+	type ThoughtPost,
 } from "./thread-core";
 
 const DAILY_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -124,6 +126,28 @@ export class ThreadService {
 			periodic.push(...pp);
 		}
 		return { posts, periodic };
+	}
+
+	/**
+	 * Every top-level thought line under today's daily note's # Thoughts section
+	 * (tagged or not), for the "Today's thoughts" view — Shawn's capture→process
+	 * bridge (record a thought, open this, tag it into a thread). Returns [] when
+	 * today's note doesn't exist yet. Read fresh each call (a single note, cheap;
+	 * the vault modify events already drive a refresh so the list stays live).
+	 */
+	async todayThoughtPosts(): Promise<ThoughtPost[]> {
+		const settings = this.getSettings();
+		const path = periodicNotePath(settings, "day", logicalTodayIso(settings));
+		const f = this.app.vault.getAbstractFileByPath(path);
+		if (!(f instanceof TFile)) return [];
+		const content = await this.app.vault.cachedRead(f);
+		return parseThoughtPosts(
+			f.basename,
+			this.noteDate(f),
+			content,
+			settings.captureTargets.thought,
+			f.path
+		);
 	}
 
 	/**
