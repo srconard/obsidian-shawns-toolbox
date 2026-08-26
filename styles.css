@@ -120,6 +120,11 @@
 	flex-direction: column;
 	height: 100%;
 	padding: 0;
+	/* On a wide pane (DeX / desktop split) keep the typing column near the
+	   centre instead of flush at the far left; narrow panes fill the width. */
+	width: 100%;
+	max-width: 760px;
+	margin-inline: auto;
 }
 
 /* The blank screen: an invisible full-bleed textarea. */
@@ -146,6 +151,35 @@
 	outline: none;
 	box-shadow: none;
 	border: none;
+}
+
+/* The "just captured" thought strip: long-press a card to tag the thought
+   with the same menu the Threads panel uses. */
+.stx-capture-recent {
+	flex: 0 0 auto;
+	display: flex;
+	flex-direction: column;
+	gap: 0.35em;
+}
+
+.stx-capture-recent-card {
+	padding: 0.45em 0.6em;
+	border-radius: 6px;
+	background: var(--background-secondary);
+	color: var(--text-muted);
+	font-size: 0.9em;
+	line-height: 1.35;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	cursor: default;
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+.stx-capture-recent-card.stx-post-pressed {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
 }
 
 .stx-capture-buttons {

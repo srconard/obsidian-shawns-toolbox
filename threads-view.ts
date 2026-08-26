@@ -2,7 +2,7 @@
 // note outside the excluded folders (via ThreadService) and renders a list → flat
 // chronological thread view (4chan-style) with reply indicators and a reply
 // action. Primary reading surface is the phone.
-import { App, ItemView, Menu, Modal, Notice, WorkspaceLeaf, TAbstractFile, setIcon } from "obsidian";
+import { ItemView, Menu, Notice, WorkspaceLeaf, TAbstractFile, setIcon } from "obsidian";
 import type { CardsHost } from "./section-cards";
 import { ThreadService } from "./thread-service";
 import {
@@ -14,7 +14,6 @@ import {
 	targetKey,
 	periodicPosts,
 	summarizePeriods,
-	normalizeThreadName,
 	THOUGHT_PERIODS,
 	type ThreadPost,
 	type PeriodicPost,
@@ -27,6 +26,7 @@ import {
 	type AreaGroup,
 	type ThreadArea,
 } from "./thread-areas";
+import { wireLongPressMenu, showTagMenu as showTagMenuAt } from "./tag-menu";
 
 /** A post the add-tag menu can act on — a thread post, a periodic-thought post,
  *  or a today's-thought post; all carry the fields the service needs to locate
@@ -297,7 +297,7 @@ export class ThreadsView extends ItemView {
 				},
 				pinnedSet.has(s.name)
 			);
-			this.wireLongPressMenu(row, (x, y, onHide) =>
+			wireLongPressMenu(row, (x, y, onHide) =>
 				this.showThreadMenu(s.name, x, y, onHide)
 			);
 		}
@@ -653,7 +653,7 @@ export class ThreadsView extends ItemView {
 	// ---- add-a-tag menu (long-press on touch, right-click on desktop) ----
 
 	private wireTagMenu(card: HTMLElement, post: TaggablePost): void {
-		this.wireLongPressMenu(card, (x, y, onHide) =>
+		wireLongPressMenu(card, (x, y, onHide) =>
 			this.showTagMenu(post, x, y, onHide)
 		);
 	}
@@ -678,137 +678,27 @@ export class ThreadsView extends ItemView {
 		});
 	}
 
-	/**
-	 * Attach a long-press (touch) / right-click (desktop) context menu to an
-	 * element. While the press is registered or the menu is open the element is
-	 * tinted (stx-post-pressed) as feedback; menuOpen keeps the tint through the
-	 * pointerup that follows a successful long-press, and the menu's onHide (via
-	 * the callback passed to buildMenu) clears it. buildMenu builds and shows the
-	 * menu at (x, y), calling onHide when it closes.
-	 */
-	private wireLongPressMenu(
-		el: HTMLElement,
-		buildMenu: (x: number, y: number, onHide: () => void) => void
-	): void {
-		let timer: number | null = null;
-		let menuOpen = false;
-		let sx = 0;
-		let sy = 0;
-		const clearTint = () => {
-			if (!menuOpen) el.removeClass("stx-post-pressed");
-		};
-		const cancel = () => {
-			if (timer !== null) {
-				window.clearTimeout(timer);
-				timer = null;
-			}
-			clearTint();
-		};
-		const open = (x: number, y: number) => {
-			menuOpen = true;
-			el.addClass("stx-post-pressed");
-			buildMenu(x, y, () => {
-				menuOpen = false;
-				el.removeClass("stx-post-pressed");
-			});
-		};
-		el.addEventListener("contextmenu", (e) => {
-			e.preventDefault();
-			cancel();
-			open(e.clientX, e.clientY);
-		});
-		// Touch long-press — desktop right-click is handled above, so a mouse
-		// press is ignored here to avoid a double affordance.
-		el.addEventListener("pointerdown", (e) => {
-			if (e.pointerType === "mouse") return;
-			sx = e.clientX;
-			sy = e.clientY;
-			if (timer !== null) window.clearTimeout(timer);
-			el.addClass("stx-post-pressed");
-			timer = window.setTimeout(() => {
-				timer = null;
-				open(sx, sy);
-			}, 450);
-		});
-		el.addEventListener("pointermove", (e) => {
-			if (
-				timer !== null &&
-				(Math.abs(e.clientX - sx) > 10 || Math.abs(e.clientY - sy) > 10)
-			)
-				cancel();
-		});
-		el.addEventListener("pointerup", cancel);
-		el.addEventListener("pointerleave", cancel);
-		el.addEventListener("pointercancel", cancel);
-	}
-
 	private showTagMenu(
 		post: TaggablePost,
 		x: number,
 		y: number,
 		onHide?: () => void
 	): void {
-		const menu = new Menu();
-		// Periodic cadence tags first (Shawn's ordering), then the thread picker.
-		for (const period of THOUGHT_PERIODS) {
-			const tag = `#thought/${period}`;
-			menu.addItem((i) =>
-				i
-					.setTitle(tag)
-					.setIcon("hash")
-					.onClick(() => void this.applyTag(post, tag))
-			);
-		}
-		menu.addSeparator();
-		menu.addItem((i) =>
-			i
-				.setTitle("New thread…")
-				.setIcon("plus")
-				.onClick(() => this.promptNewThread(post))
-		);
-		// Show the existing threads grouped by area (matching the list), with a
-		// disabled label per area as a header. Until areas are organised the
-		// grouping is flat (one Unsorted group) and the headers are suppressed.
+		// Show the existing threads grouped by area (matching the list). Until
+		// areas are organised the grouping is flat (one Unsorted group).
 		const groups = groupThreadsByArea(
 			summarizeThreads(this.posts),
 			this.areas,
 			this.pinnedThreads()
 		);
-		const flat = isFlatGrouping(groups);
-		for (const g of groups) {
-			if (!flat) {
-				menu.addSeparator();
-				menu.addItem((i) => i.setTitle(g.area).setIsLabel(true));
-			}
-			for (const t of g.threads) {
-				const tag = `#thread/${t.name}`;
-				menu.addItem((i) =>
-					i
-						.setTitle(tag)
-						.setIcon("messages-square")
-						.onClick(() => void this.applyTag(post, tag))
-				);
-			}
-		}
-		if (onHide) menu.onHide(onHide);
-		menu.showAtPosition({ x, y });
-	}
-
-	/**
-	 * Prompt for a new thread name, normalize it to the tag convention, and
-	 * append #thread/<name> to the post's source line. Empty input is a no-op;
-	 * a name that matches an existing thread just reuses it (applyTag no-ops if
-	 * the exact tag is already present).
-	 */
-	private promptNewThread(post: TaggablePost): void {
-		new NewThreadModal(this.app, (raw) => {
-			const name = normalizeThreadName(raw);
-			if (!name) {
-				new Notice("Enter a thread name");
-				return;
-			}
-			void this.applyTag(post, `#thread/${name}`);
-		}).open();
+		showTagMenuAt({
+			app: this.app,
+			groups,
+			x,
+			y,
+			onApplyTag: (tag) => void this.applyTag(post, tag),
+			onHide,
+		});
 	}
 
 	private async applyTag(post: TaggablePost, tag: string): Promise<void> {
@@ -921,43 +811,4 @@ export class ThreadsView extends ItemView {
 
 function cap(s: string): string {
 	return s.length ? s[0].toUpperCase() + s.slice(1) : s;
-}
-
-/** A minimal single-field prompt for naming a new thread. Enter or Create
- *  submits the raw text (the caller normalizes it); Escape/Cancel closes. */
-class NewThreadModal extends Modal {
-	constructor(app: App, private onSubmit: (raw: string) => void) {
-		super(app);
-	}
-
-	onOpen(): void {
-		const { contentEl } = this;
-		contentEl.addClass("stx-new-thread");
-		contentEl.createEl("h3", { text: "New thread" });
-		const input = contentEl.createEl("input", {
-			cls: "stx-new-thread-input",
-			attr: { type: "text", placeholder: "thread name" },
-		});
-		input.addEventListener("keydown", (e) => {
-			if (e.key === "Enter") {
-				e.preventDefault();
-				this.submit(input.value);
-			}
-		});
-		const row = contentEl.createDiv({ cls: "stx-thread-reply-row" });
-		const create = row.createEl("button", { cls: "mod-cta", text: "Create" });
-		create.addEventListener("click", () => this.submit(input.value));
-		const cancel = row.createEl("button", { text: "Cancel" });
-		cancel.addEventListener("click", () => this.close());
-		window.setTimeout(() => input.focus(), 0);
-	}
-
-	private submit(raw: string): void {
-		this.close();
-		this.onSubmit(raw);
-	}
-
-	onClose(): void {
-		this.contentEl.empty();
-	}
 }

@@ -14,8 +14,17 @@ import {
 import { shiftDateIso } from "./template-renderer";
 import { createDateBar, wireLongPress, type DateBar } from "./date-bar";
 import type { CardsHost } from "./section-cards";
+import { ThreadService } from "./thread-service";
+import { summarizeThreads } from "./thread-core";
+import { groupThreadsByArea } from "./thread-areas";
+import { wireLongPressMenu, showTagMenu, type TagTarget } from "./tag-menu";
 
 export const CAPTURE_VIEW_TYPE = "shawns-toolbox-capture";
+
+/** How many just-captured thoughts stay long-pressable in the recent strip. */
+const RECENT_LIMIT = 8;
+
+const normSpace = (s: string): string => s.replace(/\s+/g, " ").trim();
 
 export class CaptureView extends ItemView {
 	private inputEl: HTMLTextAreaElement | null = null;
@@ -23,6 +32,12 @@ export class CaptureView extends ItemView {
 	private dateBar: DateBar | null = null;
 	private dateBarKind: CaptureKind | null = null;
 	private lastLongPress = 0;
+	/** Threads scan / tag-append plumbing, shared with the Threads panel so the
+	 *  add-tag menu here is the very same component. */
+	private service: ThreadService;
+	/** The "just captured" thought strip below the buttons — long-press a card to
+	 *  tag the thought (same menu as the Threads panel) without leaving capture. */
+	private recentEl: HTMLElement | null = null;
 
 	constructor(leaf: WorkspaceLeaf, private host: CardsHost) {
 		super(leaf);
@@ -35,6 +50,7 @@ export class CaptureView extends ItemView {
 			void this.submit("thought");
 			return false;
 		});
+		this.service = new ThreadService(host.app, host.getSettings);
 	}
 
 	getViewType(): string {
@@ -104,6 +120,8 @@ export class CaptureView extends ItemView {
 			}
 		}
 
+		this.recentEl = root.createDiv("stx-capture-recent");
+
 		// Backup DOM path for Mod+Enter (the scope handler above is primary;
 		// defaultPrevented guards against double-submit when both fire).
 		input.addEventListener("keydown", (e) => {
@@ -137,6 +155,10 @@ export class CaptureView extends ItemView {
 			// Only clear after the write succeeded — never lose input.
 			this.inputEl.value = "";
 			this.inputEl.focus();
+			// A just-captured thought becomes a long-pressable card so it can be
+			// tagged in the moment (same menu as the Threads panel). Tasks/logs
+			// aren't thoughts, so they don't join the strip.
+			if (kind === "thought") this.addRecentThought(text);
 			const when =
 				dateIso && dateIso !== logicalTodayIso(this.host.getSettings())
 					? dateIso
@@ -149,6 +171,81 @@ export class CaptureView extends ItemView {
 			);
 		} finally {
 			this.submitting = false;
+		}
+	}
+
+	/**
+	 * Add a just-captured thought to the recent strip as a long-pressable card
+	 * (newest on top, capped at RECENT_LIMIT). The card holds only the thought's
+	 * head line; the live post is re-resolved from today's note when the tag menu
+	 * opens, so a shifted line number never leaves a stale target behind.
+	 */
+	private addRecentThought(text: string): void {
+		if (!this.recentEl) return;
+		const head = normSpace(text.split("\n")[0]);
+		if (!head) return;
+		const card = this.recentEl.createDiv("stx-capture-recent-card");
+		card.setText(head);
+		this.recentEl.prepend(card);
+		while (this.recentEl.childElementCount > RECENT_LIMIT) {
+			this.recentEl.lastElementChild?.remove();
+		}
+		wireLongPressMenu(card, (x, y, onHide) =>
+			void this.openThoughtTagMenu(head, x, y, onHide)
+		);
+	}
+
+	/** Resolve the card's thought to a live post, then show the shared tag menu. */
+	private async openThoughtTagMenu(
+		head: string,
+		x: number,
+		y: number,
+		onHide: () => void
+	): Promise<void> {
+		const target = await this.resolveThoughtTarget(head);
+		if (!target) {
+			new Notice("Couldn't find that thought to tag");
+			onHide();
+			return;
+		}
+		const groups = await this.threadGroups();
+		showTagMenu({
+			app: this.app,
+			groups,
+			x,
+			y,
+			onApplyTag: (tag) => void this.applyTag(target, tag),
+			onHide,
+		});
+	}
+
+	/** Find today's thought whose display text matches the card's head (last wins). */
+	private async resolveThoughtTarget(head: string): Promise<TagTarget | null> {
+		const posts = await this.service.todayThoughtPosts();
+		const want = normSpace(head);
+		for (let i = posts.length - 1; i >= 0; i--) {
+			if (normSpace(posts[i].text) === want) {
+				const p = posts[i];
+				return { path: p.path, note: p.note, line: p.line, raw: p.raw };
+			}
+		}
+		return null;
+	}
+
+	/** The existing threads grouped by area — same grouping the Threads panel uses. */
+	private async threadGroups() {
+		const { posts } = await this.service.scanAll();
+		const areas = await this.service.loadThreadAreas();
+		const pinned = this.host.getSettings().pinnedThreads ?? [];
+		return groupThreadsByArea(summarizeThreads(posts), areas, pinned);
+	}
+
+	private async applyTag(target: TagTarget, tag: string): Promise<void> {
+		try {
+			const changed = await this.service.appendTagToPost(target, tag);
+			new Notice(changed ? `Added ${tag}` : `${tag} already on that post`);
+		} catch (err) {
+			new Notice(err instanceof Error ? err.message : String(err));
 		}
 	}
 }
