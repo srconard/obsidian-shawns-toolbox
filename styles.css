@@ -907,6 +907,13 @@ body.is-mobile .mobile-toolbar:not(:has(.mobile-toolbar-option)) {
 	background: var(--background-primary);
 }
 
+.stx-post-tappable {
+	cursor: pointer;
+}
+.stx-post-tappable:hover {
+	border-color: var(--background-modifier-border-hover);
+}
+
 .stx-post-replyto {
 	color: var(--text-accent);
 	font-size: var(--font-ui-smaller);

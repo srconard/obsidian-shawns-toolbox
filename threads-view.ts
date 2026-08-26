@@ -394,10 +394,11 @@ export class ThreadsView extends ItemView {
 		const listEl = this.contentEl.createDiv({ cls: "stx-thread-posts" });
 		for (const post of posts) {
 			const card = listEl.createDiv({ cls: "stx-post" });
-			this.wireTagMenu(card, post);
+			this.wireTagTap(card, post);
 			const dateLine = card.createDiv({ cls: "stx-post-date" });
 			dateLine.setText(this.sourceLabel(post));
-			dateLine.addEventListener("click", async () => {
+			dateLine.addEventListener("click", async (e) => {
+				e.stopPropagation();
 				try {
 					await this.service.openPost(post);
 				} catch (err) {
@@ -409,7 +410,8 @@ export class ThreadsView extends ItemView {
 				const threadName = post.thread;
 				const t = card.createDiv({ cls: "stx-post-thread" });
 				t.setText(`#thread/${threadName}`);
-				t.addEventListener("click", () => {
+				t.addEventListener("click", (e) => {
+					e.stopPropagation();
 					this.activeToday = false;
 					this.activeThread = threadName;
 					this.threadPeriodFilter.clear();
@@ -462,10 +464,11 @@ export class ThreadsView extends ItemView {
 		const listEl = this.contentEl.createDiv({ cls: "stx-thread-posts" });
 		for (const post of posts) {
 			const card = listEl.createDiv({ cls: "stx-post" });
-			this.wireTagMenu(card, post);
+			this.wireTagTap(card, post);
 			const dateLine = card.createDiv({ cls: "stx-post-date" });
 			dateLine.setText(this.sourceLabel(post));
-			dateLine.addEventListener("click", async () => {
+			dateLine.addEventListener("click", async (e) => {
+				e.stopPropagation();
 				try {
 					await this.service.openPost(post);
 				} catch (err) {
@@ -476,7 +479,8 @@ export class ThreadsView extends ItemView {
 			if (post.thread) {
 				const t = card.createDiv({ cls: "stx-post-thread" });
 				t.setText(`#thread/${post.thread}`);
-				t.addEventListener("click", () => {
+				t.addEventListener("click", (e) => {
+					e.stopPropagation();
 					this.activePeriod = null;
 					this.activeThread = post.thread;
 					this.threadPeriodFilter.clear();
@@ -652,6 +656,26 @@ export class ThreadsView extends ItemView {
 		this.wireLongPressMenu(card, (x, y, onHide) =>
 			this.showTagMenu(post, x, y, onHide)
 		);
+	}
+
+	/**
+	 * In the processing views (Today's thoughts, periodic thoughts) a plain
+	 * tap/left-click on a post opens the add-tag menu at the tap point — the
+	 * "tag it in the moment" gesture. Right-click opens it too (desktop parity).
+	 * Inner controls (date → open source, #thread chip → jump) stopPropagation so
+	 * they keep their own action instead of also opening the menu. Deliberately
+	 * not the long-press path used in the reading/thread view, where a stray tap
+	 * shouldn't pop a menu.
+	 */
+	private wireTagTap(card: HTMLElement, post: TaggablePost): void {
+		card.addClass("stx-post-tappable");
+		card.addEventListener("click", (e) =>
+			this.showTagMenu(post, e.clientX, e.clientY)
+		);
+		card.addEventListener("contextmenu", (e) => {
+			e.preventDefault();
+			this.showTagMenu(post, e.clientX, e.clientY);
+		});
 	}
 
 	/**
