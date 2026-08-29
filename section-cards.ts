@@ -33,6 +33,7 @@ import { stepAnchorIso, formatDateLabel } from "./date-nav";
 import { EmbeddedMarkdownEditor, type LineOp } from "./embedded-editor";
 import type { PillarSource } from "./pillar-core";
 import { wirePillarScrub } from "./pillar-scrub";
+import { wireLinkClicks } from "./link-clicks";
 import type { ShawnsToolboxSettings } from "./settings";
 
 export interface CardsHost {
@@ -563,6 +564,9 @@ export class SectionCards extends Component {
 
 		if (this.readingMode()) {
 			card.renderEl = bodyEl;
+			// Delegated on the persistent card body (not per-render) so
+			// reconcile's re-renders don't stack duplicate handlers.
+			wireLinkClicks(this.host.app, bodyEl, file.path);
 			void this.renderReading(file, card, slice);
 		} else {
 			card.editor = new EmbeddedMarkdownEditor(this.host.app, bodyEl, {

@@ -10,6 +10,7 @@
 import { ItemView, MarkdownRenderer, TFile, WorkspaceLeaf, setIcon } from "obsidian";
 import type { CardsHost } from "./section-cards";
 import { guidingViews, sliceGuidingView, type GuidingView } from "./guiding-core";
+import { wireLinkClicks } from "./link-clicks";
 
 export const GUIDING_VIEW_TYPE = "shawns-toolbox-guiding";
 
@@ -118,6 +119,7 @@ export class GuidingQuestionsView extends ItemView {
 		}
 		const card = cardsEl.createDiv("stx-card");
 		const body = card.createDiv("stx-card-body");
+		wireLinkClicks(this.host.app, body, file.path);
 		const slice = sliceGuidingView(content, view);
 		void MarkdownRenderer.render(
 			this.host.app,
