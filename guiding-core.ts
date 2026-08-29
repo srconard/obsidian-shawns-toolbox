@@ -1,15 +1,17 @@
-// guiding-core.ts — pure logic for the Guiding Questions panel's flip ring.
+// guiding-core.ts — pure logic for the Guiding Questions panel.
 // No Obsidian imports, so it unit-tests against a fixture copy of the real
 // "03. Personal/Guiding Questions.md".
 //
-// The panel flips through the source note one section at a time, the way the
-// Pillars panel flips through pillars. Resilience is the point: the note is
-// lightly structured today and Shawn will reorganise it later, so
+// The panel now works like the Pillars / periodic-note panels: Shawn picks
+// which of the note's sections to show and they render together (see
+// guiding-view). This module owns the pure pieces — the ordered ring of
+// selectable views and the selection toggle — plus the resilience the note
+// still needs while it is lightly structured and Shawn is reorganising it:
 //   - a note with NO headings collapses to a single "whole note" view rather
 //     than breaking, and
 //   - any non-blank content before the first heading is offered as a leading
 //     "(top)" view so nothing is hidden.
-// When real headings exist, section-cycling kicks in (one view per heading).
+// When real headings exist, each becomes its own selectable view.
 
 import { parseSections } from "./section-core";
 
@@ -17,10 +19,12 @@ export type GuidingViewKind = "whole" | "preamble" | "section";
 
 export interface GuidingView {
 	kind: GuidingViewKind;
-	/** Label for the dropdown / nav row; also the last-viewed persistence key. */
+	/** Label for the chips / persistence key (must be unique within a note). */
 	title: string;
 	/** Full heading line for a "section" view (matches parseSections), else "". */
 	heading: string;
+	/** Heading depth (1–6) for chip indentation; 1 for whole/preamble views. */
+	level: number;
 }
 
 function stripCr(line: string): string {
@@ -44,7 +48,7 @@ function frontmatterEnd(lines: string[]): number {
 export function guidingViews(content: string): GuidingView[] {
 	const sections = parseSections(content);
 	if (sections.length === 0) {
-		return [{ kind: "whole", title: "Whole note", heading: "" }];
+		return [{ kind: "whole", title: "Whole note", heading: "", level: 1 }];
 	}
 	const views: GuidingView[] = [];
 	const lines = content.split("\n");
@@ -54,16 +58,46 @@ export function guidingViews(content: string): GuidingView[] {
 		.join("\n")
 		.trim();
 	if (preamble !== "") {
-		views.push({ kind: "preamble", title: "(top)", heading: "" });
+		views.push({ kind: "preamble", title: "(top)", heading: "", level: 1 });
 	}
 	for (const sec of sections) {
 		views.push({
 			kind: "section",
 			title: sec.title.trim() || sec.heading,
 			heading: sec.heading,
+			level: sec.level,
 		});
 	}
 	return views;
+}
+
+/**
+ * The subset of `views` the user has selected, in note order. Selection is
+ * stored as a list of view titles; titles that no longer resolve (the note was
+ * re-headed) are silently dropped, so a stale pick never breaks the panel.
+ */
+export function orderGuidingSelection(
+	views: GuidingView[],
+	selectedTitles: string[]
+): GuidingView[] {
+	const wanted = new Set(selectedTitles);
+	return views.filter((v) => wanted.has(v.title));
+}
+
+/**
+ * Toggle a title's membership in the selection and return the new selection as
+ * a list of titles in note order — the shape persisted in settings (mirrors the
+ * Pillars section-pick persistence).
+ */
+export function toggleGuidingSelection(
+	views: GuidingView[],
+	selectedTitles: string[],
+	title: string
+): string[] {
+	const next = new Set(selectedTitles);
+	if (next.has(title)) next.delete(title);
+	else next.add(title);
+	return views.map((v) => v.title).filter((t) => next.has(t));
 }
 
 /**

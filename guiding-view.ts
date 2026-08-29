@@ -1,22 +1,31 @@
-// guiding-view.ts — right-sidebar Guiding Questions panel, modelled on the
-// Pillars panel. It parses the source note live, flips through its sections one
-// at a time with ◀ ▶ + a jump dropdown (the pillar-row styling), remembers the
-// last-viewed section across sessions, and re-renders when the note changes.
+// guiding-view.ts — right-sidebar Guiding Questions panel.
 //
-// A lightly-structured note (few/no headings) shows as a single "whole note"
-// view instead of breaking — the resilience the note needs while Shawn is still
-// reorganising it (guiding-core owns that logic). v1 is read + flip + live
-// update; per-section editing is deferred until the note's headings stabilise.
+// It works like the Pillars / periodic-note panels: a row of section chips lets
+// Shawn pick which of the note's sections to show, and the picked sections
+// render together in a scrollable stack (the section-cards chip pattern reused
+// for one fixed note). The selection persists across reloads, and the panel
+// re-renders when the note changes.
+//
+// A lightly-structured note (few/no headings) still degrades gracefully — the
+// chips include a single "Whole note" view when there are no headings, and a
+// leading "(top)" view for any content before the first heading (guiding-core
+// owns that logic). v1 stays read-only; per-section editing is deferred until
+// the note's headings stabilise.
 import { ItemView, MarkdownRenderer, TFile, WorkspaceLeaf, setIcon } from "obsidian";
 import type { CardsHost } from "./section-cards";
-import { guidingViews, sliceGuidingView, type GuidingView } from "./guiding-core";
+import {
+	guidingViews,
+	sliceGuidingView,
+	orderGuidingSelection,
+	toggleGuidingSelection,
+	type GuidingView,
+} from "./guiding-core";
 import { wireLinkClicks } from "./link-clicks";
 
 export const GUIDING_VIEW_TYPE = "shawns-toolbox-guiding";
 
 export class GuidingQuestionsView extends ItemView {
 	private views: GuidingView[] = [];
-	private index = 0;
 
 	constructor(leaf: WorkspaceLeaf, private host: CardsHost) {
 		super(leaf);
@@ -63,7 +72,25 @@ export class GuidingQuestionsView extends ItemView {
 		return f instanceof TFile ? f : null;
 	}
 
-	/** Re-parse the note, keep the last-viewed section if it still exists. */
+	private selection(): string[] {
+		return this.host.getSettings().guidingSectionSelections;
+	}
+
+	private async setSelection(titles: string[]): Promise<void> {
+		this.host.getSettings().guidingSectionSelections = titles;
+		await this.host.saveSettings();
+	}
+
+	private chipsCollapsed(): boolean {
+		return this.host.getSettings().guidingChipsCollapsed;
+	}
+
+	private async setChipsCollapsed(v: boolean): Promise<void> {
+		this.host.getSettings().guidingChipsCollapsed = v;
+		await this.host.saveSettings();
+	}
+
+	/** Re-parse the note and re-render the currently-picked sections. */
 	private async refresh(): Promise<void> {
 		const file = this.noteFile();
 		if (!file) {
@@ -71,28 +98,22 @@ export class GuidingQuestionsView extends ItemView {
 			this.renderEmpty();
 			return;
 		}
-		const wanted =
-			this.views[this.index]?.title ??
-			this.host.getSettings().lastGuidingView;
 		const content = await this.host.app.vault.cachedRead(file);
 		this.views = guidingViews(content);
-		const found = this.views.findIndex((v) => v.title === wanted);
-		this.index =
-			found >= 0
-				? found
-				: Math.min(Math.max(this.index, 0), this.views.length - 1);
+		await this.migrateFromLastView();
 		this.renderCurrent(file, content);
 	}
 
-	private async setIndex(i: number): Promise<void> {
-		const n = this.views.length;
-		if (n === 0) return;
-		this.index = ((i % n) + n) % n;
-		this.host.getSettings().lastGuidingView = this.views[this.index].title;
-		await this.host.saveSettings();
-		const file = this.noteFile();
-		if (file) {
-			this.renderCurrent(file, await this.host.app.vault.cachedRead(file));
+	/**
+	 * One-time seed for users upgrading from the v1.17.0 one-section-at-a-time
+	 * panel: if nothing is picked yet but a last-viewed section was remembered
+	 * and still resolves, select it so the panel isn't blank on first open.
+	 */
+	private async migrateFromLastView(): Promise<void> {
+		if (this.selection().length > 0) return;
+		const last = this.host.getSettings().lastGuidingView;
+		if (last && this.views.some((v) => v.title === last)) {
+			await this.setSelection([last]);
 		}
 	}
 
@@ -108,16 +129,80 @@ export class GuidingQuestionsView extends ItemView {
 	private renderCurrent(file: TFile, content: string): void {
 		this.contentEl.empty();
 		this.contentEl.addClass("stx-section-cards");
+		this.contentEl.style.display = "flex";
+		this.contentEl.style.flexDirection = "column";
+
 		const toolbar = this.contentEl.createDiv("stx-cards-toolbar");
-		this.buildRow(toolbar);
+		const collapsed = this.chipsCollapsed();
+		const chipsToggle = toolbar.createEl("button", {
+			cls: "stx-chips-toggle",
+			attr: { "aria-label": "Show/hide section buttons" },
+		});
+		setIcon(chipsToggle, collapsed ? "chevron-right" : "chevron-down");
+		chipsToggle.addEventListener("click", async () => {
+			await this.setChipsCollapsed(!this.chipsCollapsed());
+			this.renderCurrent(file, content);
+		});
+		// The note name, tappable to open the note itself.
+		const label = toolbar.createEl("button", {
+			cls: "stx-nav-label",
+			text: file.basename,
+			attr: { "aria-label": `Open ${file.basename}` },
+		});
+		label.addEventListener("click", () => {
+			void this.host.app.workspace.getLeaf(false).openFile(file);
+		});
+
+		const selected = new Set(this.selection());
+		const chipsEl = this.contentEl.createDiv(
+			"stx-chips" + (collapsed ? " is-collapsed" : "")
+		);
+		for (const view of this.views) {
+			const chip = chipsEl.createEl("button", {
+				cls:
+					"stx-chip stx-chip-l" +
+					view.level +
+					(selected.has(view.title) ? " is-active" : ""),
+				text: view.title,
+			});
+			chip.addEventListener("click", async () => {
+				await this.setSelection(
+					toggleGuidingSelection(
+						this.views,
+						this.selection(),
+						view.title
+					)
+				);
+				this.renderCurrent(file, content);
+			});
+		}
 
 		const cardsEl = this.contentEl.createDiv("stx-cards");
-		const view = this.views[this.index];
-		if (!view) {
-			cardsEl.createDiv({ cls: "stx-empty", text: "Nothing to show." });
+		cardsEl.style.flex = "1 1 auto";
+		cardsEl.style.minHeight = "0";
+		const picked = orderGuidingSelection(this.views, this.selection());
+		if (picked.length === 0) {
+			cardsEl.createDiv({
+				cls: "stx-empty",
+				text: "Pick one or more sections above.",
+			});
 			return;
 		}
+		for (const view of picked) {
+			this.buildCard(cardsEl, file, content, view);
+		}
+	}
+
+	private buildCard(
+		cardsEl: HTMLElement,
+		file: TFile,
+		content: string,
+		view: GuidingView
+	): void {
 		const card = cardsEl.createDiv("stx-card");
+		if (view.kind === "section") {
+			card.createDiv({ cls: "stx-card-title", text: view.title });
+		}
 		const body = card.createDiv("stx-card-body");
 		wireLinkClicks(this.host.app, body, file.path);
 		const slice = sliceGuidingView(content, view);
@@ -127,42 +212,6 @@ export class GuidingQuestionsView extends ItemView {
 			body,
 			file.path,
 			this
-		);
-	}
-
-	/** ◀ [section dropdown] ▶ — mirrors the Pillars panel's flip row. */
-	private buildRow(toolbar: HTMLElement): void {
-		const row = toolbar.createDiv("stx-pillar-row");
-		const navBtn = (aria: string, icon: string, cb: () => void) => {
-			const btn = row.createEl("button", {
-				cls: "stx-nav-btn",
-				attr: { "aria-label": aria },
-			});
-			setIcon(btn, icon);
-			btn.addEventListener("click", cb);
-		};
-		navBtn("Previous section", "chevron-left", () =>
-			void this.setIndex(this.index - 1)
-		);
-		const select = row.createEl("select", { cls: "stx-pillar-select" });
-		if (this.views.length === 0) {
-			select.createEl("option", { text: "—" });
-			select.disabled = true;
-		} else {
-			this.views.forEach((v, i) => {
-				const opt = select.createEl("option", {
-					text: v.title,
-					value: String(i),
-				});
-				if (i === this.index) opt.selected = true;
-			});
-			select.value = String(this.index);
-			select.addEventListener("change", () =>
-				void this.setIndex(Number(select.value))
-			);
-		}
-		navBtn("Next section", "chevron-right", () =>
-			void this.setIndex(this.index + 1)
 		);
 	}
 }

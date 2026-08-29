@@ -69,9 +69,13 @@ export interface ShawnsToolboxSettings {
 	lastPillarLink: string;
 
 	// Guiding Questions panel
-	/** Note the Guiding Questions panel flips through, section by section. */
+	/** Note the Guiding Questions panel shows sections from. */
 	guidingQuestionsNotePath: string;
-	/** Last-viewed guiding section (its title), restored across sessions. */
+	/** Picked guiding section titles shown together, persisted (note order). */
+	guidingSectionSelections: string[];
+	/** Chip-row collapse state for the Guiding Questions panel. */
+	guidingChipsCollapsed: boolean;
+	/** Legacy v1.17.0 last-viewed section; seeds the first multi-select. */
 	lastGuidingView: string;
 
 	// Voice capture
@@ -149,6 +153,8 @@ export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
 	lastPillarLink: "",
 
 	guidingQuestionsNotePath: "03. Personal/Guiding Questions.md",
+	guidingSectionSelections: [],
+	guidingChipsCollapsed: false,
 	lastGuidingView: "",
 
 	groqApiKey: "",
@@ -565,7 +571,7 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 		containerEl.createEl("h3", { text: "Guiding Questions panel" });
 
 		containerEl.createEl("p", {
-			text: "The Guiding Questions panel flips through this note one section at a time (◀ ▶ + dropdown). A note with no headings shows whole.",
+			text: "The Guiding Questions panel shows the sections you pick from this note, rendered together (like the Pillars and periodic-note panels). A note with no headings shows whole.",
 			cls: "setting-item-description",
 		});
 

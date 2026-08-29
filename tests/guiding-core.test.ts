@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { guidingViews, sliceGuidingView } from "../guiding-core";
+import {
+	guidingViews,
+	sliceGuidingView,
+	orderGuidingSelection,
+	toggleGuidingSelection,
+} from "../guiding-core";
 
 const fixture = readFileSync(
 	new URL("./fixtures/guiding-questions.md", import.meta.url),
@@ -69,7 +74,45 @@ describe("guidingViews — resilience", () => {
 	});
 
 	it("returns empty string for a stale section heading no longer present", () => {
-		const stale = { kind: "section" as const, title: "Gone", heading: "# Gone" };
+		const stale = {
+			kind: "section" as const,
+			title: "Gone",
+			heading: "# Gone",
+			level: 1,
+		};
 		expect(sliceGuidingView("# Here\nbody\n", stale)).toBe("");
+	});
+
+	it("carries each section's heading level for chip indentation", () => {
+		const views = guidingViews("# A\nx\n## B\ny\n");
+		expect(views.map((v) => [v.title, v.level])).toEqual([
+			["A", 1],
+			["B", 2],
+		]);
+	});
+});
+
+describe("guiding selection — multi-section picks", () => {
+	const views = guidingViews(fixture);
+
+	it("keeps picked sections in note order regardless of selection order", () => {
+		const picked = orderGuidingSelection(views, ["Todo", "Questions"]);
+		expect(picked.map((v) => v.title)).toEqual(["Questions", "Todo"]);
+	});
+
+	it("drops a stale title that no longer resolves", () => {
+		const picked = orderGuidingSelection(views, ["Questions", "Ghost"]);
+		expect(picked.map((v) => v.title)).toEqual(["Questions"]);
+	});
+
+	it("toggling adds a title (note order) and removes it again", () => {
+		const added = toggleGuidingSelection(views, ["Todo"], "Questions");
+		expect(added).toEqual(["Questions", "Todo"]);
+		const removed = toggleGuidingSelection(views, added, "Questions");
+		expect(removed).toEqual(["Todo"]);
+	});
+
+	it("returns an empty selection with no picks", () => {
+		expect(orderGuidingSelection(views, [])).toEqual([]);
 	});
 });
