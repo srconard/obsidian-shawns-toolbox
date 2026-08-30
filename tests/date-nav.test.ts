@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
 	stepAnchorIso,
 	formatDateLabel,
+	formatDateLabelWithYear,
 	weekRange,
 	monthRange,
 } from "../date-nav";
@@ -69,5 +70,14 @@ describe("formatDateLabel", () => {
 	});
 	it("renders a single-digit day without padding", () => {
 		expect(formatDateLabel("2026-09-01")).toBe("Tue Sep 1");
+	});
+});
+
+describe("formatDateLabelWithYear", () => {
+	it("appends the four-digit year", () => {
+		expect(formatDateLabelWithYear("2025-08-20")).toBe("Wed Aug 20, 2025");
+	});
+	it("uses the date's own year, not today's", () => {
+		expect(formatDateLabelWithYear("2022-12-09")).toBe("Fri Dec 9, 2022");
 	});
 });

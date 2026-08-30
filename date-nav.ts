@@ -28,6 +28,12 @@ export function formatDateLabel(dateIso: string): string {
 	return `${DAY_ABBR[t.getUTCDay()]} ${MONTH_ABBR[t.getUTCMonth()]} ${t.getUTCDate()}`;
 }
 
+/** "Thu Aug 20, 2025" — used where the year matters (e.g. "On this day"). */
+export function formatDateLabelWithYear(dateIso: string): string {
+	const year = dateIso.slice(0, 4);
+	return `${formatDateLabel(dateIso)}, ${year}`;
+}
+
 function shiftMonths(dateIso: string, months: number): string {
 	const [y, m, d] = dateIso.split("-").map(Number);
 	// Day 1 of the target month, then clamp the day-of-month: Jan 31 + 1 month

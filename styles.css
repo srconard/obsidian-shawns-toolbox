@@ -1435,6 +1435,7 @@ body.is-mobile .mobile-toolbar:not(:has(.mobile-toolbar-option)) {
 
 .stx-hl-item {
 	display: flex;
+	justify-content: flex-start;
 	text-align: left;
 	width: 100%;
 	background: var(--background-secondary);

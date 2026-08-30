@@ -10,6 +10,7 @@ import type { CardsHost } from "./section-cards";
 import { HighlightsService, type DayHighlights } from "./highlights-service";
 import {
 	formatDateLabel,
+	formatDateLabelWithYear,
 	weekRange,
 	monthRange,
 	stepAnchorIso,
@@ -309,11 +310,17 @@ export class HighlightsView extends ItemView {
 		for (const day of days) this.buildDayGroup(listEl, day);
 	}
 
-	private buildDayGroup(listEl: HTMLElement, day: DayHighlights): void {
+	private buildDayGroup(
+		listEl: HTMLElement,
+		day: DayHighlights,
+		withYear = false
+	): void {
 		const group = listEl.createDiv("stx-hl-group");
 		const head = group.createEl("button", {
 			cls: "stx-hl-group-date",
-			text: formatDateLabel(day.dateIso),
+			text: withYear
+				? formatDateLabelWithYear(day.dateIso)
+				: formatDateLabel(day.dateIso),
 			attr: { "aria-label": `Open ${day.dateIso}` },
 		});
 		head.addEventListener("click", () => {
@@ -334,7 +341,7 @@ export class HighlightsView extends ItemView {
 		if (days.length === 0) return;
 		const section = root.createDiv("stx-hl-onthisday");
 		section.createDiv({ cls: "stx-hl-onthisday-title", text: "On this day" });
-		for (const day of days) this.buildDayGroup(section, day);
+		for (const day of days) this.buildDayGroup(section, day, true);
 	}
 
 	// ---- a single highlight row (view + inline edit) ----

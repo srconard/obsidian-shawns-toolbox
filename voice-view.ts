@@ -29,7 +29,7 @@ import {
 import { createDateBar, wireLongPress, type DateBar } from "./date-bar";
 import type { CardsHost } from "./section-cards";
 import { THOUGHT_PERIODS, applyPeriodTags } from "./thread-core";
-import { HIGHLIGHTS_VIEW_TYPE } from "./highlights-view";
+import { HighlightsService } from "./highlights-service";
 
 export const VOICE_VIEW_TYPE = "shawns-toolbox-voice";
 
@@ -44,8 +44,9 @@ const PERIOD_LABELS: Record<Period, string> = {
 	yearly: "Yearly",
 };
 
-/** The voice panel's buttons: the four capture kinds plus AI bullets. */
-type VoiceKind = CaptureKind | "aiThought";
+/** The voice panel's buttons: the four capture kinds, AI bullets, and a
+ *  highlight (routed to today's `highlights::` field, not the capture pipeline). */
+type VoiceKind = CaptureKind | "aiThought" | "highlight";
 
 function pickMimeType(): string {
 	const candidates = [
@@ -86,6 +87,7 @@ export class VoiceView extends ItemView {
 	private armedPeriods = new Set<Period>();
 	private periodBtns: Partial<Record<Period, HTMLButtonElement>> = {};
 	private periodRow: HTMLElement | null = null;
+	private highlightsSvc: HighlightsService | null = null;
 
 	constructor(leaf: WorkspaceLeaf, private host: CardsHost) {
 		super(leaf);
@@ -186,32 +188,34 @@ export class VoiceView extends ItemView {
 			this.periodBtns[period] = pbtn;
 		}
 
-		// Quick access to the Highlights panel — the day's "what mattered"
-		// capture lives outside the voice pipeline, so this just opens it.
+		// Highlights — record the day's "what mattered" by voice. Tap to start,
+		// tap again to stop; the transcript is routed to today's `highlights::`
+		// field (the same append logic the Highlights panel uses), not the
+		// normal capture pipeline.
 		const hlRow = root.createDiv("stx-voice-highlights");
 		const hlBtn = hlRow.createEl("button", {
 			cls: "stx-voice-highlights-btn",
-			attr: { "aria-label": "Open highlights panel" },
+			attr: { "aria-label": "Record a highlight" },
 		});
 		const hlIcon = hlBtn.createSpan("stx-voice-highlights-icon");
 		setIcon(hlIcon, "star");
 		hlBtn.createSpan({ text: "Highlights" });
-		hlBtn.addEventListener("click", () => this.openHighlights());
+		hlBtn.addEventListener("click", () => {
+			if (Date.now() - this.lastLongPress < 700) return;
+			void this.toggle("highlight");
+		});
+		this.buttons.highlight = { btn: hlBtn, icon: hlIcon };
 	}
 
-	/** Reveal the Highlights panel, creating it in the right sidebar if needed. */
-	private openHighlights(): void {
-		const { workspace } = this.app;
-		const existing = workspace.getLeavesOfType(HIGHLIGHTS_VIEW_TYPE);
-		if (existing.length > 0) {
-			workspace.revealLeaf(existing[0]);
-			return;
+	/** Lazily-built service for writing `highlights::` lines to daily notes. */
+	private highlights(): HighlightsService {
+		if (!this.highlightsSvc) {
+			this.highlightsSvc = new HighlightsService(
+				this.app,
+				() => this.host.getSettings()
+			);
 		}
-		const leaf = workspace.getRightLeaf(false);
-		if (!leaf) return;
-		void leaf
-			.setViewState({ type: HIGHLIGHTS_VIEW_TYPE, active: true })
-			.then(() => workspace.revealLeaf(leaf));
+		return this.highlightsSvc;
 	}
 
 	/** Toggle a cadence tag armed for the recording; refresh its button state. */
@@ -256,7 +260,9 @@ export class VoiceView extends ItemView {
 
 	/** Default (idle) icon for a voice button. */
 	private defaultIcon(kind: VoiceKind): string {
-		return kind === "aiThought" ? "sparkles" : "mic";
+		if (kind === "aiThought") return "sparkles";
+		if (kind === "highlight") return "star";
+		return "mic";
 	}
 
 	/** Thought ⇄ AI Thought may swap mid-recording; nothing else may. */
@@ -360,7 +366,8 @@ export class VoiceView extends ItemView {
 		ui.btn.addClass("is-recording");
 		setIcon(ui.icon, "square");
 		this.setSwitchAffordance(kind);
-		this.setPeriodsLive(true);
+		// The cadence-arm cue only makes sense for a thought recording.
+		if (kind === "thought" || kind === "aiThought") this.setPeriodsLive(true);
 		recorder.start();
 	}
 
@@ -388,6 +395,15 @@ export class VoiceView extends ItemView {
 				// Every provider failed: never discard the audio — park it in
 				// the vault and point today's note at it so it resurfaces.
 				await this.saveFailedAudio(settings, kind, blob, dateIso, e);
+				return;
+			}
+			if (kind === "highlight") {
+				// Highlights always land on today's note, via the same
+				// `highlights::` append the Highlights panel uses.
+				const svc = this.highlights();
+				const day = svc.todayIso();
+				await svc.addToDay(day, text);
+				new Notice(`★ Highlight → ${day}\n${text}`, 6000);
 				return;
 			}
 			const when =
@@ -492,7 +508,9 @@ export class VoiceView extends ItemView {
 				await routeCapture(
 					this.app,
 					settings,
-					kind === "aiThought" ? "thought" : kind,
+					kind === "aiThought" || kind === "highlight"
+						? "thought"
+						: kind,
 					`⚠️ Voice transcription failed — audio saved: [[${path}]]`,
 					dateIso
 				);
