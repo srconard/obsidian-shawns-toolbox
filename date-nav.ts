@@ -46,6 +46,34 @@ function shiftMonths(dateIso: string, months: number): string {
 	return clamped.toISOString().slice(0, 10);
 }
 
+export interface DateRange {
+	start: string;
+	end: string;
+}
+
+/** The ISO week (Mon–Sun) containing dateIso, as an inclusive [start, end]. */
+export function weekRange(dateIso: string): DateRange {
+	const [y, m, d] = dateIso.split("-").map(Number);
+	const t = new Date(Date.UTC(y, m - 1, d));
+	// getUTCDay: Sun=0..Sat=6 → offset to Monday-based (Mon=0..Sun=6).
+	const offset = (t.getUTCDay() + 6) % 7;
+	const iso = (dt: Date) => dt.toISOString().slice(0, 10);
+	const start = new Date(t);
+	start.setUTCDate(t.getUTCDate() - offset);
+	const end = new Date(start);
+	end.setUTCDate(start.getUTCDate() + 6);
+	return { start: iso(start), end: iso(end) };
+}
+
+/** The calendar month containing dateIso, as an inclusive [start, end]. */
+export function monthRange(dateIso: string): DateRange {
+	const [y, m] = dateIso.split("-").map(Number);
+	const iso = (dt: Date) => dt.toISOString().slice(0, 10);
+	const start = new Date(Date.UTC(y, m - 1, 1));
+	const end = new Date(Date.UTC(y, m, 0));
+	return { start: iso(start), end: iso(end) };
+}
+
 /**
  * Step an anchor date by one unit of the scope. The anchor stays a plain
  * day; the periodic formats resolve it to the right week/month/quarter/year

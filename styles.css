@@ -1290,3 +1290,298 @@ body.is-mobile .mobile-toolbar:not(:has(.mobile-toolbar-option)) {
 	letter-spacing: 0.04em;
 	margin-bottom: 0.3em;
 }
+
+/* ---- Highlights panel (v1.31.0) ---- */
+
+.stx-highlights-root {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	min-height: 0;
+	padding: 0.5em 0.6em;
+	gap: 0.5em;
+}
+
+.stx-hl-modes {
+	flex: 0 0 auto;
+	display: flex;
+	gap: 0.3em;
+}
+
+.stx-hl-mode {
+	flex: 1 1 0;
+	min-height: 2.2em;
+	font-size: var(--font-ui-smaller);
+	border-radius: var(--radius-m);
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	color: var(--text-muted);
+	cursor: pointer;
+}
+
+.stx-hl-mode:hover {
+	background: var(--background-modifier-hover);
+}
+
+.stx-hl-mode.is-active {
+	background: var(--interactive-accent);
+	border-color: var(--interactive-accent);
+	color: var(--text-on-accent);
+	font-weight: 600;
+}
+
+.stx-hl-nav {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	gap: 0.25em;
+}
+
+.stx-hl-nav-btn {
+	background: transparent;
+	border: none;
+	box-shadow: none;
+	color: var(--text-muted);
+	padding: 0.3em;
+	border-radius: var(--radius-s);
+	cursor: pointer;
+	display: flex;
+}
+
+.stx-hl-nav-btn:hover {
+	color: var(--text-normal);
+	background: var(--background-modifier-hover);
+}
+
+/* Visible date = the label; an invisible native date input overlays it so a
+   tap opens the platform picker (raw date inputs render poorly on Android). */
+.stx-hl-nav-label {
+	position: relative;
+	flex: 1 1 auto;
+	min-width: 6em;
+	text-align: center;
+	font-size: var(--font-ui-small);
+	color: var(--text-normal);
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	padding: 0.35em 0.4em;
+	cursor: pointer;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.stx-hl-date-input {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	opacity: 0;
+	cursor: pointer;
+	border: none;
+	padding: 0;
+	margin: 0;
+}
+
+.stx-hl-today {
+	flex: 0 0 auto;
+	font-size: var(--font-ui-smaller);
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	color: var(--text-muted);
+	border-radius: var(--radius-s);
+	padding: 0.35em 0.6em;
+	cursor: pointer;
+}
+
+.stx-hl-today:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.stx-hl-rangenav {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	gap: 0.35em;
+}
+
+.stx-hl-range-input {
+	flex: 1 1 0;
+	min-width: 0;
+	font-size: var(--font-ui-smaller);
+}
+
+.stx-hl-range-to {
+	color: var(--text-muted);
+}
+
+.stx-hl-list {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+	gap: 0.3em;
+}
+
+.stx-hl-empty {
+	color: var(--text-faint);
+	padding: 0.8em 0.4em;
+	text-align: center;
+	font-size: var(--font-ui-small);
+}
+
+.stx-hl-item {
+	display: flex;
+	text-align: left;
+	width: 100%;
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	padding: 0.5em 0.6em;
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+	cursor: pointer;
+}
+
+.stx-hl-item:hover {
+	background: var(--background-modifier-hover);
+}
+
+.stx-hl-item-text {
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
+
+.stx-hl-addbox {
+	display: flex;
+	gap: 0.35em;
+	margin-top: 0.3em;
+}
+
+.stx-hl-add-input {
+	flex: 1 1 auto;
+	min-width: 0;
+	font-size: var(--font-ui-small);
+}
+
+.stx-hl-add-btn,
+.stx-hl-edit-btn {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	border: none;
+	border-radius: var(--radius-s);
+	padding: 0.35em 0.6em;
+	cursor: pointer;
+}
+
+.stx-hl-add-btn:hover,
+.stx-hl-edit-btn:hover {
+	opacity: 0.85;
+}
+
+.stx-hl-edit {
+	display: flex;
+	gap: 0.3em;
+	align-items: center;
+}
+
+.stx-hl-edit-input {
+	flex: 1 1 auto;
+	min-width: 0;
+	font-size: var(--font-ui-small);
+}
+
+.stx-hl-edit-btn {
+	background: var(--background-secondary);
+	color: var(--text-muted);
+	border: 1px solid var(--background-modifier-border);
+	padding: 0.35em 0.5em;
+}
+
+.stx-hl-edit-btn:hover {
+	color: var(--text-normal);
+	background: var(--background-modifier-hover);
+}
+
+.stx-hl-del:hover {
+	color: var(--color-red);
+}
+
+.stx-hl-group {
+	display: flex;
+	flex-direction: column;
+	gap: 0.25em;
+	margin-bottom: 0.4em;
+}
+
+.stx-hl-group-date {
+	align-self: flex-start;
+	background: transparent;
+	border: none;
+	box-shadow: none;
+	color: var(--text-accent);
+	font-size: var(--font-ui-smaller);
+	font-weight: 600;
+	cursor: pointer;
+	padding: 0.2em 0;
+}
+
+.stx-hl-group-date:hover {
+	text-decoration: underline;
+}
+
+.stx-hl-onthisday {
+	flex: 0 0 auto;
+	border-top: 1px solid var(--background-modifier-border);
+	padding-top: 0.5em;
+	margin-top: 0.3em;
+	max-height: 40%;
+	overflow-y: auto;
+}
+
+.stx-hl-onthisday-title {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	margin-bottom: 0.4em;
+}
+
+/* Voice panel → Highlights quick-access button. */
+.stx-voice-highlights {
+	flex: 0 0 auto;
+	padding: 0 0.8em 0.8em;
+}
+
+.stx-voice-highlights-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.4em;
+	width: 100%;
+	min-height: 2.6em;
+	font-size: var(--font-ui-small);
+	border-radius: var(--radius-m);
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	color: var(--text-muted);
+	cursor: pointer;
+	touch-action: manipulation;
+}
+
+.stx-voice-highlights-btn:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.stx-voice-highlights-icon {
+	display: flex;
+}

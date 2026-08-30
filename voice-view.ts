@@ -29,6 +29,7 @@ import {
 import { createDateBar, wireLongPress, type DateBar } from "./date-bar";
 import type { CardsHost } from "./section-cards";
 import { THOUGHT_PERIODS, applyPeriodTags } from "./thread-core";
+import { HIGHLIGHTS_VIEW_TYPE } from "./highlights-view";
 
 export const VOICE_VIEW_TYPE = "shawns-toolbox-voice";
 
@@ -184,6 +185,33 @@ export class VoiceView extends ItemView {
 			pbtn.addEventListener("click", () => this.togglePeriod(period));
 			this.periodBtns[period] = pbtn;
 		}
+
+		// Quick access to the Highlights panel — the day's "what mattered"
+		// capture lives outside the voice pipeline, so this just opens it.
+		const hlRow = root.createDiv("stx-voice-highlights");
+		const hlBtn = hlRow.createEl("button", {
+			cls: "stx-voice-highlights-btn",
+			attr: { "aria-label": "Open highlights panel" },
+		});
+		const hlIcon = hlBtn.createSpan("stx-voice-highlights-icon");
+		setIcon(hlIcon, "star");
+		hlBtn.createSpan({ text: "Highlights" });
+		hlBtn.addEventListener("click", () => this.openHighlights());
+	}
+
+	/** Reveal the Highlights panel, creating it in the right sidebar if needed. */
+	private openHighlights(): void {
+		const { workspace } = this.app;
+		const existing = workspace.getLeavesOfType(HIGHLIGHTS_VIEW_TYPE);
+		if (existing.length > 0) {
+			workspace.revealLeaf(existing[0]);
+			return;
+		}
+		const leaf = workspace.getRightLeaf(false);
+		if (!leaf) return;
+		void leaf
+			.setViewState({ type: HIGHLIGHTS_VIEW_TYPE, active: true })
+			.then(() => workspace.revealLeaf(leaf));
 	}
 
 	/** Toggle a cadence tag armed for the recording; refresh its button state. */

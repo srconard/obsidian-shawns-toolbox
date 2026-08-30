@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { stepAnchorIso, formatDateLabel } from "../date-nav";
+import {
+	stepAnchorIso,
+	formatDateLabel,
+	weekRange,
+	monthRange,
+} from "../date-nav";
 
 describe("stepAnchorIso", () => {
 	it("steps a day", () => {
@@ -22,6 +27,39 @@ describe("stepAnchorIso", () => {
 	it("steps a year, clamping Feb 29", () => {
 		expect(stepAnchorIso("2024-02-29", "year", 1)).toBe("2025-02-28");
 		expect(stepAnchorIso("2026-08-20", "year", -1)).toBe("2025-08-20");
+	});
+});
+
+describe("weekRange", () => {
+	it("returns Monday–Sunday of the ISO week", () => {
+		// 2026-08-29 is a Saturday.
+		expect(weekRange("2026-08-29")).toEqual({
+			start: "2026-08-24",
+			end: "2026-08-30",
+		});
+	});
+	it("handles a Monday and a Sunday at the edges", () => {
+		expect(weekRange("2026-08-24")).toEqual({
+			start: "2026-08-24",
+			end: "2026-08-30",
+		});
+		expect(weekRange("2026-08-30")).toEqual({
+			start: "2026-08-24",
+			end: "2026-08-30",
+		});
+	});
+});
+
+describe("monthRange", () => {
+	it("returns the first and last day of the month", () => {
+		expect(monthRange("2026-08-29")).toEqual({
+			start: "2026-08-01",
+			end: "2026-08-31",
+		});
+		expect(monthRange("2026-02-15")).toEqual({
+			start: "2026-02-01",
+			end: "2026-02-28",
+		});
 	});
 });
 
