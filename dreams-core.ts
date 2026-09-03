@@ -27,6 +27,23 @@ const HEADING_RE = /^(#{2,3})\s+(.*\S)\s*$/;
 const PAIR_PREFIX_RE = /^(\s*[-*]\s+\[([ xX])\]\s+)/;
 const WIKILINK_RE = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
 
+/** The 💭 glyph that marks Shawn's optional "why I kept this" note child line. */
+export const NOTE_GLYPH = "💭";
+// A note child line: optional indent, optional bullet, the 💭 glyph, then text.
+const NOTE_LINE_RE = /^\s*(?:[-*]\s+)?💭\s?/;
+// Trailing italic signature "*(Shawn, 2026-09-03)*" — stripped from display text.
+const NOTE_SIG_RE = /\s*\*\([^)]*\)\*\s*$/;
+
+/** True for a `- 💭 …` context-note child line (any indent, bullet optional). */
+export function isNoteLine(line: string): boolean {
+	return NOTE_LINE_RE.test(line.trim());
+}
+
+/** The note text from a `- 💭 <text> *(Shawn, date)*` line (glyph + signature stripped). */
+export function noteTextFromLine(line: string): string {
+	return line.trim().replace(NOTE_LINE_RE, "").replace(NOTE_SIG_RE, "").trim();
+}
+
 export type KeepState = "plain" | "kept" | "applied";
 
 export interface DreamConnection {
@@ -47,6 +64,8 @@ export interface DreamConnection {
 	thread: string;
 	/** Text after `**Speculation…:**`, or "". */
 	speculation: string;
+	/** Shawn's optional "why I kept this" note (glyph + signature stripped), or "". */
+	note: string;
 	/** The high-signal round-up block is informational, not a connection. */
 	isHighSignal: boolean;
 }
@@ -134,8 +153,16 @@ export function parseDreams(region: string): DreamConnection[] {
 		const quotes: string[] = [];
 		let thread = "";
 		let speculation = "";
+		let note = "";
 		for (const raw of body) {
 			const line = raw.trim();
+			// Shawn's context note sits under the pair line as a `- 💭 …` child.
+			// Check it before the pair test so a note that happens to contain a
+			// wikilink is never mistaken for the pair line.
+			if (isNoteLine(line)) {
+				note = noteTextFromLine(line);
+				continue;
+			}
 			if (!pairRaw && isPairLine(line)) {
 				pairRaw = line;
 				continue;
@@ -170,6 +197,7 @@ export function parseDreams(region: string): DreamConnection[] {
 			quotes,
 			thread,
 			speculation,
+			note,
 			isHighSignal: highSignal,
 		});
 	}
@@ -225,4 +253,68 @@ export function toggleKeep(content: string, pairBody: string): string {
 		return lines.join("\n");
 	}
 	return content;
+}
+
+/**
+ * Write (or replace, or delete) Shawn's context note for one connection by
+ * touching only its `- 💭 …` child line directly under the pair line — the rest
+ * of the dreams lane is never re-serialised. `text` is trimmed:
+ *   • non-empty  → upsert `  - 💭 <text> *(Shawn, <dateIso>)*` (one note per
+ *                  connection: an existing note line is replaced in place, else a
+ *                  new line is inserted immediately below the pair line);
+ *   • empty      → delete the existing note line, if any.
+ * The connection is matched by its checkbox-stripped pair body, so keep-state
+ * (plain / `- [ ]` / `- [x]`) is irrelevant. No matching pair line → unchanged.
+ * Idempotent: saving the same text (same date) twice yields identical content.
+ */
+export function setConnectionNote(
+	content: string,
+	pairBody: string,
+	text: string,
+	dateIso: string
+): string {
+	const want = pairBody.trim();
+	if (!want) return content;
+	const lines = splitLines(content);
+	let i = -1;
+	for (let k = 0; k < lines.length; k++) {
+		const line = stripCr(lines[k]);
+		if (!isPairLine(line)) continue;
+		if (stripKeepPrefix(line).trim() !== want) continue;
+		i = k;
+		break;
+	}
+	if (i < 0) return content;
+	const pairLine = stripCr(lines[i]);
+	const indentMatch = /^(\s*)/.exec(pairLine);
+	const indent = indentMatch ? indentMatch[1] : "";
+	const childIndent = indent + "  ";
+	const newText = text.trim();
+	// Find this connection's existing note line — the first `💭` line after the
+	// pair line and before the next heading or pair line (the block boundary).
+	let j = -1;
+	for (let k = i + 1; k < lines.length; k++) {
+		const l = stripCr(lines[k]);
+		// isNoteLine wins over isPairLine so a note that dictated a `[[link]] ↔`
+		// isn't misread as the next connection's pair line and skipped.
+		if (isNoteLine(l)) {
+			j = k;
+			break;
+		}
+		if (HEADING_RE.test(l)) break;
+		if (isPairLine(l)) break;
+	}
+	if (newText === "") {
+		if (j >= 0) lines.splice(j, 1);
+		return lines.join("\n");
+	}
+	const newLine = `${childIndent}- ${NOTE_GLYPH} ${newText} *(Shawn, ${dateIso})*`;
+	if (j >= 0) {
+		const cr = lines[j].endsWith("\r") ? "\r" : "";
+		lines[j] = newLine + cr;
+	} else {
+		const cr = lines[i].endsWith("\r") ? "\r" : "";
+		lines.splice(i + 1, 0, newLine + cr);
+	}
+	return lines.join("\n");
 }

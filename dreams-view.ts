@@ -20,6 +20,13 @@ import {
 } from "./dreams-service";
 import type { DreamConnection } from "./dreams-core";
 import { formatDateLabelWithYear } from "./date-nav";
+import {
+	MicRecorder,
+	appendTranscript,
+	failureEmbed,
+	parkFailedAudio,
+	transcribeChain,
+} from "./voice-capture";
 
 export const DREAMS_VIEW_TYPE = "shawns-toolbox-dreams";
 
@@ -44,6 +51,13 @@ export class DreamsView extends ItemView {
 	private listScroll = 0;
 	/** Suppresses the click that follows a long-press dismiss. */
 	private suppressNextClick = false;
+	/** Pair body whose context-note editor is open, or null. */
+	private editing: string | null = null;
+	/** Live draft text of the open note editor (survives re-renders). */
+	private draft = "";
+	/** Mic recorder for the open note editor. */
+	private recorder: MicRecorder | null = null;
+	private recState: "idle" | "recording" | "transcribing" = "idle";
 
 	constructor(leaf: WorkspaceLeaf, private host: CardsHost) {
 		super(leaf);
@@ -97,6 +111,9 @@ export class DreamsView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
+		this.recorder?.cancel();
+		this.recorder = null;
+		this.recState = "idle";
 		this.contentEl.empty();
 	}
 
@@ -355,6 +372,239 @@ export class DreamsView extends ItemView {
 				}
 			}
 		}
+
+		this.buildNoteSection(card, detail, c);
+	}
+
+	// ---- context note ("why I kept this") ----
+
+	/**
+	 * The note text (if any) plus the add/edit affordance. The pencil appears only
+	 * once a connection is kept or applied — on a plain card it shows up right
+	 * after the tap-to-keep re-render. When the editor is open for this
+	 * connection, the inline editor replaces the button.
+	 */
+	private buildNoteSection(
+		card: HTMLElement,
+		detail: DreamDayDetail,
+		c: DreamConnection
+	): void {
+		if (c.note) {
+			const noteEl = card.createDiv("stx-dreams-note-body");
+			noteEl.createSpan({ cls: "stx-dreams-note-glyph", text: "💭 " });
+			noteEl.createSpan({ cls: "stx-dreams-note-text", text: c.note });
+		}
+		if (this.editing === c.pairBody) {
+			this.buildNoteEditor(card, detail, c);
+			return;
+		}
+		if (c.keep === "plain") return; // affordance appears once kept/applied
+		const btn = card.createEl("button", {
+			cls: "stx-dreams-note-btn",
+			attr: {
+				"aria-label": c.note ? "Edit note" : "Add a note",
+				type: "button",
+			},
+		});
+		setIcon(btn.createSpan({ cls: "stx-dreams-note-btn-icon" }), "pencil");
+		btn.createSpan({ text: c.note ? "edit" : "why?" });
+		// Keep the card's long-press dismiss / keep-toggle from firing.
+		btn.addEventListener("pointerdown", (e) => e.stopPropagation());
+		btn.addEventListener("contextmenu", (e) => e.stopPropagation());
+		btn.addEventListener("click", (e) => {
+			e.stopPropagation();
+			this.editing = c.pairBody;
+			this.draft = c.note;
+			void this.render();
+		});
+	}
+
+	private buildNoteEditor(
+		card: HTMLElement,
+		detail: DreamDayDetail,
+		c: DreamConnection
+	): void {
+		const box = card.createDiv("stx-dreams-note-editor");
+		// Swallow the gestures the card uses for keep-toggle / long-press dismiss.
+		box.addEventListener("pointerdown", (e) => e.stopPropagation());
+		box.addEventListener("contextmenu", (e) => e.stopPropagation());
+		box.addEventListener("click", (e) => e.stopPropagation());
+
+		const ta = box.createEl("textarea", {
+			cls: "stx-dreams-note-input",
+			attr: {
+				rows: "2",
+				placeholder: "what you like about this connection…",
+			},
+		});
+		ta.value = this.draft;
+		const grow = () => {
+			ta.style.height = "auto";
+			ta.style.height = `${ta.scrollHeight}px`;
+		};
+		ta.addEventListener("input", () => {
+			this.draft = ta.value;
+			grow();
+		});
+		ta.addEventListener("keydown", (e) => {
+			if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+				e.preventDefault();
+				void this.saveNote(detail, c);
+			} else if (e.key === "Escape") {
+				e.preventDefault();
+				this.cancelNote();
+			}
+		});
+
+		const row = box.createDiv("stx-dreams-note-editrow");
+		const mic = row.createEl("button", {
+			cls: "stx-inbox-mic stx-dreams-note-mic",
+			attr: { "aria-label": "Dictate", type: "button" },
+		});
+		const micIcon = mic.createSpan({ cls: "stx-inbox-mic-icon" });
+		setIcon(micIcon, "mic");
+		mic.addEventListener("click", (e) => {
+			e.stopPropagation();
+			void this.toggleMic(ta, mic, micIcon);
+		});
+
+		const done = row.createEl("button", {
+			cls: "mod-cta stx-dreams-note-done",
+			text: "Done",
+		});
+		done.addEventListener("click", (e) => {
+			e.stopPropagation();
+			void this.saveNote(detail, c);
+		});
+		const cancel = row.createEl("button", {
+			cls: "stx-dreams-note-cancel",
+			text: "Cancel",
+		});
+		cancel.addEventListener("click", (e) => {
+			e.stopPropagation();
+			this.cancelNote();
+		});
+
+		window.setTimeout(() => {
+			ta.focus();
+			grow();
+			const n = ta.value.length;
+			ta.setSelectionRange(n, n);
+		}, 0);
+	}
+
+	private async saveNote(
+		detail: DreamDayDetail,
+		c: DreamConnection
+	): Promise<void> {
+		const text = this.draft.trim();
+		const prev = this.draft;
+		this.editing = null;
+		this.draft = "";
+		try {
+			await this.svc.setNote(detail.path, c.pairBody, text);
+			await this.render();
+		} catch (err) {
+			// Reopen the editor so the typed text isn't lost.
+			this.editing = c.pairBody;
+			this.draft = prev;
+			new Notice(msg("Could not save note", err));
+			await this.render();
+		}
+	}
+
+	private cancelNote(): void {
+		this.editing = null;
+		this.draft = "";
+		void this.render();
+	}
+
+	/** Reuse the plugin's Groq→OpenAI dictation chain to fill the note box. */
+	private async toggleMic(
+		ta: HTMLTextAreaElement,
+		mic: HTMLElement,
+		micIcon: HTMLElement
+	): Promise<void> {
+		if (this.recState === "transcribing") return;
+		if (this.recState === "recording") {
+			await this.stopAndTranscribe(ta, mic, micIcon);
+			return;
+		}
+		try {
+			this.recorder = new MicRecorder();
+			await this.recorder.start();
+		} catch (e) {
+			this.recorder = null;
+			new Notice(
+				"Microphone unavailable: " +
+					(e instanceof Error ? e.message : String(e))
+			);
+			return;
+		}
+		this.recState = "recording";
+		mic.addClass("is-recording");
+		setIcon(micIcon, "square");
+	}
+
+	private async stopAndTranscribe(
+		ta: HTMLTextAreaElement,
+		mic: HTMLElement,
+		micIcon: HTMLElement
+	): Promise<void> {
+		const recorder = this.recorder;
+		this.recorder = null;
+		this.recState = "idle";
+		mic.removeClass("is-recording");
+		if (!recorder) return;
+		const blob = await recorder.stop();
+		if (blob.size === 0) {
+			setIcon(micIcon, "mic");
+			new Notice("No audio captured");
+			return;
+		}
+		this.recState = "transcribing";
+		mic.addClass("is-busy");
+		setIcon(micIcon, "loader");
+		const settings = this.host.getSettings();
+		try {
+			let text: string;
+			try {
+				text = await transcribeChain(settings, blob);
+			} catch (err) {
+				// Every provider failed — park the audio and embed it so nothing
+				// is lost; the note editor keeps the embed for later transcription.
+				try {
+					const path = await parkFailedAudio(this.host.app, settings, blob);
+					this.appendDraft(ta, failureEmbed(path));
+					new Notice(
+						`Transcription failed. Audio saved → ${path} — transcribe it later.`,
+						10000
+					);
+				} catch (saveErr) {
+					new Notice(
+						"Transcription failed and could not save audio: " +
+							(saveErr instanceof Error
+								? saveErr.message
+								: String(saveErr)),
+						12000
+					);
+				}
+				return;
+			}
+			this.appendDraft(ta, text);
+		} finally {
+			this.recState = "idle";
+			mic.removeClass("is-busy");
+			setIcon(micIcon, "mic");
+		}
+	}
+
+	private appendDraft(ta: HTMLTextAreaElement, text: string): void {
+		this.draft = appendTranscript(this.draft, text);
+		ta.value = this.draft;
+		ta.focus();
+		ta.style.height = "auto";
+		ta.style.height = `${ta.scrollHeight}px`;
 	}
 
 	private buildHighSignal(
@@ -429,6 +679,11 @@ export class DreamsView extends ItemView {
 		this.buildNoteLink(pair, k.path, c.noteA);
 		pair.createSpan({ cls: "stx-dreams-arrow", text: " ↔ " });
 		this.buildNoteLink(pair, k.path, c.noteB);
+		if (c.note) {
+			const noteEl = card.createDiv("stx-dreams-note-body");
+			noteEl.createSpan({ cls: "stx-dreams-note-glyph", text: "💭 " });
+			noteEl.createSpan({ cls: "stx-dreams-note-text", text: c.note });
+		}
 	}
 
 	// ---- shared bits ----

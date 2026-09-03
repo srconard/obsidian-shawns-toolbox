@@ -10,9 +10,11 @@ import {
 	parseDreams,
 	countDreams,
 	toggleKeep,
+	setConnectionNote,
 	type DreamConnection,
 	type DreamCounts,
 } from "./dreams-core";
+import { todayIso } from "./status-service";
 
 const AGENT_RE = /^\d{4}-\d{2}-\d{2}-AGENT$/;
 const LEGACY_RE = /^\d{4}-\d{2}-\d{2}-dreaming$/;
@@ -147,6 +149,20 @@ export class DreamsService {
 		const f = this.app.vault.getAbstractFileByPath(path);
 		if (!(f instanceof TFile)) throw new Error(`Note not found: ${path}`);
 		await this.app.vault.process(f, (content) => toggleKeep(content, pairBody));
+		this.cache.delete(path);
+	}
+
+	/**
+	 * Write (or replace / delete) Shawn's context note for a connection, touching
+	 * only the `- 💭 …` child line under its pair line. Empty text deletes it.
+	 */
+	async setNote(path: string, pairBody: string, text: string): Promise<void> {
+		const f = this.app.vault.getAbstractFileByPath(path);
+		if (!(f instanceof TFile)) throw new Error(`Note not found: ${path}`);
+		const date = todayIso();
+		await this.app.vault.process(f, (content) =>
+			setConnectionNote(content, pairBody, text, date)
+		);
 		this.cache.delete(path);
 	}
 

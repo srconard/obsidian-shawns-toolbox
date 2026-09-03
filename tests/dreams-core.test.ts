@@ -5,6 +5,9 @@ import {
 	countDreams,
 	toggleKeep,
 	stripKeepPrefix,
+	setConnectionNote,
+	isNoteLine,
+	noteTextFromLine,
 	DREAMS_START,
 	DREAMS_END,
 } from "../dreams-core";
@@ -239,6 +242,144 @@ describe("toggleKeep", () => {
 		expect(out).toContain("## Reflection");
 		expect(out).toContain("*Seeds: 11 daily-note thoughts.");
 		expect(out.split("\n")).toHaveLength(AGENT_NOTE.split("\n").length);
+	});
+});
+
+// An agent-note connection that already carries a Shawn context note.
+const NOTED_AGENT = [
+	DREAMS_START,
+	"",
+	"### A connection Shawn annotated",
+	"",
+	"- [ ] **[[Alpha]]** ↔ **[[Beta]]**",
+	"  - 💭 I love how the ramble predated the idea *(Shawn, 2026-09-02)*",
+	"",
+	'> "a quote"',
+	"",
+	"**The thread:** they rhyme.",
+	"",
+	"---",
+	DREAMS_END,
+].join("\n");
+
+const DATE = "2026-09-03";
+
+describe("parseDreams — context note", () => {
+	it("reads the 💭 child note and strips the glyph + signature", () => {
+		const conns = parseDreams(extractDreamsRegion(NOTED_AGENT, true)!);
+		expect(conns).toHaveLength(1);
+		expect(conns[0].note).toBe("I love how the ramble predated the idea");
+		expect(conns[0].keep).toBe("kept");
+		// The note line is not mistaken for a quote or the pair line.
+		expect(conns[0].noteA).toBe("Alpha");
+		expect(conns[0].quotes).toEqual(['"a quote"']);
+	});
+
+	it("leaves note empty for connections without one", () => {
+		const conns = parseDreams(extractDreamsRegion(AGENT_NOTE, true)!);
+		expect(conns.map((c) => c.note)).toEqual(["", "", "", ""]);
+	});
+});
+
+describe("isNoteLine / noteTextFromLine", () => {
+	it("recognises a note child line at any indent", () => {
+		expect(isNoteLine("  - 💭 hello *(Shawn, 2026-09-03)*")).toBe(true);
+		expect(isNoteLine("💭 bare")).toBe(true);
+		expect(isNoteLine("- [ ] **[[a]]** ↔ **[[b]]**")).toBe(false);
+		expect(isNoteLine("> a quote")).toBe(false);
+	});
+	it("extracts the note text", () => {
+		expect(
+			noteTextFromLine("  - 💭 the reason here *(Shawn, 2026-09-03)*")
+		).toBe("the reason here");
+	});
+});
+
+describe("setConnectionNote", () => {
+	it("inserts a note directly under a plain pair line", () => {
+		const conns = parseDreams(extractDreamsRegion(AGENT_NOTE, true)!);
+		const out = setConnectionNote(AGENT_NOTE, conns[0].pairBody, "my reason", DATE);
+		const lines = out.split("\n");
+		const pairIdx = lines.findIndex(
+			(l) =>
+				l.includes("How to play and dance with people") && l.includes("↔")
+		);
+		expect(lines[pairIdx + 1]).toBe(
+			"  - 💭 my reason *(Shawn, 2026-09-03)*"
+		);
+		// One line longer, everything else identical.
+		expect(lines.length).toBe(AGENT_NOTE.split("\n").length + 1);
+		// Round-trips through the parser.
+		const reparsed = parseDreams(extractDreamsRegion(out, true)!);
+		expect(reparsed[0].note).toBe("my reason");
+	});
+
+	it("adds a note on a kept connection", () => {
+		const conns = parseDreams(extractDreamsRegion(AGENT_NOTE, true)!);
+		const out = setConnectionNote(AGENT_NOTE, conns[1].pairBody, "worth it", DATE);
+		expect(out).toContain("  - 💭 worth it *(Shawn, 2026-09-03)*");
+		expect(parseDreams(extractDreamsRegion(out, true)!)[1].note).toBe("worth it");
+	});
+
+	it("adds a note on an applied (read-only-keep) connection", () => {
+		const conns = parseDreams(extractDreamsRegion(AGENT_NOTE, true)!);
+		const out = setConnectionNote(AGENT_NOTE, conns[2].pairBody, "kept it", DATE);
+		const applied = parseDreams(extractDreamsRegion(out, true)!)[2];
+		expect(applied.keep).toBe("applied"); // note write leaves keep untouched
+		expect(applied.note).toBe("kept it");
+	});
+
+	it("replaces an existing note in place, not appending a second", () => {
+		const out = setConnectionNote(NOTED_AGENT, "**[[Alpha]]** ↔ **[[Beta]]**", "new reason", DATE);
+		expect(out).toContain("  - 💭 new reason *(Shawn, 2026-09-03)*");
+		expect(out).not.toContain("ramble predated");
+		// Exactly one 💭 line.
+		expect(out.split("\n").filter((l) => l.includes("💭"))).toHaveLength(1);
+		expect(out.split("\n").length).toBe(NOTED_AGENT.split("\n").length);
+	});
+
+	it("deletes the note when text is empty", () => {
+		const out = setConnectionNote(NOTED_AGENT, "**[[Alpha]]** ↔ **[[Beta]]**", "", DATE);
+		expect(out).not.toContain("💭");
+		expect(out.split("\n").length).toBe(NOTED_AGENT.split("\n").length - 1);
+		expect(parseDreams(extractDreamsRegion(out, true)!)[0].note).toBe("");
+	});
+
+	it("delete-when-absent leaves content unchanged", () => {
+		const conns = parseDreams(extractDreamsRegion(AGENT_NOTE, true)!);
+		expect(setConnectionNote(AGENT_NOTE, conns[0].pairBody, "", DATE)).toBe(
+			AGENT_NOTE
+		);
+	});
+
+	it("is idempotent — saving the same note twice is a no-op the second time", () => {
+		const conns = parseDreams(extractDreamsRegion(AGENT_NOTE, true)!);
+		const once = setConnectionNote(AGENT_NOTE, conns[0].pairBody, "reason", DATE);
+		const twice = setConnectionNote(once, conns[0].pairBody, "reason", DATE);
+		expect(twice).toBe(once);
+	});
+
+	it("touches only the note line — the rest of the note is byte-identical", () => {
+		const conns = parseDreams(extractDreamsRegion(AGENT_NOTE, true)!);
+		const out = setConnectionNote(AGENT_NOTE, conns[0].pairBody, "reason", DATE);
+		const before = AGENT_NOTE.split("\n");
+		const after = out.split("\n").filter((l) => !l.includes("💭"));
+		expect(after).toEqual(before);
+	});
+
+	it("returns content unchanged when no pair line matches", () => {
+		expect(
+			setConnectionNote(AGENT_NOTE, "**[[nope]]** ↔ **[[missing]]**", "x", DATE)
+		).toBe(AGENT_NOTE);
+	});
+
+	it("works on a legacy ## digest too", () => {
+		const conns = parseDreams(extractDreamsRegion(LEGACY, false)!);
+		const out = setConnectionNote(LEGACY, conns[0].pairBody, "old dream", DATE);
+		expect(out).toContain("  - 💭 old dream *(Shawn, 2026-09-03)*");
+		expect(parseDreams(extractDreamsRegion(out, false)!)[0].note).toBe(
+			"old dream"
+		);
 	});
 });
 
