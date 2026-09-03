@@ -25,6 +25,7 @@ import { ThreadsView, THREADS_VIEW_TYPE } from "./threads-view";
 import { PillarsView, PILLARS_VIEW_TYPE } from "./pillars-view";
 import { GuidingQuestionsView, GUIDING_VIEW_TYPE } from "./guiding-view";
 import { HighlightsView, HIGHLIGHTS_VIEW_TYPE } from "./highlights-view";
+import { DreamsView, DREAMS_VIEW_TYPE } from "./dreams-view";
 import type { CardsHost } from "./section-cards";
 
 export default class ShawnsToolboxPlugin extends Plugin {
@@ -150,6 +151,10 @@ export default class ShawnsToolboxPlugin extends Plugin {
 			HIGHLIGHTS_VIEW_TYPE,
 			(leaf: WorkspaceLeaf) => new HighlightsView(leaf, host)
 		);
+		this.registerView(
+			DREAMS_VIEW_TYPE,
+			(leaf: WorkspaceLeaf) => new DreamsView(leaf, host)
+		);
 
 		this.addCommand({
 			id: "open-capture-view",
@@ -193,6 +198,11 @@ export default class ShawnsToolboxPlugin extends Plugin {
 			callback: () =>
 				void this.activateView(HIGHLIGHTS_VIEW_TYPE, "right"),
 		});
+		this.addCommand({
+			id: "open-dreams-panel",
+			name: "Open dreams panel",
+			callback: () => void this.activateView(DREAMS_VIEW_TYPE, "right"),
+		});
 		this.addRibbonIcon("zap", "Open capture view", () =>
 			void this.activateView(CAPTURE_VIEW_TYPE, "main")
 		);
@@ -210,6 +220,9 @@ export default class ShawnsToolboxPlugin extends Plugin {
 		);
 		this.addRibbonIcon("star", "Open highlights panel", () =>
 			void this.activateView(HIGHLIGHTS_VIEW_TYPE, "right")
+		);
+		this.addRibbonIcon("moon", "Open dreams panel", () =>
+			void this.activateView(DREAMS_VIEW_TYPE, "right")
 		);
 
 		// "Go to today" — jumps to (logical) today's daily note from anywhere,

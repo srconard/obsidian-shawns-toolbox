@@ -78,6 +78,14 @@ export interface ShawnsToolboxSettings {
 	/** Legacy v1.17.0 last-viewed section; seeds the first multi-select. */
 	lastGuidingView: string;
 
+	// Dreams panel
+	/** Folder holding agent daily notes (YYYY-MM-DD-AGENT.md) with a dreams lane. */
+	dreamsAgentNotesFolder: string;
+	/** Folder holding legacy standalone dreaming digests (YYYY-MM-DD-dreaming.md). */
+	dreamsLegacyFolder: string;
+	/** Last-used day-list filter, persisted like the other panels' picks. */
+	dreamsFilter: "unprocessed" | "processed" | "all";
+
 	// Voice capture
 	groqApiKey: string;
 	groqModel: string;
@@ -156,6 +164,10 @@ export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
 	guidingSectionSelections: [],
 	guidingChipsCollapsed: false,
 	lastGuidingView: "",
+
+	dreamsAgentNotesFolder: "AGENTS/timeline/agent-notes",
+	dreamsLegacyFolder: "AGENTS/workspace/dreaming",
+	dreamsFilter: "unprocessed",
 
 	groqApiKey: "",
 	groqModel: "whisper-large-v3-turbo",
@@ -586,6 +598,49 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 						this.plugin.settings.guidingQuestionsNotePath =
 							value.trim() ||
 							DEFAULT_SETTINGS.guidingQuestionsNotePath;
+						await this.plugin.saveSettings();
+					});
+				text.inputEl.style.width = "300px";
+			});
+
+		// Dreams panel section
+		containerEl.createEl("h3", { text: "Dreams panel" });
+
+		containerEl.createEl("p", {
+			text: "The Dreams panel lists the nightly dream-connection days so you can go through them and keep the ones worth saving. Keeping a connection turns its pair line into a `- [ ]` checkbox (the existing flag the night session acts on); marking a day done sets its `dreams_reviewed` frontmatter.",
+			cls: "setting-item-description",
+		});
+
+		new Setting(containerEl)
+			.setName("Agent notes folder")
+			.setDesc(
+				"Folder of agent daily notes (YYYY-MM-DD-AGENT.md) whose `## Dreams` lane holds connections."
+			)
+			.addText((text) => {
+				text
+					.setPlaceholder("AGENTS/timeline/agent-notes")
+					.setValue(this.plugin.settings.dreamsAgentNotesFolder)
+					.onChange(async (value) => {
+						this.plugin.settings.dreamsAgentNotesFolder =
+							value.trim() ||
+							DEFAULT_SETTINGS.dreamsAgentNotesFolder;
+						await this.plugin.saveSettings();
+					});
+				text.inputEl.style.width = "300px";
+			});
+
+		new Setting(containerEl)
+			.setName("Legacy dreaming folder")
+			.setDesc(
+				"Folder of older standalone dreaming digests (YYYY-MM-DD-dreaming.md)."
+			)
+			.addText((text) => {
+				text
+					.setPlaceholder("AGENTS/workspace/dreaming")
+					.setValue(this.plugin.settings.dreamsLegacyFolder)
+					.onChange(async (value) => {
+						this.plugin.settings.dreamsLegacyFolder =
+							value.trim() || DEFAULT_SETTINGS.dreamsLegacyFolder;
 						await this.plugin.saveSettings();
 					});
 				text.inputEl.style.width = "300px";
