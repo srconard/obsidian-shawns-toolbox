@@ -661,6 +661,31 @@
 	}
 }
 
+/* Voice panel fills the drawer on phone (Shawn 2026-09-04): make the five
+   capture buttons grow to absorb the free space instead of leaving a dead
+   gap above the panel switcher. `.stx-voice-root` is the view's `.view-content`
+   element, and Obsidian's `.workspace-drawer .view-content` rules out-specify
+   a single class and drop our flex column (same footgun as the v1.7.5
+   section-cards fix), so re-assert the flex column with a compound selector.
+   The five capture buttons grow evenly (flex:1); the cadence chips and the
+   Highlights button keep their natural height (flex:0 0 auto, set above). When
+   the drawer is short (landscape / split screen) the column scrolls rather
+   than crushing the buttons below a usable tap size (min-height on each). */
+body.is-phone div.view-content.stx-voice-root {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	overflow-y: auto;
+}
+body.is-phone .stx-voice-buttons {
+	flex: 1 1 auto;
+	min-height: 0;
+}
+body.is-phone .stx-voice-btn {
+	flex: 1 1 0;
+	min-height: 3.5em;
+}
+
 /* ---- Section nav row (v1.7.0): ◀ note ▶ [today] + line-edit cluster ---- */
 
 .stx-nav-row {
