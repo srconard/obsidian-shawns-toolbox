@@ -26,6 +26,7 @@ import { PillarsView, PILLARS_VIEW_TYPE } from "./pillars-view";
 import { GuidingQuestionsView, GUIDING_VIEW_TYPE } from "./guiding-view";
 import { HighlightsView, HIGHLIGHTS_VIEW_TYPE } from "./highlights-view";
 import { DreamsView, DREAMS_VIEW_TYPE } from "./dreams-view";
+import { fileShareToNote, registerFilingMenu } from "./filing-service";
 import type { CardsHost } from "./section-cards";
 
 export default class ShawnsToolboxPlugin extends Plugin {
@@ -274,6 +275,17 @@ export default class ShawnsToolboxPlugin extends Plugin {
 			ctx.addChild(renderThreadsBlock(source, el, threadService));
 		});
 
+		// ---- Media Inbox filing lane ("File tweet to note") ----
+		// Share a tweet/link → Obsidian → this row files it into the Media Inbox
+		// library and links it under the picked note's # Resources section.
+		this.registerEvent(registerFilingMenu(this.app, () => this.settings));
+		// Command entry (desktop has no share sheet): file the URL on the clipboard.
+		this.addCommand({
+			id: "file-clipboard-url-to-note",
+			name: "File clipboard URL to note",
+			callback: () => void this.fileClipboardUrl(),
+		});
+
 		// Add settings tab
 		this.addSettingTab(new ShawnsToolboxSettingTab(this.app, this));
 
@@ -284,6 +296,15 @@ export default class ShawnsToolboxPlugin extends Plugin {
 		this.statusFooter?.unmount();
 		this.mentionsFooter?.unmount();
 		console.log("Shawn's Toolbox unloaded");
+	}
+
+	private async fileClipboardUrl(): Promise<void> {
+		try {
+			const text = await navigator.clipboard.readText();
+			fileShareToNote(this.app, this.settings, text);
+		} catch {
+			new Notice("Could not read the clipboard");
+		}
 	}
 
 	private async openToday(): Promise<void> {

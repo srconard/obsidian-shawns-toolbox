@@ -99,6 +99,12 @@ export interface ShawnsToolboxSettings {
 	aiThoughtProvider: "gemini" | "openai";
 	openaiApiKey: string;
 	openaiModel: string;
+
+	// Media Inbox filing lane ("File tweet to note")
+	/** Base URL of the media-inbox server (no trailing slash), reachable from this device. */
+	mediaInboxUrl: string;
+	/** Shared secret sent as the x-media-key header (= MEDIA_INBOX_KEY on the NAS). */
+	mediaInboxKey: string;
 }
 
 export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
@@ -177,6 +183,10 @@ export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
 	aiThoughtProvider: "gemini",
 	openaiApiKey: "",
 	openaiModel: "gpt-luna",
+
+	// The NAS Tailscale address the phone reaches; overridable in settings.
+	mediaInboxUrl: "http://100.97.68.101:8799",
+	mediaInboxKey: "",
 };
 
 export class ShawnsToolboxSettingTab extends PluginSettingTab {
@@ -766,5 +776,46 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					})
 			);
+
+		// Media Inbox filing lane section
+		containerEl.createEl("h3", { text: "Media Inbox (File tweet to note)" });
+
+		containerEl.createEl("p", {
+			text: 'Share a tweet or link to Obsidian → "File tweet to note…" files it into your Media Inbox library and links it under the picked note\'s # Resources section.',
+			cls: "setting-item-description",
+		});
+
+		new Setting(containerEl)
+			.setName("Media Inbox server URL")
+			.setDesc(
+				"Base URL of the media-inbox server, reachable from this device (no trailing slash). On the phone this is the NAS Tailscale address."
+			)
+			.addText((text) => {
+				text
+					.setPlaceholder("http://100.97.68.101:8799")
+					.setValue(this.plugin.settings.mediaInboxUrl)
+					.onChange(async (value) => {
+						this.plugin.settings.mediaInboxUrl =
+							value.trim().replace(/\/+$/, "") ||
+							DEFAULT_SETTINGS.mediaInboxUrl;
+						await this.plugin.saveSettings();
+					});
+				text.inputEl.style.width = "300px";
+			});
+
+		new Setting(containerEl)
+			.setName("Media Inbox key")
+			.setDesc("Shared secret sent as x-media-key (= MEDIA_INBOX_KEY on the NAS).")
+			.addText((text) => {
+				text
+					.setPlaceholder("Enter the media key")
+					.setValue(this.plugin.settings.mediaInboxKey)
+					.onChange(async (value) => {
+						this.plugin.settings.mediaInboxKey = value.trim();
+						await this.plugin.saveSettings();
+					});
+				text.inputEl.type = "password";
+				text.inputEl.style.width = "300px";
+			});
 	}
 }
