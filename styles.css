@@ -767,6 +767,34 @@ body.is-mobile .mobile-toolbar:not(:has(.mobile-toolbar-option)) {
 	display: none;
 }
 
+/* Compact mobile sidebar panel switcher (v1.35.0, Shawn 2026-09-04): the
+   "Voice capture" pill + up/down chevron at the bottom of the mobile drawer
+   (Obsidian's own .workspace-drawer-tab-select) was a full 52px touch row —
+   Shawn asked for it "smaller". Roughly halve it to a compact single-line
+   row: shorter height, tighter inner padding, smaller label + chevron. Only
+   the collapsed pill is touched; the expanded tab-options list keeps its
+   full-size tap targets. Scoped to phone so nothing changes on desktop. */
+body.is-phone .workspace-drawer-tab-select {
+	height: var(--touch-size-xs);
+	font-size: var(--font-ui-smaller);
+}
+body.is-phone
+	.workspace-drawer-tab-select
+	.workspace-tab-header-inner {
+	padding: var(--size-4-1) var(--size-4-3);
+}
+body.is-phone
+	.workspace-drawer-tab-select
+	.workspace-tab-header-inner-icon {
+	--icon-size: var(--icon-xs);
+}
+body.is-phone
+	.workspace-drawer-tab-select
+	.workspace-tab-header-inner
+	.workspace-drawer-active-tab-chevron {
+	--icon-size: var(--icon-xs);
+}
+
 /* AI Thought voice button (v1.8.0) — sparkles variant of the thought button */
 .stx-voice-ai .stx-voice-btn-icon {
 	color: var(--interactive-accent);
