@@ -324,20 +324,48 @@ export default class ShawnsToolboxPlugin extends Plugin {
 		type: string,
 		side: "main" | "left" | "right"
 	): Promise<void> {
-		const existing = this.app.workspace.getLeavesOfType(type);
-		if (existing.length > 0) {
-			this.app.workspace.revealLeaf(existing[0]);
-			return;
+		try {
+			const ws = this.app.workspace;
+			// Reuse a live leaf of this type. A leaf can survive in the saved
+			// layout as a deferred/unloaded placeholder (Obsidian ≥1.7.2) or as
+			// an orphan with no parent — revealing one of those is a silent no-op
+			// (the "tap the ribbon, nothing happens" bug). Load deferred leaves,
+			// detach orphans, and fall through to creating a fresh one.
+			for (const leaf of ws.getLeavesOfType(type)) {
+				const anyLeaf = leaf as WorkspaceLeaf & {
+					parent?: unknown;
+					loadIfDeferred?: () => Promise<void>;
+				};
+				if (!anyLeaf.parent) {
+					leaf.detach();
+					continue;
+				}
+				if (typeof anyLeaf.loadIfDeferred === "function") {
+					await anyLeaf.loadIfDeferred();
+				}
+				await ws.revealLeaf(leaf);
+				ws.setActiveLeaf(leaf, { focus: true });
+				return;
+			}
+			const leaf =
+				side === "main"
+					? ws.getLeaf("tab")
+					: side === "left"
+						? ws.getLeftLeaf(false)
+						: ws.getRightLeaf(false);
+			if (!leaf) {
+				new Notice(`Could not open ${type}: no ${side} pane available`);
+				return;
+			}
+			await leaf.setViewState({ type, active: true });
+			await ws.revealLeaf(leaf);
+			ws.setActiveLeaf(leaf, { focus: true });
+		} catch (e) {
+			console.error("Shawn's Toolbox: activateView failed", e);
+			new Notice(
+				`Could not open view: ${e instanceof Error ? e.message : String(e)}`
+			);
 		}
-		const leaf =
-			side === "main"
-				? this.app.workspace.getLeaf(true)
-				: side === "left"
-					? this.app.workspace.getLeftLeaf(false)
-					: this.app.workspace.getRightLeaf(false);
-		if (!leaf) return;
-		await leaf.setViewState({ type, active: true });
-		this.app.workspace.revealLeaf(leaf);
 	}
 
 	async loadSettings(): Promise<void> {
