@@ -184,6 +184,112 @@ describe("parseDreams — legacy digest (## headings)", () => {
 	});
 });
 
+// The lane the night session has written since 2026-09-04: connections are
+// `####` headings so they nest under the agent note's `## Dreams` heading.
+const AGENT_NOTE_H4 = [
+	"---",
+	"date: 2026-09-04",
+	"dreams_reviewed: false",
+	"---",
+	"## Dreams",
+	"",
+	DREAMS_START,
+	"*Connections found across the vault.*",
+	"",
+	"#### Play was already filed as a use of the logos in 2024",
+	"",
+	"**[[2026-09-03]]** \u2194 **[[i need to identify with the logos]]**",
+	"",
+	'> "Play is the logos in action." *(2026-09-03)*',
+	"",
+	"**The thread:** A 2024 note already listed play first.",
+	"",
+	"**Speculation:** *(AI)* The missing piece may be slowness.",
+	"",
+	"---",
+	"",
+	"#### Curiosity is the word Vervaeke put on the other side",
+	"",
+	"- [ ] **[[Base Philosophy]]** \u2194 **[[2023-11-21]]**",
+	"",
+	"**The thread:** Curiosity is the having-mode craving.",
+	"",
+	DREAMS_END,
+	"",
+].join("\n");
+
+describe("parseDreams — agent-note lane with #### headings (2026-09-04+)", () => {
+	const conns = parseDreams(extractDreamsRegion(AGENT_NOTE_H4, true)!);
+
+	it("parses #### connection headings the same as ###", () => {
+		expect(conns).toHaveLength(2);
+		expect(conns[0].level).toBe(4);
+		expect(conns[0].title).toBe(
+			"Play was already filed as a use of the logos in 2024"
+		);
+		expect(conns[0].noteA).toBe("2026-09-03");
+		expect(conns[0].noteB).toBe("i need to identify with the logos");
+		expect(conns[0].keep).toBe("plain");
+		expect(conns[0].thread).toContain("2024 note");
+		expect(conns[1].keep).toBe("kept");
+	});
+
+	it("counts a #### day so it is never dropped from the day list", () => {
+		expect(countDreams(conns)).toEqual({
+			connections: 2,
+			flagged: 1,
+			applied: 0,
+		});
+	});
+
+	it("toggles keep on a #### connection", () => {
+		const out = toggleKeep(AGENT_NOTE_H4, conns[0].pairBody);
+		expect(out).toContain(
+			"- [ ] **[[2026-09-03]]** \u2194 **[[i need to identify with the logos]]**"
+		);
+		expect(parseDreams(extractDreamsRegion(out, true)!)[0].keep).toBe("kept");
+	});
+
+	it("writes a context note under a #### connection's pair line", () => {
+		const out = setConnectionNote(
+			AGENT_NOTE_H4,
+			conns[1].pairBody,
+			"slowness is the entry condition",
+			"2026-09-06"
+		);
+		const lines = out.split("\n");
+		const pairAt = lines.findIndex((l) =>
+			l.includes("**[[Base Philosophy]]**")
+		);
+		expect(lines[pairAt + 1]).toBe(
+			"  - 💭 slowness is the entry condition *(Shawn, 2026-09-06)*"
+		);
+		expect(parseDreams(extractDreamsRegion(out, true)!)[1].note).toBe(
+			"slowness is the entry condition"
+		);
+	});
+});
+
+// A heading block deeper than the connection level is still handled: with no
+// pair line it is note structure, and is skipped rather than counted.
+describe("parseDreams — heading levels beyond ####", () => {
+	it("skips a deeper heading block that carries no pair line", () => {
+		const region = [
+			"##### Scratch notes",
+			"",
+			"just some prose, no pair line",
+			"",
+			"#### A real connection",
+			"",
+			"**[[a]]** \u2194 **[[b]]**",
+			"",
+		].join("\n");
+		const conns = parseDreams(region);
+		expect(conns).toHaveLength(1);
+		expect(conns[0].noteA).toBe("a");
+	});
+});
+
 describe("countDreams", () => {
 	it("counts connections, flagged (kept+applied) and applied", () => {
 		const conns = parseDreams(extractDreamsRegion(AGENT_NOTE, true)!);

@@ -4,8 +4,12 @@
 // each agent daily note (AGENTS/timeline/agent-notes/YYYY-MM-DD-AGENT.md) between
 // `<!-- lane:dreams start -->` … `<!-- lane:dreams end -->`, and older ones live
 // as standalone digests (AGENTS/workspace/dreaming/YYYY-MM-DD-dreaming.md). Each
-// connection is a heading block — `## <title>` in legacy digests, `### <title>`
-// in agent notes — carrying a pair line `**[[a]]** ↔ **[[b]]**`, one or two
+// connection is a heading block — `## <title>` in legacy digests, and any of
+// `###`/`####` (the night session has written `####` since 2026-09-04, nesting
+// the connections under the note's `## Dreams` heading) in agent notes; the
+// parser accepts any level from `##` to `######` so a future nesting change
+// never silently empties a day. Each block carries a pair line
+// `**[[a]]** ↔ **[[b]]**`, one or two
 // `> quote` lines, `**The thread:** …`, and `**Speculation:** …`. A final
 // "High-signal thoughts — no strong connection tonight" block is not a
 // connection. Shawn keeps a connection by turning its pair line into a checkbox
@@ -22,7 +26,11 @@ export const DREAMS_END = "<!-- lane:dreams end -->";
 
 /** ↔ is the connection glyph in every pair line. */
 const ARROW = "↔";
-const HEADING_RE = /^(#{2,3})\s+(.*\S)\s*$/;
+// Any heading level from `##` to `######` opens a connection block. Legacy
+// digests use `##`, agent notes `###` (2026-09-02/03) or `####` (since
+// 2026-09-04) — being level-agnostic is what keeps the panel from losing a day
+// when the night session re-nests its output.
+const HEADING_RE = /^(#{2,6})\s+(.*\S)\s*$/;
 // A pair line, optionally prefixed with a - [ ] / - [x] checkbox.
 const PAIR_PREFIX_RE = /^(\s*[-*]\s+\[([ xX])\]\s+)/;
 const WIKILINK_RE = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
@@ -49,7 +57,7 @@ export type KeepState = "plain" | "kept" | "applied";
 export interface DreamConnection {
 	/** Heading text (e.g. "The ramble found a guiding question already filed"). */
 	title: string;
-	/** 2 for legacy `##` digests, 3 for agent-note `###` blocks. */
+	/** Heading depth: 2 for legacy `##` digests, 3 or 4 for agent-note blocks. */
 	level: number;
 	/** The pair line with any checkbox prefix stripped — the stable match key. */
 	pairBody: string;
