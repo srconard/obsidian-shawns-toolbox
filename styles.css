@@ -301,6 +301,49 @@
 	min-height: 3.8em;
 }
 
+/* ---- Capture side panel (v1.38.0) ----
+   The same capture surface in a right-sidebar / phone-drawer leaf. Two things
+   a narrow panel needs that the main-pane view does not:
+
+   1. The full-height flex column must be re-asserted with a COMPOUND selector.
+      `.stx-capture-side` is the view's own `.view-content` element, and
+      Obsidian's `.workspace-drawer .view-content` rules (0,2,0) out-specify a
+      single class, dropping the column so children stack at natural height and
+      the leftover space becomes a dead gap above the panel switcher — the
+      exact footgun the v1.7.5 section-cards and v1.36.0 voice-panel fixes
+      documented. `div.view-content.stx-capture-side` is (0,2,1) and wins.
+      Written unscoped (not `body.is-phone`) so a desktop right split gets the
+      same guarantee.
+   2. No 760px centred typing column — that rule exists to keep the main pane's
+      text near the middle on a wide DeX/desktop pane; a panel is already
+      narrow and should fill its width.
+
+   The input keeps `flex: 1 1 auto` so it absorbs a tall drawer, but drops to a
+   short min-height so the four buttons stay visible without scrolling on a
+   phone with the keyboard up; a short drawer (landscape / split screen)
+   scrolls rather than crushing them. Button sizes are untouched — the
+   `.is-mobile` touch target still applies. */
+div.view-content.stx-capture-side {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	overflow-y: auto;
+	max-width: none;
+	margin-inline: 0;
+	padding: 0.6em;
+	gap: 0.6em;
+}
+
+.stx-capture-side .stx-capture-input {
+	min-height: 4.5em;
+}
+
+/* The recent-thought strip must not push the buttons off a short panel. */
+.stx-capture-side .stx-capture-recent {
+	max-height: 30%;
+	overflow-y: auto;
+}
+
 /* ---- Section cards ---- */
 
 .stx-section-cards {

@@ -18,6 +18,10 @@ import { findConflicts, formatConflictReport } from "./status-conflicts";
 import { todayIso } from "./status-service";
 import { ensureDailyNote, logicalTodayIso } from "./capture-service";
 import { CaptureView, CAPTURE_VIEW_TYPE } from "./capture-view";
+import {
+	CaptureSideView,
+	CAPTURE_SIDE_VIEW_TYPE,
+} from "./capture-side-view";
 import { SectionsView, SECTIONS_VIEW_TYPE } from "./sections-view";
 import { FocusView, FOCUS_VIEW_TYPE } from "./focus-view";
 import { VoiceView, VOICE_VIEW_TYPE } from "./voice-view";
@@ -125,6 +129,10 @@ export default class ShawnsToolboxPlugin extends Plugin {
 			(leaf: WorkspaceLeaf) => new CaptureView(leaf, host)
 		);
 		this.registerView(
+			CAPTURE_SIDE_VIEW_TYPE,
+			(leaf: WorkspaceLeaf) => new CaptureSideView(leaf, host)
+		);
+		this.registerView(
 			SECTIONS_VIEW_TYPE,
 			(leaf: WorkspaceLeaf) => new SectionsView(leaf, host)
 		);
@@ -161,6 +169,12 @@ export default class ShawnsToolboxPlugin extends Plugin {
 			id: "open-capture-view",
 			name: "Open capture view",
 			callback: () => void this.activateView(CAPTURE_VIEW_TYPE, "main"),
+		});
+		this.addCommand({
+			id: "open-capture-panel",
+			name: "Open capture panel",
+			callback: () =>
+				void this.activateView(CAPTURE_SIDE_VIEW_TYPE, "right"),
 		});
 		this.addCommand({
 			id: "open-sections-view",
@@ -206,6 +220,9 @@ export default class ShawnsToolboxPlugin extends Plugin {
 		});
 		this.addRibbonIcon("zap", "Open capture view", () =>
 			void this.activateView(CAPTURE_VIEW_TYPE, "main")
+		);
+		this.addRibbonIcon("pencil-line", "Open capture panel", () =>
+			void this.activateView(CAPTURE_SIDE_VIEW_TYPE, "right")
 		);
 		this.addRibbonIcon("layout-list", "Open sections view", () =>
 			void this.activateView(SECTIONS_VIEW_TYPE, "main")
