@@ -4,12 +4,17 @@
 // (sections-view.ts) — deliberately no tabs or chrome here.
 //
 // The surface itself lives in capture-base-view.ts, shared with the
-// right-sidebar variant (capture-side-view.ts).
-import { BaseCaptureView } from "./capture-base-view";
+// right-sidebar variant (capture-side-view.ts) and the dual panel.
+import { BaseCapturePanel } from "./capture-base-view";
+import type { ToolboxPanel } from "./panel-base";
+import { ToolboxPanelView } from "./panel-view";
 
 export const CAPTURE_VIEW_TYPE = "shawns-toolbox-capture";
 
-export class CaptureView extends BaseCaptureView {
+/** The main-pane capture surface: auto-focused, 760px centred typing column. */
+export class CapturePanel extends BaseCapturePanel {}
+
+export class CaptureView extends ToolboxPanelView {
 	getViewType(): string {
 		return CAPTURE_VIEW_TYPE;
 	}
@@ -20,5 +25,9 @@ export class CaptureView extends BaseCaptureView {
 
 	getIcon(): string {
 		return "zap";
+	}
+
+	protected createPanel(container: HTMLElement): ToolboxPanel {
+		return new CapturePanel(this.host, container);
 	}
 }

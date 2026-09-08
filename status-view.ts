@@ -1,23 +1,15 @@
 // status-view.ts — desktop right-sidebar panel showing the active note's status.
-import { ItemView, WorkspaceLeaf } from "obsidian";
+//
+// The body is a ToolboxPanel so the dual panel (v1.39.0) can host it as one
+// half of a split leaf; StatusView is the standalone shell over the same body.
 import { renderStatusControls } from "./status-controls";
+import { ToolboxPanel } from "./panel-base";
+import { ToolboxPanelView } from "./panel-view";
 
 export const STATUS_VIEW_TYPE = "shawns-toolbox-status";
 
-export class StatusView extends ItemView {
-	getViewType(): string {
-		return STATUS_VIEW_TYPE;
-	}
-
-	getDisplayText(): string {
-		return "Note status";
-	}
-
-	getIcon(): string {
-		return "check-circle";
-	}
-
-	async onOpen(): Promise<void> {
+export class StatusPanel extends ToolboxPanel {
+	protected onOpen(): void {
 		// file-open is the event that actually fires when the active note
 		// changes. active-leaf-change alone misses the case where the workspace
 		// has no active file yet at mount time, which leaves a stale
@@ -50,5 +42,23 @@ export class StatusView extends ItemView {
 			return;
 		}
 		renderStatusControls(container, this.app, file, "panel");
+	}
+}
+
+export class StatusView extends ToolboxPanelView {
+	getViewType(): string {
+		return STATUS_VIEW_TYPE;
+	}
+
+	getDisplayText(): string {
+		return "Note status";
+	}
+
+	getIcon(): string {
+		return "check-circle";
+	}
+
+	protected createPanel(container: HTMLElement): ToolboxPanel {
+		return new StatusPanel(this.host, container);
 	}
 }

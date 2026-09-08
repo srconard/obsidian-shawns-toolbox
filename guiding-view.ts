@@ -11,7 +11,7 @@
 // leading "(top)" view for any content before the first heading (guiding-core
 // owns that logic). v1 stays read-only; per-section editing is deferred until
 // the note's headings stabilise.
-import { ItemView, MarkdownRenderer, TFile, WorkspaceLeaf, setIcon } from "obsidian";
+import { MarkdownRenderer, TFile, setIcon } from "obsidian";
 import type { CardsHost } from "./section-cards";
 import {
 	guidingViews,
@@ -21,29 +21,15 @@ import {
 	type GuidingView,
 } from "./guiding-core";
 import { wireLinkClicks } from "./link-clicks";
+import { ToolboxPanel } from "./panel-base";
+import { ToolboxPanelView } from "./panel-view";
 
 export const GUIDING_VIEW_TYPE = "shawns-toolbox-guiding";
 
-export class GuidingQuestionsView extends ItemView {
+export class GuidingQuestionsPanel extends ToolboxPanel {
 	private views: GuidingView[] = [];
 
-	constructor(leaf: WorkspaceLeaf, private host: CardsHost) {
-		super(leaf);
-	}
-
-	getViewType(): string {
-		return GUIDING_VIEW_TYPE;
-	}
-
-	getDisplayText(): string {
-		return "Guiding Questions";
-	}
-
-	getIcon(): string {
-		return "compass";
-	}
-
-	async onOpen(): Promise<void> {
+	protected async onOpen(): Promise<void> {
 		const onNote = (f: { path: string }) => {
 			if (f.path === this.notePath()) void this.refresh();
 		};
@@ -59,7 +45,7 @@ export class GuidingQuestionsView extends ItemView {
 		await this.refresh();
 	}
 
-	async onClose(): Promise<void> {
+	protected async onClose(): Promise<void> {
 		this.contentEl.empty();
 	}
 
@@ -213,5 +199,23 @@ export class GuidingQuestionsView extends ItemView {
 			file.path,
 			this
 		);
+	}
+}
+
+export class GuidingQuestionsView extends ToolboxPanelView {
+	getViewType(): string {
+		return GUIDING_VIEW_TYPE;
+	}
+
+	getDisplayText(): string {
+		return "Guiding Questions";
+	}
+
+	getIcon(): string {
+		return "compass";
+	}
+
+	protected createPanel(container: HTMLElement): ToolboxPanel {
+		return new GuidingQuestionsPanel(this.host, container);
 	}
 }

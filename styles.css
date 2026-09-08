@@ -323,7 +323,8 @@
    phone with the keyboard up; a short drawer (landscape / split screen)
    scrolls rather than crushing them. Button sizes are untouched — the
    `.is-mobile` touch target still applies. */
-div.view-content.stx-capture-side {
+div.view-content.stx-capture-side,
+.stx-dual-body.stx-capture-side {
 	display: flex;
 	flex-direction: column;
 	height: 100%;
@@ -714,11 +715,22 @@ div.view-content.stx-capture-side {
    Highlights button keep their natural height (flex:0 0 auto, set above). When
    the drawer is short (landscape / split screen) the column scrolls rather
    than crushing the buttons below a usable tap size (min-height on each). */
-body.is-phone div.view-content.stx-voice-root {
+body.is-phone div.view-content.stx-voice-root,
+.stx-dual-body.stx-voice-root {
 	display: flex;
 	flex-direction: column;
 	height: 100%;
 	overflow-y: auto;
+}
+/* Inside a dual half the buttons should fill it on desktop too — the half is
+   as tight as a phone drawer. */
+.stx-dual-body.stx-voice-root .stx-voice-buttons {
+	flex: 1 1 auto;
+	min-height: 0;
+}
+.stx-dual-body.stx-voice-root .stx-voice-btn {
+	flex: 1 1 0;
+	min-height: 3.5em;
 }
 body.is-phone .stx-voice-buttons {
 	flex: 1 1 auto;
@@ -780,7 +792,8 @@ body.is-phone .stx-voice-btn {
    .view-content rules outrank a single class), which left the leftover
    container space rendering as a dead box between bar and keyboard.
    The compound selectors below out-specify the drawer rules. */
-div.view-content.stx-section-cards {
+div.view-content.stx-section-cards,
+.stx-dual-body.stx-section-cards {
 	display: flex;
 	flex-direction: column;
 }
@@ -2013,4 +2026,173 @@ body.is-phone
 }
 .stx-dreams-note-cancel:hover {
 	color: var(--text-normal);
+}
+
+/* ---- Dual panel (v1.39.0) ----
+   Two toolbox panels stacked inside ONE leaf, because the phone drawer shows
+   one panel at a time (Shawn, 2026-09-08: "can we open a double panel where we
+   can put two things in the side panel?").
+
+   The root is the view's own `.view-content`, so the flex column has to be
+   re-asserted with a COMPOUND selector — Obsidian's `.workspace-drawer
+   .view-content` rules (0,2,0) out-specify a single class and would drop the
+   column, stacking the halves at natural height and leaving the divider
+   floating (the v1.7.5 / v1.36.0 / v1.38.0 footgun). Written unscoped so a
+   desktop right split gets the same guarantee.
+
+   Each half is `flex-basis: 0` with a flex-grow written from the split ratio,
+   never a percentage height: a percentage would resolve against whichever
+   ancestor happens to have a definite height, which in the drawer is not the
+   one we mean. `min-height` keeps a half tappable even when dragged small, and
+   `overflow: hidden` on the pane + `overflow-y: auto` on the body makes the
+   BODY the scroller, which is what panels that remember their own scroll
+   offset (Threads) read. */
+div.view-content.stx-dual-root {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	min-height: 12em;
+	padding: 0;
+	gap: 0;
+}
+
+/* Overflow needs (0,3,1): Obsidian's `.workspace-split.mod-right-split
+   .view-content` is (0,3,0) and out-specifies the rule above — measured live in
+   a right split, where it set `overflow: auto` over our `hidden`. Intent stated
+   explicitly rather than inherited by accident: when the two halves' minimums
+   no longer fit (a very short landscape drawer), the whole dual view scrolls
+   instead of clipping a half away. */
+.workspace-leaf-content div.view-content.stx-dual-root {
+	overflow-y: auto;
+	overflow-x: hidden;
+}
+
+.stx-dual-header {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	gap: 0.3em;
+	padding: 0.3em 0.35em;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.stx-dual-chip {
+	flex: 1 1 0;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: 0.35em;
+	padding: 0.35em 0.5em;
+	font-size: var(--font-ui-smaller);
+	background: var(--background-modifier-form-field);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	color: var(--text-normal);
+	cursor: pointer;
+	box-shadow: none;
+}
+
+.stx-dual-chip-label {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	text-align: left;
+}
+
+.stx-dual-chip-icon,
+.stx-dual-chip-chevron {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	color: var(--text-muted);
+}
+
+.stx-dual-chip-icon .svg-icon,
+.stx-dual-chip-chevron .svg-icon {
+	width: 1em;
+	height: 1em;
+}
+
+.stx-dual-swap {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0.35em;
+	background: transparent;
+	border: none;
+	box-shadow: none;
+	color: var(--text-muted);
+	cursor: pointer;
+}
+
+.stx-dual-swap:hover {
+	color: var(--text-normal);
+}
+
+/* Touch targets: the header is the only way to change halves on the phone. */
+.is-mobile .stx-dual-chip,
+.is-mobile .stx-dual-swap {
+	min-height: 2.4em;
+}
+
+.stx-dual-pane {
+	flex-basis: 0;
+	flex-shrink: 1;
+	/* flex-grow is written inline from the persisted split ratio. */
+	display: flex;
+	flex-direction: column;
+	min-height: 3.2em;
+	overflow: hidden;
+}
+
+.stx-dual-body {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	overflow-x: hidden;
+}
+
+/* The handle. Deliberately taller than it looks (a hairline is unhittable with
+   a thumb) and `touch-action: none` so the drag is ours, not the drawer's
+   scroll. */
+.stx-dual-divider {
+	flex: 0 0 auto;
+	height: 14px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: row-resize;
+	touch-action: none;
+	background: var(--background-secondary);
+	border-top: 1px solid var(--background-modifier-border);
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.is-mobile .stx-dual-divider {
+	height: 22px;
+}
+
+.stx-dual-grip {
+	width: 2.4em;
+	height: 3px;
+	border-radius: 3px;
+	background: var(--background-modifier-border-hover);
+}
+
+.stx-dual-divider:hover .stx-dual-grip,
+.stx-dual-divider.is-dragging .stx-dual-grip {
+	background: var(--interactive-accent);
+}
+
+.stx-dual-divider.is-dragging {
+	background: var(--background-modifier-hover);
+}
+
+/* Panels that centre their content on a wide pane must not do so in a half. */
+.stx-dual-body.stx-capture-root {
+	max-width: none;
+	margin-inline: 0;
 }

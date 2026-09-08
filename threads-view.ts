@@ -2,7 +2,7 @@
 // note outside the excluded folders (via ThreadService) and renders a list → flat
 // chronological thread view (4chan-style) with reply indicators and a reply
 // action. Primary reading surface is the phone.
-import { ItemView, Menu, Notice, WorkspaceLeaf, TAbstractFile, setIcon } from "obsidian";
+import { Menu, Notice, TAbstractFile, setIcon } from "obsidian";
 import type { CardsHost } from "./section-cards";
 import { ThreadService } from "./thread-service";
 import {
@@ -27,6 +27,8 @@ import {
 	type ThreadArea,
 } from "./thread-areas";
 import { wireLongPressMenu, showTagMenu as showTagMenuAt } from "./tag-menu";
+import { ToolboxPanel } from "./panel-base";
+import { ToolboxPanelView } from "./panel-view";
 
 /** A post the add-tag menu can act on — a thread post, a periodic-thought post,
  *  or a today's-thought post; all carry the fields the service needs to locate
@@ -39,7 +41,7 @@ export const THREADS_VIEW_TYPE = "shawns-toolbox-threads";
 const PREVIEW_LEN = 60;
 const REFRESH_DEBOUNCE_MS = 400;
 
-export class ThreadsView extends ItemView {
+export class ThreadsPanel extends ToolboxPanel {
 	private service: ThreadService;
 	private posts: ThreadPost[] = [];
 	private periodic: PeriodicPost[] = [];
@@ -64,22 +66,12 @@ export class ThreadsView extends ItemView {
 	private renderedMode: "list" | "thread" | "period" | "today" | null = null;
 	private listScroll = 0;
 
-	constructor(leaf: WorkspaceLeaf, private host: CardsHost) {
-		super(leaf);
+	constructor(host: CardsHost, contentEl: HTMLElement) {
+		super(host, contentEl);
 		this.service = new ThreadService(host.app, host.getSettings);
 	}
 
-	getViewType(): string {
-		return THREADS_VIEW_TYPE;
-	}
-	getDisplayText(): string {
-		return "Threads";
-	}
-	getIcon(): string {
-		return "messages-square";
-	}
-
-	async onOpen(): Promise<void> {
+	protected async onOpen(): Promise<void> {
 		this.contentEl.addClass("stx-threads");
 		const rescanOn = (file: TAbstractFile) => {
 			if (!this.service.isScannableFile(file)) return;
@@ -115,7 +107,7 @@ export class ThreadsView extends ItemView {
 		await this.refresh();
 	}
 
-	async onClose(): Promise<void> {
+	protected async onClose(): Promise<void> {
 		if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
 		this.contentEl.empty();
 	}
@@ -811,4 +803,22 @@ export class ThreadsView extends ItemView {
 
 function cap(s: string): string {
 	return s.length ? s[0].toUpperCase() + s.slice(1) : s;
+}
+
+export class ThreadsView extends ToolboxPanelView {
+	getViewType(): string {
+		return THREADS_VIEW_TYPE;
+	}
+
+	getDisplayText(): string {
+		return "Threads";
+	}
+
+	getIcon(): string {
+		return "messages-square";
+	}
+
+	protected createPanel(container: HTMLElement): ToolboxPanel {
+		return new ThreadsPanel(this.host, container);
+	}
 }

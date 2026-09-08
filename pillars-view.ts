@@ -3,9 +3,11 @@
 // cycles through every pillar with ◀ ▶ + a jump dropdown, remembers the
 // last-viewed pillar, and shows per-pillar the sections Shawn picks — reusing
 // the SectionCards machinery (targeted section read/write, never whole-note).
-import { ItemView, TFile, WorkspaceLeaf } from "obsidian";
+import { TFile } from "obsidian";
 import { SectionCards, type CardsHost } from "./section-cards";
 import { parsePillars, type PillarLink, type PillarSource } from "./pillar-core";
+import { ToolboxPanel } from "./panel-base";
+import { ToolboxPanelView } from "./panel-view";
 
 export const PILLARS_VIEW_TYPE = "shawns-toolbox-pillars";
 
@@ -50,27 +52,11 @@ class PillarRing implements PillarSource {
 	}
 }
 
-export class PillarsView extends ItemView {
+export class PillarsPanel extends ToolboxPanel {
 	private cards: SectionCards | null = null;
 	private ring: PillarRing | null = null;
 
-	constructor(leaf: WorkspaceLeaf, private host: CardsHost) {
-		super(leaf);
-	}
-
-	getViewType(): string {
-		return PILLARS_VIEW_TYPE;
-	}
-
-	getDisplayText(): string {
-		return "Pillars";
-	}
-
-	getIcon(): string {
-		return "layout-grid";
-	}
-
-	async onOpen(): Promise<void> {
+	protected async onOpen(): Promise<void> {
 		this.contentEl.empty();
 		this.ring = new PillarRing(this.host);
 		await this.ring.reload();
@@ -108,11 +94,29 @@ export class PillarsView extends ItemView {
 		void this.cards.rebuild();
 	}
 
-	async onClose(): Promise<void> {
+	protected async onClose(): Promise<void> {
 		if (this.cards) {
 			this.removeChild(this.cards);
 			this.cards = null;
 		}
 		this.ring = null;
+	}
+}
+
+export class PillarsView extends ToolboxPanelView {
+	getViewType(): string {
+		return PILLARS_VIEW_TYPE;
+	}
+
+	getDisplayText(): string {
+		return "Pillars";
+	}
+
+	getIcon(): string {
+		return "layout-grid";
+	}
+
+	protected createPanel(container: HTMLElement): ToolboxPanel {
+		return new PillarsPanel(this.host, container);
 	}
 }

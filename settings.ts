@@ -86,6 +86,14 @@ export interface ShawnsToolboxSettings {
 	/** Last-used day-list filter, persisted like the other panels' picks. */
 	dreamsFilter: "unprocessed" | "processed" | "all";
 
+	// Dual panel (two toolbox panels stacked in one leaf)
+	/** Panel id shown in the top half (see panel-registry.ts). */
+	dualTopPanel: string;
+	/** Panel id shown in the bottom half. */
+	dualBottomPanel: string;
+	/** The top half's share of the space the two panels divide (0.15–0.85). */
+	dualSplitRatio: number;
+
 	// Voice capture
 	groqApiKey: string;
 	groqModel: string;
@@ -174,6 +182,10 @@ export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
 	dreamsAgentNotesFolder: "AGENTS/timeline/agent-notes",
 	dreamsLegacyFolder: "AGENTS/workspace/dreaming",
 	dreamsFilter: "unprocessed",
+
+	dualTopPanel: "capture",
+	dualBottomPanel: "dreams",
+	dualSplitRatio: 0.5,
 
 	groqApiKey: "",
 	groqModel: "whisper-large-v3-turbo",

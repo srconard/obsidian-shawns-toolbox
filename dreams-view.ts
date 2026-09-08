@@ -10,7 +10,7 @@
 // dismisses it locally (greys it, no file write) so a day can be moved through
 // fast. A "Kept" view lists everything saved across all days. All reads/writes go
 // through DreamsService; the panel re-renders when any dream note changes.
-import { ItemView, Notice, WorkspaceLeaf, setIcon } from "obsidian";
+import { Notice, setIcon } from "obsidian";
 import type { CardsHost } from "./section-cards";
 import {
 	DreamsService,
@@ -27,6 +27,8 @@ import {
 	parkFailedAudio,
 	transcribeChain,
 } from "./voice-capture";
+import { ToolboxPanel } from "./panel-base";
+import { ToolboxPanelView } from "./panel-view";
 
 export const DREAMS_VIEW_TYPE = "shawns-toolbox-dreams";
 
@@ -40,7 +42,7 @@ const FILTER_LABELS: Record<DreamFilter, string> = {
 
 const THREAD_PREVIEW = 150;
 
-export class DreamsView extends ItemView {
+export class DreamsPanel extends ToolboxPanel {
 	private svc: DreamsService;
 	private mode: "list" | "day" | "kept" = "list";
 	private currentDayPath: string | null = null;
@@ -59,21 +61,9 @@ export class DreamsView extends ItemView {
 	private recorder: MicRecorder | null = null;
 	private recState: "idle" | "recording" | "transcribing" = "idle";
 
-	constructor(leaf: WorkspaceLeaf, private host: CardsHost) {
-		super(leaf);
+	constructor(host: CardsHost, contentEl: HTMLElement) {
+		super(host, contentEl);
 		this.svc = new DreamsService(host.app, () => host.getSettings());
-	}
-
-	getViewType(): string {
-		return DREAMS_VIEW_TYPE;
-	}
-
-	getDisplayText(): string {
-		return "Dreams";
-	}
-
-	getIcon(): string {
-		return "moon";
 	}
 
 	private get filter(): DreamFilter {
@@ -86,7 +76,7 @@ export class DreamsView extends ItemView {
 		await this.render();
 	}
 
-	async onOpen(): Promise<void> {
+	protected async onOpen(): Promise<void> {
 		const onNote = (f: { path: string }) => {
 			if (this.svc.watches(f.path)) void this.render();
 		};
@@ -110,7 +100,7 @@ export class DreamsView extends ItemView {
 		await this.render();
 	}
 
-	async onClose(): Promise<void> {
+	protected async onClose(): Promise<void> {
 		this.recorder?.cancel();
 		this.recorder = null;
 		this.recState = "idle";
@@ -762,4 +752,22 @@ export class DreamsView extends ItemView {
 
 function msg(prefix: string, err: unknown): string {
 	return `${prefix}: ${err instanceof Error ? err.message : String(err)}`;
+}
+
+export class DreamsView extends ToolboxPanelView {
+	getViewType(): string {
+		return DREAMS_VIEW_TYPE;
+	}
+
+	getDisplayText(): string {
+		return "Dreams";
+	}
+
+	getIcon(): string {
+		return "moon";
+	}
+
+	protected createPanel(container: HTMLElement): ToolboxPanel {
+		return new DreamsPanel(this.host, container);
+	}
 }

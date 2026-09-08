@@ -5,7 +5,7 @@
 // the recording, and the transcript lands on that day's daily note (created
 // from the template when missing). On the phone, the native right-edge swipe
 // opens this panel.
-import { ItemView, Notice, WorkspaceLeaf, normalizePath, setIcon } from "obsidian";
+import { Notice, normalizePath, setIcon } from "obsidian";
 import type { CaptureKind } from "./section-core";
 import {
 	CAPTURE_LABELS,
@@ -30,6 +30,8 @@ import { createDateBar, wireLongPress, type DateBar } from "./date-bar";
 import type { CardsHost } from "./section-cards";
 import { THOUGHT_PERIODS, applyPeriodTags } from "./thread-core";
 import { HighlightsService } from "./highlights-service";
+import { ToolboxPanel } from "./panel-base";
+import { ToolboxPanelView } from "./panel-view";
 
 export const VOICE_VIEW_TYPE = "shawns-toolbox-voice";
 
@@ -66,7 +68,7 @@ function pickMimeType(): string {
 	return "";
 }
 
-export class VoiceView extends ItemView {
+export class VoicePanel extends ToolboxPanel {
 	private recorder: MediaRecorder | null = null;
 	private stream: MediaStream | null = null;
 	private recordingKind: VoiceKind | null = null;
@@ -89,23 +91,7 @@ export class VoiceView extends ItemView {
 	private periodRow: HTMLElement | null = null;
 	private highlightsSvc: HighlightsService | null = null;
 
-	constructor(leaf: WorkspaceLeaf, private host: CardsHost) {
-		super(leaf);
-	}
-
-	getViewType(): string {
-		return VOICE_VIEW_TYPE;
-	}
-
-	getDisplayText(): string {
-		return "Voice capture";
-	}
-
-	getIcon(): string {
-		return "mic";
-	}
-
-	async onOpen(): Promise<void> {
+	protected async onOpen(): Promise<void> {
 		const root = this.contentEl;
 		root.empty();
 		root.addClass("stx-voice-root");
@@ -241,7 +227,7 @@ export class VoiceView extends ItemView {
 		this.periodRow?.toggleClass("is-live", live);
 	}
 
-	async onClose(): Promise<void> {
+	protected async onClose(): Promise<void> {
 		this.stopStream();
 	}
 
@@ -302,7 +288,7 @@ export class VoiceView extends ItemView {
 		}
 		if (
 			this.recordingKind !== null &&
-			VoiceView.switchable(this.recordingKind, kind)
+			VoicePanel.switchable(this.recordingKind, kind)
 		) {
 			// Mid-recording switch: the audio keeps rolling, only the routing
 			// changes ("I'm rambling — make this an AI Thought after all").
@@ -602,5 +588,23 @@ export class VoiceView extends ItemView {
 				8000
 			);
 		}
+	}
+}
+
+export class VoiceView extends ToolboxPanelView {
+	getViewType(): string {
+		return VOICE_VIEW_TYPE;
+	}
+
+	getDisplayText(): string {
+		return "Voice capture";
+	}
+
+	getIcon(): string {
+		return "mic";
+	}
+
+	protected createPanel(container: HTMLElement): ToolboxPanel {
+		return new VoicePanel(this.host, container);
 	}
 }

@@ -5,7 +5,7 @@
 // timeline folder, grouped by date. An "On this day" section surfaces past
 // years' highlights for the same calendar date. All reads/writes go through
 // HighlightsService; the panel re-renders when any timeline note changes.
-import { ItemView, Notice, WorkspaceLeaf, setIcon } from "obsidian";
+import { Notice, setIcon } from "obsidian";
 import type { CardsHost } from "./section-cards";
 import { HighlightsService, type DayHighlights } from "./highlights-service";
 import {
@@ -16,6 +16,8 @@ import {
 	stepAnchorIso,
 	type DateRange,
 } from "./date-nav";
+import { ToolboxPanel } from "./panel-base";
+import { ToolboxPanelView } from "./panel-view";
 
 export const HIGHLIGHTS_VIEW_TYPE = "shawns-toolbox-highlights";
 
@@ -28,7 +30,7 @@ const MODE_LABELS: Record<Mode, string> = {
 	range: "Range",
 };
 
-export class HighlightsView extends ItemView {
+export class HighlightsPanel extends ToolboxPanel {
 	private svc: HighlightsService;
 	private mode: Mode = "day";
 	/** Anchor date for day/week/month modes (YYYY-MM-DD). */
@@ -41,8 +43,8 @@ export class HighlightsView extends ItemView {
 	/** The highlight currently open for inline editing, if any. */
 	private editing: { dateIso: string; text: string } | null = null;
 
-	constructor(leaf: WorkspaceLeaf, private host: CardsHost) {
-		super(leaf);
+	constructor(host: CardsHost, contentEl: HTMLElement) {
+		super(host, contentEl);
 		this.svc = new HighlightsService(host.app, () => host.getSettings());
 		this.anchor = this.svc.todayIso();
 		const wk = weekRange(this.anchor);
@@ -50,19 +52,7 @@ export class HighlightsView extends ItemView {
 		this.rangeEnd = wk.end;
 	}
 
-	getViewType(): string {
-		return HIGHLIGHTS_VIEW_TYPE;
-	}
-
-	getDisplayText(): string {
-		return "Highlights";
-	}
-
-	getIcon(): string {
-		return "star";
-	}
-
-	async onOpen(): Promise<void> {
+	protected async onOpen(): Promise<void> {
 		const inTimeline = (path: string) =>
 			path.startsWith(this.svc.timelineFolder() + "/");
 		const onNote = (f: { path: string }) => {
@@ -79,7 +69,7 @@ export class HighlightsView extends ItemView {
 		await this.render();
 	}
 
-	async onClose(): Promise<void> {
+	protected async onClose(): Promise<void> {
 		this.contentEl.empty();
 	}
 
@@ -441,5 +431,23 @@ export class HighlightsView extends ItemView {
 		});
 
 		window.setTimeout(() => input.focus(), 0);
+	}
+}
+
+export class HighlightsView extends ToolboxPanelView {
+	getViewType(): string {
+		return HIGHLIGHTS_VIEW_TYPE;
+	}
+
+	getDisplayText(): string {
+		return "Highlights";
+	}
+
+	getIcon(): string {
+		return "star";
+	}
+
+	protected createPanel(container: HTMLElement): ToolboxPanel {
+		return new HighlightsPanel(this.host, container);
 	}
 }

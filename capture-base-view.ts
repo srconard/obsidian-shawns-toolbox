@@ -1,14 +1,16 @@
-// capture-base-view.ts — the capture surface itself, shared by both places it
-// is shown: the main-pane "blank screen" view (capture-view.ts) and the
-// right-sidebar panel (capture-side-view.ts). Nothing but an auto-focused
-// input, the four routing buttons, and the just-captured thought strip;
-// sections live in their own view (sections-view.ts).
+// capture-base-view.ts — the capture surface itself, shared by every place it
+// is shown: the main-pane "blank screen" view (capture-view.ts), the
+// right-sidebar panel (capture-side-view.ts) and either half of the dual panel
+// (dual-view.ts). Nothing but an auto-focused input, the four routing buttons,
+// and the just-captured thought strip; sections live in their own view
+// (sections-view.ts).
 //
-// The two surfaces differ ONLY in view type, tab title, icon and the extra
-// root class that tunes the layout for a narrow panel — every behaviour
-// (routing, long-press date bar, Mod+Enter, the recent strip's tag menu) is
-// defined once, here.
-import { ItemView, Notice, Scope, WorkspaceLeaf, setIcon } from "obsidian";
+// The surfaces differ ONLY in view type, tab title, icon and the extra root
+// class that tunes the layout for a narrow panel — every behaviour (routing,
+// long-press date bar, Mod+Enter, the recent strip's tag menu) is defined once,
+// here. Since v1.39.0 this is a ToolboxPanel (a Component rendering into a
+// container it is handed) rather than an ItemView, so a leaf can host two of it.
+import { Notice, Scope, setIcon } from "obsidian";
 import type { CaptureKind } from "./section-core";
 import {
 	CAPTURE_ICONS,
@@ -25,11 +27,12 @@ import { summarizeThreads } from "./thread-core";
 import { groupThreadsByArea } from "./thread-areas";
 import { wireLongPressMenu, showTagMenu, type TagTarget } from "./tag-menu";
 import { findLastMatching, normSpace, thoughtHead } from "./capture-recent";
+import { ToolboxPanel } from "./panel-base";
 
 /** How many just-captured thoughts stay long-pressable in the recent strip. */
 const RECENT_LIMIT = 8;
 
-export abstract class BaseCaptureView extends ItemView {
+export abstract class BaseCapturePanel extends ToolboxPanel {
 	private inputEl: HTMLTextAreaElement | null = null;
 	private submitting = false;
 	private dateBar: DateBar | null = null;
@@ -42,8 +45,8 @@ export abstract class BaseCaptureView extends ItemView {
 	 *  tag the thought (same menu as the Threads panel) without leaving capture. */
 	private recentEl: HTMLElement | null = null;
 
-	constructor(leaf: WorkspaceLeaf, protected host: CardsHost) {
-		super(leaf);
+	constructor(host: CardsHost, contentEl: HTMLElement) {
+		super(host, contentEl);
 		// Mod+Enter = Thought. Registered on the view's keymap scope because
 		// Obsidian's keymap claims the combo before a plain DOM listener on
 		// the textarea ever sees it.
@@ -67,7 +70,7 @@ export abstract class BaseCaptureView extends ItemView {
 		return true;
 	}
 
-	async onOpen(): Promise<void> {
+	protected async onOpen(): Promise<void> {
 		const root = this.contentEl;
 		root.empty();
 		root.addClass("stx-capture-root", "stx-capture-body");

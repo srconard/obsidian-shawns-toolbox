@@ -30,6 +30,7 @@ import { PillarsView, PILLARS_VIEW_TYPE } from "./pillars-view";
 import { GuidingQuestionsView, GUIDING_VIEW_TYPE } from "./guiding-view";
 import { HighlightsView, HIGHLIGHTS_VIEW_TYPE } from "./highlights-view";
 import { DreamsView, DREAMS_VIEW_TYPE } from "./dreams-view";
+import { DualPanelView, DUAL_VIEW_TYPE } from "./dual-view";
 import { fileShareToNote, registerFilingMenu } from "./filing-service";
 import type { CardsHost } from "./section-cards";
 
@@ -72,11 +73,6 @@ export default class ShawnsToolboxPlugin extends Plugin {
 		});
 
 		// ---- Note status ----
-
-		this.registerView(
-			STATUS_VIEW_TYPE,
-			(leaf: WorkspaceLeaf) => new StatusView(leaf)
-		);
 
 		this.addCommand({
 			id: "open-status-panel",
@@ -125,6 +121,10 @@ export default class ShawnsToolboxPlugin extends Plugin {
 		};
 
 		this.registerView(
+			STATUS_VIEW_TYPE,
+			(leaf: WorkspaceLeaf) => new StatusView(leaf, host)
+		);
+		this.registerView(
 			CAPTURE_VIEW_TYPE,
 			(leaf: WorkspaceLeaf) => new CaptureView(leaf, host)
 		);
@@ -163,6 +163,12 @@ export default class ShawnsToolboxPlugin extends Plugin {
 		this.registerView(
 			DREAMS_VIEW_TYPE,
 			(leaf: WorkspaceLeaf) => new DreamsView(leaf, host)
+		);
+		// Two panels stacked in one leaf — the only way to see two toolbox
+		// surfaces at once in the phone drawer, which shows one panel at a time.
+		this.registerView(
+			DUAL_VIEW_TYPE,
+			(leaf: WorkspaceLeaf) => new DualPanelView(leaf, host)
 		);
 
 		this.addCommand({
@@ -218,6 +224,11 @@ export default class ShawnsToolboxPlugin extends Plugin {
 			name: "Open dreams panel",
 			callback: () => void this.activateView(DREAMS_VIEW_TYPE, "right"),
 		});
+		this.addCommand({
+			id: "open-dual-panel",
+			name: "Open dual panel",
+			callback: () => void this.activateView(DUAL_VIEW_TYPE, "right"),
+		});
 		this.addRibbonIcon("zap", "Open capture view", () =>
 			void this.activateView(CAPTURE_VIEW_TYPE, "main")
 		);
@@ -241,6 +252,9 @@ export default class ShawnsToolboxPlugin extends Plugin {
 		);
 		this.addRibbonIcon("moon", "Open dreams panel", () =>
 			void this.activateView(DREAMS_VIEW_TYPE, "right")
+		);
+		this.addRibbonIcon("rows-2", "Open dual panel", () =>
+			void this.activateView(DUAL_VIEW_TYPE, "right")
 		);
 
 		// "Go to today" — jumps to (logical) today's daily note from anywhere,
