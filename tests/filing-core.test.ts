@@ -74,6 +74,42 @@ describe("formatResourceBlock", () => {
 		);
 	});
 
+	it("indents each quoted level by its depth (quote of a quote of a quote)", () => {
+		const children = [
+			{ note: "Library/Media Inbox/2026-09-09 Quoted.md", title: "Quoted", kind: "tweet", depth: 1 },
+			{ note: "Library/Media Inbox/2026-09-09 Deeper.md", title: "Deeper", kind: "tweet", depth: 2 },
+			{ note: "Library/Media Inbox/2026-09-09 Deepest.md", title: "Deepest", kind: "tweet", depth: 3 },
+			{ note: "Library/Media Inbox/2026-09-09 Linked.md", title: "Linked", kind: "article", depth: 1 },
+		];
+		expect(formatResourceBlock(main, children, "2026-09-09")).toBe(
+			[
+				"- [[2026-09-04 The Take|The Take]] >[[2026-09-09]]",
+				"\t- [[2026-09-09 Quoted|Quoted]]",
+				"\t\t- [[2026-09-09 Deeper|Deeper]]",
+				"\t\t\t- [[2026-09-09 Deepest|Deepest]]",
+				"\t- [[2026-09-09 Linked|Linked]]",
+			].join("\n")
+		);
+	});
+
+	it("clamps a hostile or nonsense depth into the tree instead of exploding it", () => {
+		const children = [
+			{ note: "a.md", title: "A", depth: 0 },
+			{ note: "b.md", title: "B", depth: 99 },
+			{ note: "c.md", title: "C", depth: -3 },
+			{ note: "d.md", title: "D", depth: Number.NaN },
+		];
+		expect(formatResourceBlock(main, children, "2026-09-09")).toBe(
+			[
+				"- [[2026-09-04 The Take|The Take]] >[[2026-09-09]]",
+				"\t- [[a|A]]",
+				"\t\t\t\t\t- [[b|B]]",
+				"\t- [[c|C]]",
+				"\t- [[d|D]]",
+			].join("\n")
+		);
+	});
+
 	it("appends cleanly under a # Resources section, creating it when missing", () => {
 		const note = ["---", "type: note", "---", "", "# Notes", "", "some text", ""].join("\n");
 		const block = formatResourceBlock(main, [], "2026-09-04");

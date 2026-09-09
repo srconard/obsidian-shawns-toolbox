@@ -11,6 +11,13 @@ export interface FiledResource {
 	title: string;
 	/** Media kind (tweet | article | …); present on children, optional on the main note. */
 	kind?: string;
+	/**
+	 * Quote nesting level of a child (server, 2026-09-09): 1 = quoted directly
+	 * by the shared tweet, 2 = the tweet THAT one quotes, … Linked articles are
+	 * always 1, and an older server that omits the field is read as 1, so the
+	 * one-level block is byte-identical to v1.37.0.
+	 */
+	depth?: number;
 }
 
 /** The media-inbox POST /ingest {filed:true} response shape. */
@@ -47,13 +54,17 @@ export function sanitizeAlias(title: string): string {
 		.trim();
 }
 
+/** Deepest quote level indented in the Resources tree (matches the server's cap). */
+const MAX_CHILD_DEPTH = 5;
+
 /**
  * Build the block appended under the target note's `# Resources` section:
  *   - [[<main>|<title>]] >[[<dateIso>]]
- *     - [[<child>|<title>]]
- *     - [[<child>|<title>]]
+ *     - [[<child>|<title>]]          (depth 1 — quoted tweet / linked article)
+ *       - [[<child>|<title>]]        (depth 2 — the tweet THAT one quotes)
  * The parent carries the provenance date (resource-schema link-line format);
- * each referenced resource is an indented child bullet beneath it.
+ * each referenced resource is a child bullet indented by its quote depth, so a
+ * quote-of-a-quote reads as the nesting it actually is.
  */
 export function formatResourceBlock(
 	main: FiledResource,
@@ -64,7 +75,11 @@ export function formatResourceBlock(
 		`[[${resourceLinkTarget(r.note)}|${sanitizeAlias(r.title)}]]`;
 	const lines = [`- ${link(main)} >[[${dateIso}]]`];
 	for (const child of children ?? []) {
-		lines.push(`\t- ${link(child)}`);
+		const depth = Math.min(
+			Math.max(Math.floor(child.depth ?? 1) || 1, 1),
+			MAX_CHILD_DEPTH
+		);
+		lines.push(`${"\t".repeat(depth)}- ${link(child)}`);
 	}
 	return lines.join("\n");
 }
