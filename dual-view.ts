@@ -7,9 +7,13 @@
 // view. This is that view: a small header with a selector per half, the two
 // panel bodies, and a draggable divider between them.
 //
-// Every half is a real ToolboxPanel from the registry — the same class the
+// A half shows either a real ToolboxPanel from the registry — the same class the
 // standalone view mounts (panel-base.ts / panel-registry.ts), so behaviour is
-// never reimplemented here and each standalone panel keeps working untouched.
+// never reimplemented here and each standalone panel keeps working untouched —
+// or (v1.40.0) ANY other view type registered with Obsidian, hosted in a
+// detached leaf whose container is re-parented into the half (foreign-host.ts).
+// Shawn, 2026-09-08: "it would be nice to select any but specifically the
+// calendar … so that anything in the side panel can go in there."
 //
 // Layout notes (the v1.7.5 / v1.36.0 / v1.38.0 footgun, paid forward):
 //   - The view's own `.view-content` needs a COMPOUND selector
@@ -25,6 +29,17 @@ import { ItemView, Menu, Notice, WorkspaceLeaf, setIcon } from "obsidian";
 import type { ToolboxPanel } from "./panel-base";
 import type { CardsHost } from "./section-cards";
 import { PANEL_IDS, PANEL_SPECS, panelSpec } from "./panel-registry";
+import {
+	foreignMenuEntries,
+	foreignType,
+	selectionIcon,
+	selectionLabel,
+} from "./foreign-core";
+import {
+	HostedViewSlot,
+	registeredViewTypes,
+	viewTypeAvailable,
+} from "./foreign-host";
 import {
 	applyDualChoice,
 	clampSplitRatio,
@@ -50,7 +65,10 @@ interface Half {
 	/** The element the panel renders into (and scrolls in); replaced on switch. */
 	bodyEl: HTMLElement;
 	chipEl: HTMLElement;
+	/** Set when this half shows a toolbox panel. */
 	panel: ToolboxPanel | null;
+	/** Set instead when this half hosts another Obsidian view. */
+	hosted: HostedViewSlot | null;
 }
 
 export class DualPanelView extends ItemView {
@@ -110,12 +128,14 @@ export class DualPanelView extends ItemView {
 				bodyEl: topPane.createDiv("stx-dual-body"),
 				chipEl: topChip,
 				panel: null,
+				hosted: null,
 			},
 			bottom: {
 				paneEl: bottomPane,
 				bodyEl: bottomPane.createDiv("stx-dual-body"),
 				chipEl: bottomChip,
 				panel: null,
+				hosted: null,
 			},
 		};
 
@@ -123,6 +143,14 @@ export class DualPanelView extends ItemView {
 		this.applyRatio();
 		this.mount("top");
 		this.mount("bottom");
+
+		// A hosted view's plugin can be enabled or disabled while this view is on
+		// screen. Obsidian rebuilds leaves of a vanished type, but ours is not in
+		// the workspace tree, so nothing would tell it — without this the half
+		// would keep showing a dead copy of a plugin that is no longer running.
+		this.registerEvent(
+			this.app.workspace.on("layout-change", () => this.verifyHosted())
+		);
 	}
 
 	async onClose(): Promise<void> {
@@ -147,48 +175,81 @@ export class DualPanelView extends ItemView {
 	private paintChip(half: DualHalf): void {
 		const h = this.halves?.[half];
 		if (!h) return;
-		const spec = panelSpec(this.selection[half]);
+		const id = this.selection[half];
+		const label = selectionLabel(id, (x) => panelSpec(x)?.label ?? null);
+		const icon = selectionIcon(id, (x) => panelSpec(x)?.icon ?? null);
 		h.chipEl.empty();
-		const icon = h.chipEl.createSpan("stx-dual-chip-icon");
-		setIcon(icon, spec?.icon ?? "help-circle");
-		h.chipEl.createSpan({
-			cls: "stx-dual-chip-label",
-			text: spec?.label ?? this.selection[half],
-		});
+		const iconEl = h.chipEl.createSpan("stx-dual-chip-icon");
+		setIcon(iconEl, icon);
+		h.chipEl.createSpan({ cls: "stx-dual-chip-label", text: label });
 		const chev = h.chipEl.createSpan("stx-dual-chip-chevron");
 		setIcon(chev, "chevron-down");
 		h.chipEl.setAttr(
 			"aria-label",
-			`${half === "top" ? "Top" : "Bottom"} panel: ${spec?.label ?? "none"}`
+			`${half === "top" ? "Top" : "Bottom"} panel: ${label}`
 		);
 	}
 
+	/**
+	 * The half's selector menu: the toolbox panels first (the ones this plugin
+	 * owns), then a separator, then every other view type Obsidian has
+	 * registered right now — core sidebar views and community-plugin views alike
+	 * (foreign-core.ts decides which are offerable and what they are called).
+	 * The list is read at open time, not cached, so enabling a plugin makes its
+	 * view selectable without reloading anything.
+	 */
 	private showPanelMenu(half: DualHalf, evt: MouseEvent): void {
 		const menu = new Menu();
 		const current = this.selection[half];
 		const taken = this.selection[otherHalf(half)];
-		for (const spec of PANEL_SPECS) {
+		const add = (
+			id: string,
+			label: string,
+			icon: string,
+			available = true
+		) => {
 			menu.addItem((item) => {
+				const title = !available
+					? `${label} (unavailable)`
+					: id === taken
+						? `${label} (swap)`
+						: label;
 				item
-					.setTitle(
-						spec.id === taken
-							? `${spec.label} (swap)`
-							: spec.label
-					)
-					.setIcon(spec.icon)
-					.setChecked(spec.id === current)
-					.onClick(() => void this.choose(half, spec.id));
+					.setTitle(title)
+					.setIcon(icon)
+					.setChecked(id === current)
+					.onClick(() => void this.choose(half, id));
 			});
+		};
+		for (const spec of PANEL_SPECS) {
+			add(spec.id, spec.label, spec.icon);
+		}
+		const entries = foreignMenuEntries(
+			registeredViewTypes(this.app),
+			current
+		);
+		if (entries.length) {
+			menu.addSeparator();
+			for (const { spec, available } of entries) {
+				add(spec.id, spec.label, spec.icon, available);
+			}
 		}
 		menu.showAtMouseEvent(evt);
 	}
 
-	/** Mount the panel this half is set to, into a fresh body element. */
+	/** Mount whatever this half is set to, into a fresh body element. */
 	private mount(half: DualHalf): void {
 		const h = this.halves?.[half];
 		if (!h) return;
 		this.paintChip(half);
-		const spec = panelSpec(this.selection[half]);
+		const id = this.selection[half];
+		const viewType = foreignType(id);
+		if (viewType) {
+			this.mountForeign(h, viewType);
+			this.adoptScope();
+			return;
+		}
+		const spec = panelSpec(id);
 		if (!spec) {
 			h.bodyEl.createDiv({
 				cls: "stx-empty",
@@ -212,6 +273,25 @@ export class DualPanelView extends ItemView {
 	}
 
 	/**
+	 * Host another Obsidian view in this half. The mount is async (building a
+	 * view state is), so the slot is recorded synchronously and the await guards
+	 * against the half having been switched or the whole view closed meanwhile —
+	 * otherwise a slow view would appear in a half that has moved on, and its
+	 * leaf would never be detached.
+	 */
+	private mountForeign(h: Half, viewType: string): void {
+		const slot = new HostedViewSlot(this.app, h.bodyEl, viewType);
+		h.hosted = slot;
+		void slot.mount().then(() => {
+			if (h.hosted !== slot) {
+				slot.dispose();
+				return;
+			}
+			slot.resize();
+		});
+	}
+
+	/**
 	 * Unmount a half and throw its body element away. Panels add their root
 	 * class (and sometimes inline styles) to the container they are handed, so a
 	 * fresh element is the only way to be sure nothing leaks from the panel that
@@ -223,6 +303,12 @@ export class DualPanelView extends ItemView {
 		if (h.panel) {
 			this.removeChild(h.panel);
 			h.panel = null;
+		}
+		if (h.hosted) {
+			// Must happen before the body element goes: an undetached leaf keeps
+			// its view loaded and its event handlers live for the whole session.
+			h.hosted.dispose();
+			h.hosted = null;
 		}
 		h.bodyEl.remove();
 		h.bodyEl = h.paneEl.createDiv("stx-dual-body");
@@ -247,6 +333,24 @@ export class DualPanelView extends ItemView {
 		this.ratio = swapSplitRatio(this.ratio);
 		this.remount(true);
 		await this.persist();
+	}
+
+	/**
+	 * Re-check each hosted half against the view types registered right now, and
+	 * remount the ones whose availability flipped: a disabled plugin turns its
+	 * half into the placeholder, and re-enabling it brings the view back without
+	 * Shawn having to touch the selector.
+	 */
+	private verifyHosted(): void {
+		if (!this.halves) return;
+		for (const half of ["top", "bottom"] as DualHalf[]) {
+			const h = this.halves[half];
+			const type = foreignType(this.selection[half]);
+			if (!type || !h.hosted) continue;
+			if (viewTypeAvailable(this.app, type) === h.hosted.isLive()) continue;
+			this.unmount(half);
+			this.mount(half);
+		}
 	}
 
 	private remount(ratioChangedToo: boolean): void {
@@ -332,6 +436,23 @@ export class DualPanelView extends ItemView {
 		const grow = splitGrow(this.ratio);
 		h.top.paneEl.style.flexGrow = String(grow.top);
 		h.bottom.paneEl.style.flexGrow = String(grow.bottom);
+		this.resizeHosted();
+	}
+
+	/**
+	 * A hosted view lays itself out from its container's size and never gets
+	 * Obsidian's own resize notification (it is not in the workspace tree), so
+	 * every size change we cause has to be forwarded. Toolbox panels are CSS-only
+	 * and need nothing.
+	 */
+	private resizeHosted(): void {
+		this.halves?.top.hosted?.resize();
+		this.halves?.bottom.hosted?.resize();
+	}
+
+	/** Obsidian resized the leaf (drawer opened, window resized, split moved). */
+	onResize(): void {
+		this.resizeHosted();
 	}
 
 	private async persist(): Promise<void> {

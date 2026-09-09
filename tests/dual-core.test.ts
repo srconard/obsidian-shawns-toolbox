@@ -139,6 +139,38 @@ describe("resolveDualSelection", () => {
 			resolveDualSelection(null, [], { top: "capture", bottom: "dreams" })
 		).toEqual({ top: "", bottom: "" });
 	});
+
+	// v1.40.0: a half can hold any registered Obsidian view ("view:<type>").
+	// Whether that view exists depends on which plugins are enabled right now,
+	// so the stored id is kept and the MOUNT decides — otherwise a half would
+	// silently reset to Capture every time the Calendar plugin was off.
+	it("keeps a hosted-view id even though it is not a panel id", () => {
+		expect(
+			resolveDualSelection(
+				{ top: "view:calendar", bottom: "view:outline" },
+				IDS,
+				{ top: "capture", bottom: "dreams" }
+			)
+		).toEqual({ top: "view:calendar", bottom: "view:outline" });
+	});
+
+	it("still rejects an unknown bare id next to a hosted-view id", () => {
+		expect(
+			resolveDualSelection({ top: "retired", bottom: "view:tag" }, IDS, {
+				top: "capture",
+				bottom: "dreams",
+			})
+		).toEqual({ top: "capture", bottom: "view:tag" });
+	});
+
+	it("accepts a hosted view as a configured default", () => {
+		expect(
+			resolveDualSelection(null, IDS, {
+				top: "view:calendar",
+				bottom: "dreams",
+			})
+		).toEqual({ top: "view:calendar", bottom: "dreams" });
+	});
 });
 
 describe("swap helpers", () => {
@@ -166,6 +198,22 @@ describe("swap helpers", () => {
 	it("names the other half", () => {
 		expect(otherHalf("top")).toBe("bottom");
 		expect(otherHalf("bottom")).toBe("top");
+	});
+});
+
+describe("applyDualChoice with hosted views", () => {
+	it("swaps rather than showing the same hosted view twice", () => {
+		const sel = { top: "view:calendar", bottom: "dreams" };
+		expect(applyDualChoice(sel, "bottom", "view:calendar")).toEqual({
+			top: "dreams",
+			bottom: "view:calendar",
+		});
+	});
+
+	it("sets a half to a hosted view like any other id", () => {
+		expect(
+			applyDualChoice({ top: "capture", bottom: "dreams" }, "bottom", "view:calendar")
+		).toEqual({ top: "capture", bottom: "view:calendar" });
 	});
 });
 

@@ -2,6 +2,11 @@
 // how a ratio becomes flex growth, and how a stored panel choice is validated
 // against the panels that actually exist. No Obsidian imports, so it is unit
 // tested directly (tests/dual-core.test.ts).
+//
+// A half's selection is a string id: a toolbox panel keeps its bare id
+// ("capture"), while any other Obsidian view hosted in a half (v1.40.0) is
+// namespaced "view:<type>" — see foreign-core.ts.
+import { isForeignId } from "./foreign-core";
 
 /** Which half of the dual panel. */
 export type DualHalf = "top" | "bottom";
@@ -69,10 +74,10 @@ export function ratioChanged(a: number, b: number): boolean {
 
 /**
  * Validate a stored selection against the panel ids that exist in this build.
- * An unknown id (a panel that was renamed or removed since data.json was
- * written) falls back to the default for that half, and the fallback itself
- * falls back to the first available panel — so the view can never come up with
- * an empty half.
+ * An unknown TOOLBOX id (a panel renamed or removed since data.json was written)
+ * falls back to the default for that half, and the fallback itself falls back to
+ * the first available panel — so the view can never come up with an empty half.
+ * A hosted-view id ("view:…") is always kept; see the note in `pick`.
  */
 export function resolveDualSelection(
 	stored: Partial<DualSelection> | null | undefined,
@@ -83,7 +88,15 @@ export function resolveDualSelection(
 		if (typeof value === "string" && availableIds.includes(value)) {
 			return value;
 		}
+		// A hosted Obsidian view ("view:calendar") is kept even though it is not
+		// in `availableIds`: whether that view type exists depends on which
+		// plugins are enabled RIGHT NOW, and resetting the half because the
+		// Calendar plugin happened to be off would silently lose Shawn's choice.
+		// The mount decides — an unavailable type renders a placeholder, and
+		// re-enabling the plugin brings the half back untouched.
+		if (isForeignId(value)) return value;
 		if (availableIds.includes(fallback)) return fallback;
+		if (isForeignId(fallback)) return fallback;
 		return availableIds[0] ?? "";
 	};
 	return {

@@ -2191,6 +2191,78 @@ div.view-content.stx-dual-root {
 	background: var(--background-modifier-hover);
 }
 
+/* A half hosting ANOTHER Obsidian view (v1.40.0). The leaf's container is a
+   plain element once re-parented out of the workspace, so it has none of the
+   sizing the workspace flex layout normally gives it — measured live: a
+   re-parented `.workspace-leaf` came up `offsetHeight: 0` until told to fill.
+   The half stops being the scroller here (`overflow: hidden`); the hosted
+   view's own `.view-content` scrolls, which is what every core view expects. */
+.stx-dual-body.stx-dual-foreign {
+	overflow: hidden;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.stx-dual-body.stx-dual-foreign > .workspace-leaf {
+	flex: 1 1 0;
+	min-height: 0;
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+}
+
+.stx-dual-body.stx-dual-foreign > .workspace-leaf > .workspace-leaf-content {
+	flex: 1 1 0;
+	min-height: 0;
+}
+
+/* The chip above the half already names it, and the tab header carries controls
+   (close / pin) that would act on a leaf that is not in the workspace. */
+.stx-dual-body.stx-dual-foreign .view-header {
+	display: none;
+}
+
+/* The workspace's own drag-to-resize edge; our divider is the only handle. */
+.stx-dual-body.stx-dual-foreign .workspace-leaf-resize-handle {
+	display: none;
+}
+
+/* Placeholder for a view whose plugin is disabled or uninstalled. The half
+   keeps the selection so re-enabling the plugin restores it untouched. */
+.stx-dual-missing {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 0.35em;
+	height: 100%;
+	padding: 1em 1.2em;
+	text-align: center;
+	color: var(--text-muted);
+}
+
+.stx-dual-missing-icon .svg-icon {
+	width: 1.6em;
+	height: 1.6em;
+	color: var(--text-faint);
+}
+
+.stx-dual-missing-title {
+	font-size: var(--font-ui-small);
+	color: var(--text-normal);
+}
+
+.stx-dual-missing-detail {
+	font-size: var(--font-ui-smaller);
+}
+
+.stx-dual-missing-type {
+	font-size: var(--font-ui-smaller);
+	font-family: var(--font-monospace);
+	color: var(--text-faint);
+}
+
 /* Panels that centre their content on a wide pane must not do so in a half. */
 .stx-dual-body.stx-capture-root {
 	max-width: none;
