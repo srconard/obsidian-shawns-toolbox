@@ -192,13 +192,31 @@ export abstract class BaseCapturePanel extends ToolboxPanel {
 		this.registerDomEvent(vv as unknown as HTMLElement, "resize", update);
 		this.registerDomEvent(vv as unknown as HTMLElement, "scroll", update);
 		this.registerDomEvent(window, "resize", update);
-		// The leaf resizes when the keyboard shows — that is the reliable signal.
+		// The leaf resizes when the keyboard shows — but on the way DOWN the
+		// resize fires while `--keyboard-height` is still non-zero and the
+		// variable is cleared afterwards with no further resize (phone probe
+		// 2026-09-13 19:43Z: keyboard 0px, class still set, buttons under the
+		// navbar). So: watch the variable itself (Obsidian writes it to the root
+		// element's style attribute) and re-check on a short tail after any
+		// trigger.
+		const settle = () => {
+			update();
+			for (const ms of [120, 400, 900]) window.setTimeout(update, ms);
+		};
 		if (typeof ResizeObserver !== "undefined") {
-			const ro = new ResizeObserver(() => update());
+			const ro = new ResizeObserver(settle);
 			ro.observe(root);
 			this.register(() => ro.disconnect());
 		}
-		update();
+		if (typeof MutationObserver !== "undefined") {
+			const mo = new MutationObserver(settle);
+			mo.observe(document.documentElement, { attributes: true, attributeFilter: ["style"] });
+			mo.observe(document.body, { attributes: true, attributeFilter: ["style", "class"] });
+			this.register(() => mo.disconnect());
+		}
+		this.registerDomEvent(root, "focusin", settle);
+		this.registerDomEvent(root, "focusout", settle);
+		settle();
 	}
 
 	/** Append the live geometry around the buttons to a vault note (phone diagnosis). */
