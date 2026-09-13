@@ -30,7 +30,7 @@ import { PillarsView, PILLARS_VIEW_TYPE } from "./pillars-view";
 import { GuidingQuestionsView, GUIDING_VIEW_TYPE } from "./guiding-view";
 import { HighlightsView, HIGHLIGHTS_VIEW_TYPE } from "./highlights-view";
 import { DreamsView, DREAMS_VIEW_TYPE } from "./dreams-view";
-import { DualPanelView, DUAL_VIEW_TYPE } from "./dual-view";
+import { DualPanelView, DUAL_VIEW_TYPE, DUAL_LEFT_VIEW_TYPE } from "./dual-view";
 import { DrawerChrome } from "./drawer-chrome";
 import { openVaultChooser } from "./settings";
 import { fileShareToNote, registerFilingMenu } from "./filing-service";
@@ -171,7 +171,11 @@ export default class ShawnsToolboxPlugin extends Plugin {
 		// surfaces at once in the phone drawer, which shows one panel at a time.
 		this.registerView(
 			DUAL_VIEW_TYPE,
-			(leaf: WorkspaceLeaf) => new DualPanelView(leaf, host)
+			(leaf: WorkspaceLeaf) => new DualPanelView(leaf, host, "right")
+		);
+		this.registerView(
+			DUAL_LEFT_VIEW_TYPE,
+			(leaf: WorkspaceLeaf) => new DualPanelView(leaf, host, "left")
 		);
 
 		this.addCommand({
@@ -232,6 +236,11 @@ export default class ShawnsToolboxPlugin extends Plugin {
 			name: "Open dual panel",
 			callback: () => void this.activateView(DUAL_VIEW_TYPE, "right"),
 		});
+		this.addCommand({
+			id: "open-dual-panel-left",
+			name: "Open dual panel (left)",
+			callback: () => void this.activateView(DUAL_LEFT_VIEW_TYPE, "left"),
+		});
 		// Desktop has no swipe; the dots work, but a hotkey is nicer.
 		for (const [id, name, dir] of [
 			["dual-panel-next-page", "Dual panel: next page", 1],
@@ -241,10 +250,13 @@ export default class ShawnsToolboxPlugin extends Plugin {
 				id,
 				name,
 				checkCallback: (checking) => {
-					const view = this.app.workspace
-						.getLeavesOfType(DUAL_VIEW_TYPE)
-						.map((l) => l.view)
-						.find((v): v is DualPanelView => v instanceof DualPanelView);
+					const active = this.app.workspace.activeLeaf?.view;
+					const view =
+						active instanceof DualPanelView
+							? active
+							: [...this.app.workspace.getLeavesOfType(DUAL_VIEW_TYPE), ...this.app.workspace.getLeavesOfType(DUAL_LEFT_VIEW_TYPE)]
+								.map((l) => l.view)
+								.find((v): v is DualPanelView => v instanceof DualPanelView);
 					if (!view) return false;
 					if (!checking) void view.stepPage(dir);
 					return true;
@@ -277,6 +289,9 @@ export default class ShawnsToolboxPlugin extends Plugin {
 		);
 		this.addRibbonIcon("rows-2", "Open dual panel", () =>
 			void this.activateView(DUAL_VIEW_TYPE, "right")
+		);
+		this.addRibbonIcon("panel-left", "Open dual panel (left)", () =>
+			void this.activateView(DUAL_LEFT_VIEW_TYPE, "left")
 		);
 
 		// "Go to today" — jumps to (logical) today's daily note from anywhere,

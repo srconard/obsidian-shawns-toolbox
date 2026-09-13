@@ -67,12 +67,26 @@ import {
 } from "./dual-core";
 
 export const DUAL_VIEW_TYPE = "shawns-toolbox-dual";
+/** v1.44.0: a second, independent dual panel for the LEFT sidebar / drawer
+ *  (Shawn, 2026-09-13: "add a dual panel for the left side panel so I can put
+ *  different things over there"). Same view class, its own pages + settings. */
+export const DUAL_LEFT_VIEW_TYPE = "shawns-toolbox-dual-left";
+
+export type DualSide = "right" | "left";
+
+/** Shipped page list for a left dual panel with nothing stored: Focus, then Threads. */
+const DEFAULT_LEFT_PAGES: DualPage[] = [
+	{ panels: ["focus"], ratios: [1] },
+	{ panels: ["threads"], ratios: [1] },
+];
 
 /** Fired on the workspace when the settings tab edits the page list. */
 export const DUAL_PAGES_CHANGED = "shawns-toolbox:dual-pages-changed";
 
 /** Shipped defaults for a build with no stored layout at all: capture over dreams. */
 const DEFAULT_LEGACY = { top: "capture", bottom: "dreams" };
+/** Only used to satisfy resolveDualPages' legacy seed for the left side (never shown). */
+const DEFAULT_LEFT_LEGACY = { top: "focus", bottom: "threads" };
 
 /** Minimum finger travel (px) for a page swipe. */
 const SWIPE_PX = 60;
@@ -101,16 +115,20 @@ export class DualPanelView extends ItemView {
 	private stackEl: HTMLElement | null = null;
 	private toggleEl: HTMLElement | null = null;
 
-	constructor(leaf: WorkspaceLeaf, private host: CardsHost) {
+	constructor(
+		leaf: WorkspaceLeaf,
+		private host: CardsHost,
+		readonly side: DualSide = "right"
+	) {
 		super(leaf);
 	}
 
 	getViewType(): string {
-		return DUAL_VIEW_TYPE;
+		return this.side === "left" ? DUAL_LEFT_VIEW_TYPE : DUAL_VIEW_TYPE;
 	}
 
 	getDisplayText(): string {
-		return "Dual panel";
+		return this.side === "left" ? "Dual panel (left)" : "Dual panel";
 	}
 
 	getIcon(): string {
@@ -161,7 +179,8 @@ export class DualPanelView extends ItemView {
 		// The settings tab edits the same page list; re-read and re-render.
 		this.registerEvent(
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			(this.app.workspace as any).on(DUAL_PAGES_CHANGED, () => {
+			(this.app.workspace as any).on(DUAL_PAGES_CHANGED, (side?: DualSide) => {
+				if (side && side !== this.side) return;
 				this.unmountAll();
 				this.loadLayout();
 				this.renderPage();
@@ -181,6 +200,21 @@ export class DualPanelView extends ItemView {
 
 	private loadLayout(): void {
 		const s = this.host.getSettings();
+		if (this.side === "left") {
+			const stored = resolveDualPages(s.dualLeftPages, PANEL_IDS, {
+				selection: DEFAULT_LEFT_LEGACY,
+				ratio: 0.5,
+			});
+			// resolveDualPages seeds an empty store from the two-half legacy shape;
+			// the left panel never had one, so an empty store means the left defaults.
+			this.pages =
+				Array.isArray(s.dualLeftPages) && s.dualLeftPages.length > 0
+					? stored
+					: DEFAULT_LEFT_PAGES.map((p) => ({ panels: [...p.panels], ratios: [...p.ratios] }));
+			this.pageIndex = clampPageIndex(s.dualLeftPage, this.pages.length);
+			this.collapsed = !!s.dualLeftHeaderCollapsed;
+			return;
+		}
 		this.pages = resolveDualPages(s.dualPages, PANEL_IDS, {
 			selection: {
 				top: s.dualTopPanel || DEFAULT_LEGACY.top,
@@ -194,12 +228,19 @@ export class DualPanelView extends ItemView {
 
 	private async persist(): Promise<void> {
 		const s = this.host.getSettings();
-		s.dualPages = this.pages.map((p) => ({
+		const pages = this.pages.map((p) => ({
 			panels: [...p.panels],
 			ratios: [...p.ratios],
 		}));
-		s.dualPage = this.pageIndex;
-		s.dualHeaderCollapsed = this.collapsed;
+		if (this.side === "left") {
+			s.dualLeftPages = pages;
+			s.dualLeftPage = this.pageIndex;
+			s.dualLeftHeaderCollapsed = this.collapsed;
+		} else {
+			s.dualPages = pages;
+			s.dualPage = this.pageIndex;
+			s.dualHeaderCollapsed = this.collapsed;
+		}
 		await this.host.saveSettings();
 	}
 
@@ -256,11 +297,18 @@ export class DualPanelView extends ItemView {
 			dot.addEventListener("click", () => void this.goToPage(i));
 		});
 
-		// Obsidian's drawer closes on a horizontal swipe; on page 2+ a rightward
-		// swipe must mean "previous page" instead, so the drawer is told to
-		// ignore swipes that start inside this view. On page 1 the stock gesture
-		// (swipe right = close) is left alone.
-		if (this.pageIndex > 0 && this.pages.length > 1) {
+		// Obsidian's drawer closes on a horizontal swipe toward its edge: right
+		// drawer = swipe right, left drawer = swipe left. Wherever that direction
+		// must mean a page change instead (right side: any page but the first;
+		// left side: any page but the last) the drawer is told to ignore swipes
+		// that start inside this view; on the remaining page the stock
+		// swipe-to-close is left alone.
+		const suppress =
+			this.pages.length > 1 &&
+			(this.side === "left"
+				? this.pageIndex < this.pages.length - 1
+				: this.pageIndex > 0);
+		if (suppress) {
 			this.contentEl.setAttr("data-ignore-swipe", "true");
 		} else {
 			this.contentEl.removeAttribute("data-ignore-swipe");

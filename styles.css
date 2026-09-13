@@ -146,6 +146,26 @@ body.is-phone.is-floating-nav .workspace-split.mod-root div.view-content.stx-cap
 	);
 }
 
+/* v1.44.0: belt and braces for a phone where `--keyboard-height` never moves —
+   capture-base-view.ts sets `stx-kb-open` from visualViewport, and
+   `--stx-kb-overhang` is how far the view still extends under the keyboard. */
+body.is-phone .workspace-split.mod-root div.view-content.stx-capture-root.stx-kb-open {
+	padding-bottom: var(--stx-kb-overhang, 0px);
+}
+
+/* Obsidian parks a 52px "mobile-toolbar-spacer" in the layout while it thinks
+   its toolbar is up; for a view that is not a markdown editor the toolbar has
+   no options (and is hidden below) but the spacer stays — Shawn's 09-13
+   screenshot geometry (34 + 13 + ~52px under the buttons) matches it exactly. */
+body.is-mobile:not(:has(.mobile-toolbar .mobile-toolbar-option)) .mobile-toolbar-spacer {
+	display: none;
+}
+
+.stx-capture-probe {
+	flex: 0 0 auto;
+	opacity: 0.45;
+}
+
 /* The blank screen: an invisible full-bleed textarea. */
 .stx-capture-body {
 	padding: 0.8em;
@@ -215,6 +235,10 @@ body.is-phone.is-floating-nav .workspace-split.mod-root div.view-content.stx-cap
 .stx-capture-buttons.stx-capture-icons {
 	grid-template-columns: repeat(4, 1fr);
 	gap: 0.45em;
+}
+
+.stx-capture-buttons.stx-capture-icons:has(.stx-capture-probe) {
+	grid-template-columns: repeat(4, 1fr) 2.2em;
 }
 
 .stx-capture-icons .stx-capture-btn {

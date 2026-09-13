@@ -14,7 +14,7 @@ import {
 import { PANEL_IDS, PANEL_SPECS, panelSpec } from "./panel-registry";
 import { listForeignViews, selectionLabel } from "./foreign-core";
 import { registeredViewTypes } from "./foreign-host";
-import { DUAL_PAGES_CHANGED } from "./dual-view";
+import { DUAL_PAGES_CHANGED, type DualSide } from "./dual-view";
 import type ShawnsToolboxPlugin from "./main";
 import type { CaptureKind } from "./section-core";
 import type { NoteScope } from "./capture-service";
@@ -117,6 +117,12 @@ export interface ShawnsToolboxSettings {
 	dualPage: number;
 	/** Whether the selector header is folded behind its chevron. */
 	dualHeaderCollapsed: boolean;
+	/** v1.44.0: the LEFT dual panel's own pages / page / header state. */
+	dualLeftPages: { panels: string[]; ratios: number[] }[];
+	dualLeftPage: number;
+	dualLeftHeaderCollapsed: boolean;
+	/** Show the 🐞 layout-probe button in the capture view (writes phone geometry to a note). */
+	captureLayoutProbe: boolean;
 
 	// Phone drawer chrome (v1.42.0)
 	/** Move Obsidian's panel-switcher pill into the drawer's bottom header row,
@@ -219,6 +225,10 @@ export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
 	dualPages: [],
 	dualPage: 0,
 	dualHeaderCollapsed: false,
+	dualLeftPages: [],
+	dualLeftPage: 0,
+	dualLeftHeaderCollapsed: false,
+	captureLayoutProbe: true,
 
 	drawerPillInHeader: true,
 
@@ -559,6 +569,18 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 			);
 		}
 
+		new Setting(containerEl)
+			.setName("Layout probe button (phone debugging)")
+			.setDesc("Shows a small 🐞 button beside the capture buttons. Tap it with the keyboard up: it appends the view's real geometry (keyboard, navbar, toolbar, paddings) to AGENTS/inbox/capture-layout-probe.md so the dead-space-under-the-buttons problem can be diagnosed from the phone itself. Turn off once fixed.")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.captureLayoutProbe)
+					.onChange(async (value) => {
+						this.plugin.settings.captureLayoutProbe = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
 		containerEl.createEl("p", {
 			text: "Periodic note paths as moment formats (no .md). Literal text goes in [brackets].",
 			cls: "setting-item-description",
@@ -733,7 +755,8 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 			});
 
 		// Voice capture section
-		this.renderDualPanelSection(containerEl);
+		this.renderDualPanelSection(containerEl, "right");
+		this.renderDualPanelSection(containerEl, "left");
 
 		containerEl.createEl("h3", { text: "Voice capture" });
 
@@ -903,24 +926,38 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 	 * Obsidian has registered right now (Calendar etc.). Edits are pushed to an
 	 * open dual view through the DUAL_PAGES_CHANGED workspace event.
 	 */
-	private renderDualPanelSection(containerEl: HTMLElement): void {
-		containerEl.createEl("h3", { text: "Dual panel pages" });
+	private renderDualPanelSection(containerEl: HTMLElement, side: DualSide): void {
+		const left = side === "left";
+		containerEl.createEl("h3", { text: left ? "Dual panel pages (left side panel)" : "Dual panel pages (right side panel)" });
 		containerEl.createEl("p", {
-			text: "The dual panel shows one page at a time; swipe left/right (or tap the dots) to move between pages. Each page stacks up to three panes. Page 1 is what opens first.",
+			text: (left
+				? "The left dual panel (Open dual panel (left) — the left drawer on the phone) has its own pages. "
+				: "The dual panel shows one page at a time; swipe left/right (or tap the dots) to move between pages. ") +
+				"Each page stacks up to three panes. Page 1 is what opens first.",
 			cls: "setting-item-description",
 		});
 
 		const s = this.plugin.settings;
-		const pages = resolveDualPages(s.dualPages, PANEL_IDS, {
-			selection: { top: s.dualTopPanel, bottom: s.dualBottomPanel },
-			ratio: s.dualSplitRatio,
-		});
+		const pages = left
+			? (Array.isArray(s.dualLeftPages) && s.dualLeftPages.length > 0
+				? resolveDualPages(s.dualLeftPages, PANEL_IDS, { selection: { top: "focus", bottom: "threads" }, ratio: 0.5 })
+				: [{ panels: ["focus"], ratios: [1] }, { panels: ["threads"], ratios: [1] }])
+			: resolveDualPages(s.dualPages, PANEL_IDS, {
+				selection: { top: s.dualTopPanel, bottom: s.dualBottomPanel },
+				ratio: s.dualSplitRatio,
+			});
 		const save = async (next: DualPage[]) => {
-			s.dualPages = next.map((p) => ({ panels: [...p.panels], ratios: [...p.ratios] }));
-			s.dualPage = clampPageIndex(s.dualPage, next.length);
+			const copy = next.map((p) => ({ panels: [...p.panels], ratios: [...p.ratios] }));
+			if (left) {
+				s.dualLeftPages = copy;
+				s.dualLeftPage = clampPageIndex(s.dualLeftPage, next.length);
+			} else {
+				s.dualPages = copy;
+				s.dualPage = clampPageIndex(s.dualPage, next.length);
+			}
 			await this.plugin.saveSettings();
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			(this.app.workspace as any).trigger(DUAL_PAGES_CHANGED);
+			(this.app.workspace as any).trigger(DUAL_PAGES_CHANGED, side);
 			this.display();
 		};
 

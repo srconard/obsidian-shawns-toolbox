@@ -10,7 +10,7 @@
 // long-press date bar, Mod+Enter, the recent strip's tag menu) is defined once,
 // here. Since v1.39.0 this is a ToolboxPanel (a Component rendering into a
 // container it is handed) rather than an ItemView, so a leaf can host two of it.
-import { Notice, Scope, setIcon } from "obsidian";
+import { Notice, Platform, Scope, setIcon, normalizePath } from "obsidian";
 import type { CaptureKind } from "./section-core";
 import {
 	CAPTURE_ICONS,
@@ -138,7 +138,19 @@ export abstract class BaseCapturePanel extends ToolboxPanel {
 			});
 		}
 
+		if (this.host.getSettings().captureLayoutProbe && Platform.isMobile) {
+			const probe = buttons.createEl("button", {
+				cls: "stx-capture-btn stx-capture-probe",
+				attr: { "aria-label": "Layout probe (writes geometry to a note)", title: "Layout probe" },
+			});
+			const pi = probe.createSpan("stx-capture-btn-icon");
+			setIcon(pi, "bug");
+			probe.addEventListener("pointerdown", (e) => e.preventDefault()); // keep the keyboard up
+			probe.addEventListener("click", () => void this.writeLayoutProbe());
+		}
+
 		this.recentEl = root.createDiv("stx-capture-recent");
+		this.watchKeyboard(root);
 
 		// Backup DOM path for Mod+Enter (the scope handler above is primary;
 		// defaultPrevented guards against double-submit when both fire).
@@ -150,6 +162,72 @@ export abstract class BaseCapturePanel extends ToolboxPanel {
 			}
 		});
 		if (this.autoFocus()) window.setTimeout(() => input.focus(), 0);
+	}
+
+	/**
+	 * v1.44.0: the phone keyboard as a class. Obsidian publishes
+	 * `--keyboard-height` (used by the CSS padding formula), but a build where
+	 * that variable stays 0 would leave the safe-area + navbar padding under the
+	 * buttons as a dead row with the keyboard up. `visualViewport` shrinks with
+	 * the keyboard on Android regardless, so it toggles `stx-kb-open` here and
+	 * the CSS zeroes the padding on that class as well.
+	 */
+	private watchKeyboard(root: HTMLElement): void {
+		const vv = window.visualViewport;
+		if (!vv || !Platform.isMobile) return;
+		const update = () => {
+			const open = window.innerHeight - vv.height > 120;
+			root.toggleClass("stx-kb-open", open);
+			// adjustPan-style layouts leave the view extending under the keyboard:
+			// pad the overhang away so the buttons end at the visible bottom.
+			const overhang = root.getBoundingClientRect().bottom - (vv.offsetTop + vv.height);
+			root.style.setProperty("--stx-kb-overhang", open && overhang > 0 ? `${Math.round(overhang)}px` : "0px");
+		};
+		this.registerDomEvent(vv as unknown as HTMLElement, "resize", update);
+		this.registerDomEvent(vv as unknown as HTMLElement, "scroll", update);
+		this.registerDomEvent(window, "resize", update);
+		update();
+	}
+
+	/** Append the live geometry around the buttons to a vault note (phone diagnosis). */
+	private async writeLayoutProbe(): Promise<void> {
+		const root = this.contentEl;
+		const q = (sel: string) => document.querySelector<HTMLElement>(sel);
+		const rect = (el: Element | null) => {
+			if (!el) return "—";
+			const r = el.getBoundingClientRect();
+			return `top ${Math.round(r.top)} bottom ${Math.round(r.bottom)} h ${Math.round(r.height)}`;
+		};
+		const pad = (el: Element | null) => (el ? getComputedStyle(el).paddingBottom : "—");
+		const docStyle = getComputedStyle(document.documentElement);
+		const bodyStyle = getComputedStyle(document.body);
+		const vv = window.visualViewport;
+		const lines: string[] = [];
+		lines.push(`## ${new Date().toISOString()} — capture layout probe (${this.variantClass() || "main"})`);
+		lines.push(`- window.innerHeight ${window.innerHeight} · visualViewport ${vv ? `h ${Math.round(vv.height)} top ${Math.round(vv.offsetTop)}` : "n/a"} · classes ${root.className}`);
+		lines.push(`- --keyboard-height ${docStyle.getPropertyValue("--keyboard-height") || "(unset)"} · --safe-area-inset-bottom ${bodyStyle.getPropertyValue("--safe-area-inset-bottom")} · --mobile-toolbar-height ${bodyStyle.getPropertyValue("--mobile-toolbar-height")} · body ${document.body.className}`);
+		lines.push(`- root .view-content: ${rect(root)} · padding-bottom ${pad(root)} · overhang var ${root.style.getPropertyValue("--stx-kb-overhang")}`);
+		lines.push(`- buttons: ${rect(root.querySelector(".stx-capture-buttons"))} · input: ${rect(root.querySelector(".stx-capture-input"))}`);
+		let el: HTMLElement | null = root.parentElement;
+		while (el && el !== document.body) {
+			const cls = el.className.toString().split(" ").slice(0, 3).join(".");
+			lines.push(`- ancestor ${el.tagName.toLowerCase()}.${cls}: ${rect(el)} · padding-bottom ${pad(el)} · height ${getComputedStyle(el).height}`);
+			el = el.parentElement;
+		}
+		for (const sel of [".mobile-navbar", ".mobile-toolbar", ".mobile-toolbar-spacer", ".mobile-toolbar-options-container"]) {
+			const e = q(sel);
+			lines.push(`- ${sel}: ${e ? `${rect(e)} · display ${getComputedStyle(e).display} · parent ${e.parentElement?.className.toString().slice(0, 40)} · options ${e.querySelectorAll(".mobile-toolbar-option").length}` : "absent"}`);
+		}
+		const path = normalizePath("AGENTS/inbox/capture-layout-probe.md");
+		const text = lines.join("\n") + "\n\n";
+		try {
+			const existing = this.app.vault.getFileByPath(path);
+			if (existing) await this.app.vault.append(existing, text);
+			else await this.app.vault.create(path, `# Capture layout probe\n\n${text}`);
+			new Notice("Layout probe written → AGENTS/inbox/capture-layout-probe.md");
+		} catch (e) {
+			new Notice(`Probe failed: ${e instanceof Error ? e.message : String(e)}`);
+		}
 	}
 
 	private hideDateBar(): void {
