@@ -176,7 +176,13 @@ export abstract class BaseCapturePanel extends ToolboxPanel {
 		const vv = window.visualViewport;
 		if (!vv || !Platform.isMobile) return;
 		const update = () => {
-			const open = window.innerHeight - vv.height > 120;
+			// Android Obsidian: the app shrinks and `--keyboard-height` is set on
+			// the root element, but window.innerHeight and the visual viewport do
+			// not change (phone probe, 2026-09-13). Read the variable first.
+			const kb = parseFloat(
+				getComputedStyle(document.documentElement).getPropertyValue("--keyboard-height")
+			);
+			const open = (Number.isFinite(kb) && kb > 0) || window.innerHeight - vv.height > 120;
 			root.toggleClass("stx-kb-open", open);
 			// adjustPan-style layouts leave the view extending under the keyboard:
 			// pad the overhang away so the buttons end at the visible bottom.
@@ -186,6 +192,12 @@ export abstract class BaseCapturePanel extends ToolboxPanel {
 		this.registerDomEvent(vv as unknown as HTMLElement, "resize", update);
 		this.registerDomEvent(vv as unknown as HTMLElement, "scroll", update);
 		this.registerDomEvent(window, "resize", update);
+		// The leaf resizes when the keyboard shows — that is the reliable signal.
+		if (typeof ResizeObserver !== "undefined") {
+			const ro = new ResizeObserver(() => update());
+			ro.observe(root);
+			this.register(() => ro.disconnect());
+		}
 		update();
 	}
 

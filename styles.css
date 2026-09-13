@@ -140,15 +140,22 @@
    root split (drawers have no navbar) and to the floating navbar (a docked
    one is in-flow and needs no clearance). (0,4,2) beats Obsidian's rule. */
 body.is-phone.is-floating-nav .workspace-split.mod-root div.view-content.stx-capture-root {
+	/* v1.44.1 — the phone's own probe (2026-09-13 17:50Z) showed Android
+	   Obsidian sets `--safe-area-inset-bottom` EQUAL to `--keyboard-height`
+	   while the keyboard is up (both 332px), so "safe + navbar − keyboard"
+	   cancelled to exactly the 52px navbar allowance: the surviving gap. The
+	   keyboard term is multiplied so any open keyboard swamps the sum → 0. */
 	padding-bottom: max(
 		0px,
-		calc(var(--safe-area-inset-bottom, 0px) + var(--mobile-toolbar-height, 52px) + 0.4em - var(--keyboard-height, 0px))
+		calc(var(--safe-area-inset-bottom, 0px) + var(--mobile-toolbar-height, 52px) + 0.4em - var(--keyboard-height, 0px) * 10)
 	);
 }
 
-/* v1.44.0: belt and braces for a phone where `--keyboard-height` never moves —
-   capture-base-view.ts sets `stx-kb-open` from visualViewport, and
-   `--stx-kb-overhang` is how far the view still extends under the keyboard. */
+/* v1.44.0/1: `stx-kb-open` is set by capture-base-view.ts from
+   `--keyboard-height` (re-read whenever the view resizes — the leaf shrinks
+   when the keyboard shows; the probe showed visualViewport does NOT) and from
+   visualViewport as a fallback; `--stx-kb-overhang` is how far the view still
+   extends under the keyboard (0 on Android, where the app shrinks). */
 body.is-phone .workspace-split.mod-root div.view-content.stx-capture-root.stx-kb-open {
 	padding-bottom: var(--stx-kb-overhang, 0px);
 }
