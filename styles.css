@@ -127,6 +127,25 @@
 	margin-inline: auto;
 }
 
+/* Phone, main pane (v1.43.1, Shawn 2026-09-13 screenshots): the buttons sat
+   BEHIND Obsidian's floating navbar, and a blank row appeared under them with
+   the keyboard up. Measured under phone emulation: `.mobile-navbar` is
+   `position: fixed; bottom: 0; height: 52px` — an overlay Obsidian pads for
+   only in its own markdown views — and `.view-content` keeps its 34px
+   safe-area padding after the keyboard (which covers that inset) has
+   shrunk the leaf. Obsidian publishes the keyboard as `--keyboard-height` on
+   the root element (0px when closed), so one formula does both: closed →
+   safe area + navbar clearance; open → the negative keyboard term clamps the
+   padding to 0 and the buttons sit right on the keyboard. Scoped to the
+   root split (drawers have no navbar) and to the floating navbar (a docked
+   one is in-flow and needs no clearance). (0,4,2) beats Obsidian's rule. */
+body.is-phone.is-floating-nav .workspace-split.mod-root div.view-content.stx-capture-root {
+	padding-bottom: max(
+		0px,
+		calc(var(--safe-area-inset-bottom, 0px) + var(--mobile-toolbar-height, 52px) + 0.4em - var(--keyboard-height, 0px))
+	);
+}
+
 /* The blank screen: an invisible full-bleed textarea. */
 .stx-capture-body {
 	padding: 0.8em;
