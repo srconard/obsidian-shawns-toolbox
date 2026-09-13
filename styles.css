@@ -189,6 +189,49 @@
 	gap: 0.6em;
 }
 
+/* v1.42.0 (Shawn, 2026-09-13): "make the buttons smaller, remove the words
+   and just leave the icons" — one row of four icon buttons on every capture
+   surface (main view, side panel, dual half). The label span stays in the DOM
+   for aria-label/hover; a long-press flashes it as .stx-capture-btn-tip. */
+.stx-capture-buttons.stx-capture-icons {
+	grid-template-columns: repeat(4, 1fr);
+	gap: 0.45em;
+}
+
+.stx-capture-icons .stx-capture-btn {
+	position: relative;
+	min-height: 2.5em;
+	padding: 0.3em;
+}
+
+.stx-capture-icons .stx-capture-btn-label {
+	display: none;
+}
+
+.stx-capture-icons .stx-capture-btn-icon .svg-icon {
+	width: 1.35em;
+	height: 1.35em;
+}
+
+.is-mobile .stx-capture-icons .stx-capture-btn {
+	min-height: 2.9em;
+}
+
+.stx-capture-btn-tip {
+	position: absolute;
+	left: 50%;
+	bottom: calc(100% + 0.3em);
+	transform: translateX(-50%);
+	padding: 0.2em 0.55em;
+	border-radius: var(--radius-s);
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+	font-size: var(--font-ui-smaller);
+	white-space: nowrap;
+	pointer-events: none;
+	z-index: 2;
+}
+
 .stx-capture-btn {
 	display: flex;
 	align-items: center;
@@ -848,32 +891,57 @@ body.is-mobile .mobile-toolbar:not(:has(.mobile-toolbar-option)) {
 	display: none;
 }
 
-/* Compact mobile sidebar panel switcher (v1.35.0, Shawn 2026-09-04): the
-   "Voice capture" pill + up/down chevron at the bottom of the mobile drawer
-   (Obsidian's own .workspace-drawer-tab-select) was a full 52px touch row —
-   Shawn asked for it "smaller". Roughly halve it to a compact single-line
-   row: shorter height, tighter inner padding, smaller label + chevron. Only
-   the collapsed pill is touched; the expanded tab-options list keeps its
-   full-size tap targets. Scoped to phone so nothing changes on desktop. */
-body.is-phone .workspace-drawer-tab-select {
-	height: var(--touch-size-xs);
-	font-size: var(--font-ui-smaller);
+/* ---- Phone drawer footer row (v1.42.0, Shawn 2026-09-13) ----
+   drawer-chrome.ts moves each drawer's header ICONS (settings gear on the
+   left drawer, sync status on the right) into Obsidian's own
+   .workspace-drawer-tab-options element — the one holding the panel-picker
+   pill — and hides the emptied header row. The pill itself never moves: its
+   tap handler is registered on the options element and checks the target is
+   inside it (measured live, v1.42.0), so re-parenting the pill kills the tap.
+   The header row carried the vault name + file count (left) and the open
+   note's name + word/character count (right); both are gone, as asked, and
+   vault switching lives in the toolbox settings tab + a command.
+
+   Measured stock phone layout (Obsidian 1.12.7, is-phone): the options
+   element is a 52px flex column at the bottom of the active-tab container
+   (`order: 2`), the pill fills it, and the options LIST is absolutely
+   positioned inside it opening upward (`bottom: 0`, padding-bottom 52px so
+   the pill overlays its foot, pill z-index 5). Turning the element into a
+   row leaves the absolute list untouched — it still opens upward from the
+   same box, now spanning under the icons too, which sit above it like the
+   pill does. The v1.35.0 half-height pill rules are retired: Shawn asked for
+   it "taller again, similar height to the check box" — stock 52px it is,
+   beside the 44px round icon.
+
+   Everything is gated on the classes drawer-chrome.ts adds and on
+   body.is-phone, so a tablet/desktop, a build with no drawers, or the setting
+   turned off is stock. */
+body.is-phone .workspace-drawer-header.stx-drawer-header-hidden {
+	display: none;
 }
-body.is-phone
-	.workspace-drawer-tab-select
-	.workspace-tab-header-inner {
-	padding: var(--size-4-1) var(--size-4-3);
+
+body.is-phone .workspace-drawer-tab-options.stx-drawer-options-row {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: var(--size-4-2);
+	/* the hidden header row had 12px above it; keep that breathing room */
+	margin-bottom: var(--size-4-3);
 }
-body.is-phone
-	.workspace-drawer-tab-select
-	.workspace-tab-header-inner-icon {
-	--icon-size: var(--icon-xs);
+
+body.is-phone .stx-drawer-options-row > .workspace-drawer-tab-select {
+	flex: 1 1 auto;
+	min-width: 0;
 }
-body.is-phone
-	.workspace-drawer-tab-select
-	.workspace-tab-header-inner
-	.workspace-drawer-active-tab-chevron {
-	--icon-size: var(--icon-xs);
+
+body.is-phone .stx-drawer-options-row > .workspace-drawer-header-icon {
+	flex: 0 0 auto;
+	/* the pill is `order: 2` in stock CSS — trail it, so the gear / sync icon
+	   sits at the RIGHT end of the row where the sync check was */
+	order: 3;
+	/* above the upward-opening options list, like the pill (z-index 5) */
+	position: relative;
+	z-index: 5;
 }
 
 /* AI Thought voice button (v1.8.0) — sparkles variant of the thought button */

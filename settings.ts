@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Setting } from "obsidian";
+import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import type ShawnsToolboxPlugin from "./main";
 import type { CaptureKind } from "./section-core";
 import type { NoteScope } from "./capture-service";
@@ -94,6 +94,12 @@ export interface ShawnsToolboxSettings {
 	/** The top half's share of the space the two panels divide (0.15–0.85). */
 	dualSplitRatio: number;
 
+	// Phone drawer chrome (v1.42.0)
+	/** Move Obsidian's panel-switcher pill into the drawer's bottom header row,
+	 *  next to the settings gear (left) / sync icon (right), and hide the vault
+	 *  switcher + open-note info that row carried. Mobile only. */
+	drawerPillInHeader: boolean;
+
 	// Voice capture
 	groqApiKey: string;
 	groqModel: string;
@@ -187,6 +193,8 @@ export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
 	dualBottomPanel: "dreams",
 	dualSplitRatio: 0.5,
 
+	drawerPillInHeader: true,
+
 	groqApiKey: "",
 	groqModel: "whisper-large-v3-turbo",
 	openaiSttModel: "whisper-1",
@@ -217,6 +225,35 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 		containerEl.createEl("h2", {
 			text: `Shawn's Toolbox Settings — v${this.plugin.manifest.version}`,
 		});
+
+		// ---- Vault & phone drawer (v1.42.0) ----
+		containerEl.createEl("h3", { text: "Vault & phone drawer" });
+
+		new Setting(containerEl)
+			.setName("Manage vaults")
+			.setDesc(
+				"Open Obsidian's vault chooser to switch vaults. The phone drawer's own vault switcher is hidden while the panel picker sits in its place (below)."
+			)
+			.addButton((btn) =>
+				btn
+					.setButtonText("Open vault chooser")
+					.onClick(() => openVaultChooser(this.app))
+			);
+
+		new Setting(containerEl)
+			.setName("Panel picker in the drawer footer (phone)")
+			.setDesc(
+				"Move the side-panel picker pill into the bottom row of each drawer, next to the settings gear (left) and the sync icon (right), and hide the vault switcher, file count and open-note word count that row showed. Takes effect immediately."
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.drawerPillInHeader)
+					.onChange(async (value) => {
+						this.plugin.settings.drawerPillInHeader = value;
+						await this.plugin.saveSettings();
+						this.plugin.refreshDrawerChrome();
+					})
+			);
 
 		// Checkbox Completion Stamping section
 		containerEl.createEl("h3", { text: "Checkbox Completion Stamping" });
@@ -830,4 +867,22 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 				text.inputEl.style.width = "300px";
 			});
 	}
+}
+
+/**
+ * Open Obsidian's vault chooser — the screen the phone drawer's vault switcher
+ * led to. `app.openVaultChooser()` is what Obsidian's own "Manage vaults"
+ * command (`app:open-vault`) calls; it is not in the public typings, so the
+ * command is the fallback when a build renames it.
+ */
+export function openVaultChooser(app: App): void {
+	/* eslint-disable @typescript-eslint/no-explicit-any */
+	const a = app as any;
+	if (typeof a.openVaultChooser === "function") {
+		a.openVaultChooser();
+		return;
+	}
+	const ran = a.commands?.executeCommandById?.("app:open-vault");
+	if (!ran) new Notice("This Obsidian build has no vault chooser command");
+	/* eslint-enable @typescript-eslint/no-explicit-any */
 }

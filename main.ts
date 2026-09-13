@@ -31,6 +31,8 @@ import { GuidingQuestionsView, GUIDING_VIEW_TYPE } from "./guiding-view";
 import { HighlightsView, HIGHLIGHTS_VIEW_TYPE } from "./highlights-view";
 import { DreamsView, DREAMS_VIEW_TYPE } from "./dreams-view";
 import { DualPanelView, DUAL_VIEW_TYPE } from "./dual-view";
+import { DrawerChrome } from "./drawer-chrome";
+import { openVaultChooser } from "./settings";
 import { fileShareToNote, registerFilingMenu } from "./filing-service";
 import type { CardsHost } from "./section-cards";
 
@@ -41,6 +43,7 @@ export default class ShawnsToolboxPlugin extends Plugin {
 		enabled: true,
 	};
 	private statusFooter: StatusFooter | null = null;
+	private drawerChrome: DrawerChrome | null = null;
 	private mentionsFooter: MentionsFooter | null = null;
 	/** Shared across ```threads block renders so the mtime cache persists. */
 	private threadService: ThreadService | null = null;
@@ -268,6 +271,25 @@ export default class ShawnsToolboxPlugin extends Plugin {
 			void this.openToday()
 		);
 
+		// Phone drawer chrome (v1.42.0): the panel-picker pill moves into the
+		// drawer's bottom row. Applied once the layout exists and re-checked on
+		// every layout change (idempotent), undone on unload.
+		this.drawerChrome = new DrawerChrome(
+			this.app,
+			() => this.settings.drawerPillInHeader
+		);
+		this.app.workspace.onLayoutReady(() => this.refreshDrawerChrome());
+		this.registerEvent(
+			this.app.workspace.on("layout-change", () =>
+				this.refreshDrawerChrome()
+			)
+		);
+		this.addCommand({
+			id: "open-vault-chooser",
+			name: "Switch vault (open the vault chooser)",
+			callback: () => openVaultChooser(this.app),
+		});
+
 		this.statusFooter = new StatusFooter(this.app, () => this.settings);
 		const footer = this.statusFooter;
 		this.registerEvent(
@@ -324,6 +346,7 @@ export default class ShawnsToolboxPlugin extends Plugin {
 	}
 
 	onunload(): void {
+		this.drawerChrome?.restore();
 		this.statusFooter?.unmount();
 		this.mentionsFooter?.unmount();
 		console.log("Shawn's Toolbox unloaded");
@@ -437,6 +460,11 @@ export default class ShawnsToolboxPlugin extends Plugin {
 			this.settings.focusSectionSelections[this.settings.focusScope] =
 				legacy as string[];
 		}
+	}
+
+	/** Re-apply (or undo) the drawer pill move after a settings change. */
+	refreshDrawerChrome(): void {
+		this.drawerChrome?.apply();
 	}
 
 	async saveSettings(): Promise<void> {

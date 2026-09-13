@@ -1,6 +1,7 @@
 // capture-recent.ts — pure helpers for the capture surfaces' "just captured"
 // thought strip. Kept free of Obsidian imports so both capture surfaces (the
 // main-pane view and the side panel) share one tested implementation.
+import { appendTag } from "./thread-core";
 
 /** Collapse every run of whitespace and trim — the strip's display form. */
 export function normSpace(s: string): string {
@@ -30,4 +31,19 @@ export function findLastMatching(texts: string[], head: string): number {
 		if (normSpace(texts[i]) === want) return i;
 	}
 	return -1;
+}
+
+/**
+ * Put a tag on the HEAD line of a capture before it is routed (v1.42.0: long-
+ * press Thought → pick a cadence/thread → the thought lands already tagged).
+ * Only the first line carries the tag — a multi-line thought's continuation
+ * lines are children, and a tag there would be a different post. Leading and
+ * trailing blank lines are dropped first so the tag cannot land on an empty
+ * line; a duplicate tag is a no-op (appendTag). Empty text stays empty.
+ */
+export function withTagOnHead(text: string, tag: string): string {
+	const trimmed = text.replace(/^\s*\n|\s+$/g, "");
+	if (!trimmed.trim()) return trimmed;
+	const [head, ...rest] = trimmed.split("\n");
+	return [appendTag(head, tag), ...rest].join("\n");
 }

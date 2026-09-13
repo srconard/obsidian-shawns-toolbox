@@ -3,6 +3,7 @@ import {
 	findLastMatching,
 	normSpace,
 	thoughtHead,
+	withTagOnHead,
 } from "../capture-recent";
 
 describe("normSpace", () => {
@@ -60,5 +61,35 @@ describe("findLastMatching", () => {
 
 	it("returns -1 on an empty list", () => {
 		expect(findLastMatching([], "anything")).toBe(-1);
+	});
+});
+
+describe("withTagOnHead", () => {
+	it("appends the tag to a single-line thought", () => {
+		expect(withTagOnHead("walk more", "#thought/weekly")).toBe(
+			"walk more #thought/weekly"
+		);
+	});
+
+	it("tags only the head line of a multi-line thought", () => {
+		expect(withTagOnHead("head\n  - child", "#thought/monthly")).toBe(
+			"head #thought/monthly\n  - child"
+		);
+	});
+
+	it("drops leading/trailing blank lines so the tag never lands on an empty line", () => {
+		expect(withTagOnHead("\n\nhead\n\n", "#thread/dance")).toBe(
+			"head #thread/dance"
+		);
+	});
+
+	it("is a no-op for a tag already on the head line", () => {
+		expect(withTagOnHead("head #thought/weekly", "#thought/weekly")).toBe(
+			"head #thought/weekly"
+		);
+	});
+
+	it("leaves empty text empty", () => {
+		expect(withTagOnHead("   ", "#thought/weekly")).toBe("");
 	});
 });

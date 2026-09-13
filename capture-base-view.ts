@@ -26,7 +26,12 @@ import { ThreadService } from "./thread-service";
 import { summarizeThreads } from "./thread-core";
 import { groupThreadsByArea } from "./thread-areas";
 import { wireLongPressMenu, showTagMenu, type TagTarget } from "./tag-menu";
-import { findLastMatching, normSpace, thoughtHead } from "./capture-recent";
+import {
+	findLastMatching,
+	normSpace,
+	thoughtHead,
+	withTagOnHead,
+} from "./capture-recent";
 import { ToolboxPanel } from "./panel-base";
 
 /** How many just-captured thoughts stay long-pressable in the recent strip. */
@@ -96,7 +101,11 @@ export abstract class BaseCapturePanel extends ToolboxPanel {
 			},
 		});
 
-		const buttons = root.createDiv("stx-capture-buttons");
+		// v1.42.0 (Shawn, 2026-09-13): icon-only buttons, one compact row. The
+		// label stays in the DOM (hidden by CSS) and doubles as the aria-label,
+		// so hovering on desktop shows what a button is; a long-press flashes the
+		// same label on the phone, in addition to the button's long-press action.
+		const buttons = root.createDiv("stx-capture-buttons stx-capture-icons");
 		const kinds: CaptureKind[] = [
 			"thought",
 			"doToday",
@@ -104,27 +113,29 @@ export abstract class BaseCapturePanel extends ToolboxPanel {
 			"log",
 		];
 		for (const kind of kinds) {
+			const label = CAPTURE_LABELS[kind];
 			const btn = buttons.createEl("button", {
 				cls: "stx-capture-btn stx-capture-" + kind,
+				attr: { "aria-label": label, title: label },
 			});
 			const icon = btn.createSpan("stx-capture-btn-icon");
 			setIcon(icon, CAPTURE_ICONS[kind]);
-			btn.createSpan({
-				cls: "stx-capture-btn-label",
-				text: CAPTURE_LABELS[kind],
-			});
+			btn.createSpan({ cls: "stx-capture-btn-label", text: label });
 			btn.addEventListener("click", () => {
 				// a long-press already handled this gesture
 				if (Date.now() - this.lastLongPress < 700) return;
 				void this.submit(kind);
 			});
-			if (kind === "doToday" || kind === "otherTask") {
-				wireLongPress(btn, () => {
-					this.lastLongPress = Date.now();
+			wireLongPress(btn, () => {
+				this.lastLongPress = Date.now();
+				this.flashLabel(btn, label);
+				if (kind === "doToday" || kind === "otherTask") {
 					this.dateBarKind = kind;
-					this.dateBar?.show(CAPTURE_LABELS[kind] + " on");
-				});
-			}
+					this.dateBar?.show(label + " on");
+				} else if (kind === "thought") {
+					void this.openCaptureTagMenu(btn);
+				}
+			});
 		}
 
 		this.recentEl = root.createDiv("stx-capture-recent");
@@ -146,10 +157,17 @@ export abstract class BaseCapturePanel extends ToolboxPanel {
 		this.dateBarKind = null;
 	}
 
-	private async submit(kind: CaptureKind, dateIso?: string): Promise<void> {
+	private async submit(
+		kind: CaptureKind,
+		dateIso?: string,
+		tag?: string
+	): Promise<void> {
 		if (!this.inputEl || this.submitting) return;
-		const text = this.inputEl.value;
-		if (!text.trim()) return;
+		const raw = this.inputEl.value;
+		if (!raw.trim()) return;
+		// A cadence/thread tag picked from the Thought long-press menu rides on
+		// the head line, so the thought lands already tagged (no second write).
+		const text = tag ? withTagOnHead(raw, tag) : raw;
 		this.submitting = true;
 		try {
 			const target = await routeCapture(
@@ -170,7 +188,7 @@ export abstract class BaseCapturePanel extends ToolboxPanel {
 				dateIso && dateIso !== logicalTodayIso(this.host.getSettings())
 					? dateIso
 					: nowHm();
-			new Notice(`→ ${target} ${when}`);
+			new Notice(tag ? `→ ${target} ${when} · ${tag}` : `→ ${target} ${when}`);
 			this.hideDateBar();
 		} catch (e) {
 			new Notice(
@@ -179,6 +197,42 @@ export abstract class BaseCapturePanel extends ToolboxPanel {
 		} finally {
 			this.submitting = false;
 		}
+	}
+
+	/**
+	 * Show a button's name for a moment (phone: there is no hover). A small tip
+	 * element inside the button, removed after ~1.2 s; a second flash on the same
+	 * button replaces the first.
+	 */
+	private flashLabel(btn: HTMLElement, label: string): void {
+		btn.querySelector(".stx-capture-btn-tip")?.remove();
+		const tip = btn.createSpan({ cls: "stx-capture-btn-tip", text: label });
+		window.setTimeout(() => tip.remove(), 1200);
+	}
+
+	/**
+	 * Long-press Thought (v1.42.0, Shawn: "if I do a long press I can add a
+	 * periodic tag like #thought/quarterly"): the same cadence + thread menu the
+	 * Threads panel and the recent strip use, but the pick CAPTURES — the text in
+	 * the box is routed as a thought with the tag already on its head line. With
+	 * nothing typed there is nothing to tag, so the menu is not shown.
+	 */
+	private async openCaptureTagMenu(btn: HTMLElement): Promise<void> {
+		if (!this.inputEl?.value.trim()) {
+			new Notice("Type a thought first, then long-press to tag it");
+			return;
+		}
+		const rect = btn.getBoundingClientRect();
+		const groups = await this.threadGroups();
+		if (!this.inputEl?.value.trim()) return;
+		showTagMenu({
+			app: this.app,
+			groups,
+			x: rect.left + rect.width / 2,
+			y: rect.top,
+			title: "Thought · tag as",
+			onApplyTag: (tag) => void this.submit("thought", undefined, tag),
+		});
 	}
 
 	/**

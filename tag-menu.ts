@@ -87,6 +87,9 @@ export interface TagMenuOptions {
 	/** Apply the chosen tag to the target (caller writes + refreshes). */
 	onApplyTag: (tag: string) => void;
 	onHide?: () => void;
+	/** Optional non-clickable heading shown above the cadence tags — the capture
+	 *  buttons use it to say what a long-press is tagging ("Thought · tag as"). */
+	title?: string;
 }
 
 /**
@@ -96,8 +99,9 @@ export interface TagMenuOptions {
  * grouping is flat (one Unsorted group) and the area headers are suppressed.
  */
 export function showTagMenu(opts: TagMenuOptions): void {
-	const { app, groups, x, y, onApplyTag, onHide } = opts;
+	const { app, groups, x, y, onApplyTag, onHide, title } = opts;
 	const menu = new Menu();
+	if (title) menu.addItem((i) => i.setTitle(title).setIsLabel(true));
 	for (const period of THOUGHT_PERIODS) {
 		const tag = `#thought/${period}`;
 		menu.addItem((i) =>
