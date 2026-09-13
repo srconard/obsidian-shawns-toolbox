@@ -2144,6 +2144,98 @@ div.view-content.stx-dual-root {
 	border-bottom: 1px solid var(--background-modifier-border);
 }
 
+/* v1.43.0: the header folds behind its chevron (Shawn: "a button at the top
+   that will collapse and hide where you select the two panels"). Collapsed,
+   only a slim strip remains: the chevron, the ⋯ menu and the page dots. */
+.stx-dual-header.is-collapsed {
+	padding: 0 0.35em;
+	min-height: 1.4em;
+}
+
+.stx-dual-header.is-collapsed .stx-dual-chips {
+	display: none;
+}
+
+.stx-dual-toggle,
+.stx-dual-more {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0.2em;
+	background: transparent;
+	border: none;
+	box-shadow: none;
+	color: var(--text-muted);
+	cursor: pointer;
+}
+
+.stx-dual-toggle:hover,
+.stx-dual-more:hover {
+	color: var(--text-normal);
+}
+
+.stx-dual-toggle .svg-icon,
+.stx-dual-more .svg-icon {
+	width: 1em;
+	height: 1em;
+}
+
+.stx-dual-chips {
+	flex: 1 1 0;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: 0.3em;
+}
+
+/* Page dots: one per page, the current one filled. Hidden with one page. */
+.stx-dual-dots {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	gap: 0.35em;
+	padding: 0 0.25em;
+}
+
+.stx-dual-dots.is-hidden {
+	display: none;
+}
+
+/* Written with the header as prefix: Obsidian's mobile `button` rule sets a
+   44px height with (0,1,1) specificity, which out-specifies a lone class and
+   made the collapsed strip 45px tall (measured live, v1.43.0). */
+.stx-dual-header .stx-dual-dot {
+	width: 0.55em;
+	height: 0.55em;
+	min-height: 0;
+	padding: 0;
+	border-radius: 50%;
+	border: 1px solid var(--text-faint);
+	background: transparent;
+	box-shadow: none;
+	cursor: pointer;
+	/* the hit target is bigger than the dot */
+	box-sizing: content-box;
+	outline: 0.35em solid transparent;
+}
+
+.stx-dual-header .stx-dual-dot.is-active {
+	background: var(--interactive-accent);
+	border-color: var(--interactive-accent);
+}
+
+/* The stack of panes for the current page: a flex column that owns all the
+   height under the header. `touch-action: pan-y` keeps vertical scrolling
+   native while leaving horizontal finger travel to the page-swipe handler. */
+.stx-dual-stack {
+	flex: 1 1 0;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	touch-action: pan-y;
+}
+
 .stx-dual-chip {
 	flex: 1 1 0;
 	min-width: 0;
@@ -2200,10 +2292,18 @@ div.view-content.stx-dual-root {
 	color: var(--text-normal);
 }
 
-/* Touch targets: the header is the only way to change halves on the phone. */
+/* Touch targets: the header is the only way to change panes on the phone. */
 .is-mobile .stx-dual-chip,
-.is-mobile .stx-dual-swap {
+.is-mobile .stx-dual-swap,
+.is-mobile .stx-dual-toggle,
+.is-mobile .stx-dual-more {
 	min-height: 2.4em;
+}
+
+.is-mobile .stx-dual-header.is-collapsed .stx-dual-toggle,
+.is-mobile .stx-dual-header.is-collapsed .stx-dual-more {
+	min-height: 1.6em;
+	height: 1.6em;
 }
 
 .stx-dual-pane {

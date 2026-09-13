@@ -1,4 +1,20 @@
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
+import {
+	addPage,
+	addPane,
+	clampPageIndex,
+	MAX_PAGES,
+	MAX_PANES,
+	removePage,
+	removePane,
+	resolveDualPages,
+	setPagePanel,
+	type DualPage,
+} from "./dual-core";
+import { PANEL_IDS, PANEL_SPECS, panelSpec } from "./panel-registry";
+import { listForeignViews, selectionLabel } from "./foreign-core";
+import { registeredViewTypes } from "./foreign-host";
+import { DUAL_PAGES_CHANGED } from "./dual-view";
 import type ShawnsToolboxPlugin from "./main";
 import type { CaptureKind } from "./section-core";
 import type { NoteScope } from "./capture-service";
@@ -91,8 +107,16 @@ export interface ShawnsToolboxSettings {
 	dualTopPanel: string;
 	/** Panel id shown in the bottom half. */
 	dualBottomPanel: string;
-	/** The top half's share of the space the two panels divide (0.15–0.85). */
+	/** The top half's share of the space the two panels divide (0.15–0.85).
+	 *  v1.39.0–v1.42.0 storage; read once to seed `dualPages`, then unused. */
 	dualSplitRatio: number;
+	/** v1.43.0: the swipeable pages, each a stack of 1–3 pane ids + shares
+	 *  (dual-core.ts `DualPage`). Empty → seeded from the three fields above. */
+	dualPages: { panels: string[]; ratios: number[] }[];
+	/** Index of the page last shown. */
+	dualPage: number;
+	/** Whether the selector header is folded behind its chevron. */
+	dualHeaderCollapsed: boolean;
 
 	// Phone drawer chrome (v1.42.0)
 	/** Move Obsidian's panel-switcher pill into the drawer's bottom header row,
@@ -192,6 +216,9 @@ export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
 	dualTopPanel: "capture",
 	dualBottomPanel: "dreams",
 	dualSplitRatio: 0.5,
+	dualPages: [],
+	dualPage: 0,
+	dualHeaderCollapsed: false,
 
 	drawerPillInHeader: true,
 
@@ -706,6 +733,8 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 			});
 
 		// Voice capture section
+		this.renderDualPanelSection(containerEl);
+
 		containerEl.createEl("h3", { text: "Voice capture" });
 
 		containerEl.createEl("p", {
@@ -866,6 +895,114 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 				text.inputEl.type = "password";
 				text.inputEl.style.width = "300px";
 			});
+	}
+
+	/**
+	 * Dual panel pages (v1.43.0): one block per page, a dropdown per pane
+	 * (1–3), add/remove. Options are the toolbox panels plus every view type
+	 * Obsidian has registered right now (Calendar etc.). Edits are pushed to an
+	 * open dual view through the DUAL_PAGES_CHANGED workspace event.
+	 */
+	private renderDualPanelSection(containerEl: HTMLElement): void {
+		containerEl.createEl("h3", { text: "Dual panel pages" });
+		containerEl.createEl("p", {
+			text: "The dual panel shows one page at a time; swipe left/right (or tap the dots) to move between pages. Each page stacks up to three panes. Page 1 is what opens first.",
+			cls: "setting-item-description",
+		});
+
+		const s = this.plugin.settings;
+		const pages = resolveDualPages(s.dualPages, PANEL_IDS, {
+			selection: { top: s.dualTopPanel, bottom: s.dualBottomPanel },
+			ratio: s.dualSplitRatio,
+		});
+		const save = async (next: DualPage[]) => {
+			s.dualPages = next.map((p) => ({ panels: [...p.panels], ratios: [...p.ratios] }));
+			s.dualPage = clampPageIndex(s.dualPage, next.length);
+			await this.plugin.saveSettings();
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			(this.app.workspace as any).trigger(DUAL_PAGES_CHANGED);
+			this.display();
+		};
+
+		const options: { id: string; label: string }[] = PANEL_SPECS.map((p) => ({
+			id: p.id,
+			label: p.label,
+		}));
+		for (const spec of listForeignViews(registeredViewTypes(this.app))) {
+			options.push({ id: spec.id, label: spec.label });
+		}
+
+		pages.forEach((page, pi) => {
+			const block = new Setting(containerEl)
+				.setName(`Page ${pi + 1}`)
+				.setDesc(
+					pi === 0
+						? "Opens first."
+						: `Reached by swiping left ${pi} time${pi > 1 ? "s" : ""}.`
+				);
+			page.panels.forEach((id, slot) => {
+				block.addDropdown((drop) => {
+					for (const o of options) drop.addOption(o.id, o.label);
+					if (!options.some((o) => o.id === id)) {
+						drop.addOption(id, `${selectionLabel(id, (x) => panelSpec(x)?.label ?? null)} (unavailable)`);
+					}
+					drop.setValue(id).onChange((value) => {
+						const next = pages.map((p, i) =>
+							i === pi ? setPagePanel(p, slot, value) : p
+						);
+						void save(next);
+					});
+				});
+			});
+			if (page.panels.length > 1) {
+				block.addExtraButton((b) =>
+					b
+						.setIcon("minus")
+						.setTooltip("Remove the bottom pane")
+						.onClick(() => {
+							const next = pages.map((p, i) =>
+								i === pi ? removePane(p, p.panels.length - 1) : p
+							);
+							void save(next);
+						})
+				);
+			}
+			if (page.panels.length < MAX_PANES) {
+				block.addExtraButton((b) =>
+					b
+						.setIcon("plus")
+						.setTooltip("Add a pane below")
+						.onClick(() => {
+							const fresh = PANEL_IDS.find((x) => !page.panels.includes(x));
+							if (!fresh) return;
+							const next = pages.map((p, i) => (i === pi ? addPane(p, fresh) : p));
+							void save(next);
+						})
+				);
+			}
+			if (pages.length > 1) {
+				block.addExtraButton((b) =>
+					b
+						.setIcon("trash-2")
+						.setTooltip("Remove this page")
+						.onClick(() => void save(removePage(pages, pi)))
+				);
+			}
+		});
+
+		if (pages.length < MAX_PAGES) {
+			new Setting(containerEl)
+				.setName("Add a page")
+				.setDesc("A new page starts with one pane; swipe left from the last page to reach it.")
+				.addButton((btn) =>
+					btn.setButtonText("Add page").onClick(() => {
+						const last = pages[pages.length - 1];
+						const fresh =
+							PANEL_IDS.find((x) => !last.panels.includes(x)) ?? PANEL_IDS[0];
+						void save(addPage(pages, { panels: [fresh], ratios: [1] }));
+					})
+				);
+		}
 	}
 }
 

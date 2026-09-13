@@ -232,6 +232,25 @@ export default class ShawnsToolboxPlugin extends Plugin {
 			name: "Open dual panel",
 			callback: () => void this.activateView(DUAL_VIEW_TYPE, "right"),
 		});
+		// Desktop has no swipe; the dots work, but a hotkey is nicer.
+		for (const [id, name, dir] of [
+			["dual-panel-next-page", "Dual panel: next page", 1],
+			["dual-panel-previous-page", "Dual panel: previous page", -1],
+		] as const) {
+			this.addCommand({
+				id,
+				name,
+				checkCallback: (checking) => {
+					const view = this.app.workspace
+						.getLeavesOfType(DUAL_VIEW_TYPE)
+						.map((l) => l.view)
+						.find((v): v is DualPanelView => v instanceof DualPanelView);
+					if (!view) return false;
+					if (!checking) void view.stepPage(dir);
+					return true;
+				},
+			});
+		}
 		this.addRibbonIcon("zap", "Open capture view", () =>
 			void this.activateView(CAPTURE_VIEW_TYPE, "main")
 		);
