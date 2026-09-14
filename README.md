@@ -44,6 +44,13 @@ You can configure exclusion patterns in the settings. Any line containing an exc
 - [x] Recurring item #recurring        <- not stamped (if #recurring is added to exclusions)
 ```
 
+### Web Viewer Fullscreen
+
+Two commands for Obsidian's built-in web viewer:
+
+- **Toggle fullscreen (hides web viewer toolbar)** — default hotkey **F11**. Puts the active tab into true fullscreen (no ribbon, sidebars, tab bar, or status bar) and hides the web viewer's toolbar (address bar, back / forward, reload) so the page fills the screen. Press F11 again or **Esc** to exit. Works on any tab; the toolbar hide only applies to web viewer tabs.
+- **Toggle web viewer toolbar** — hides just the toolbar on the active web viewer tab without going fullscreen (handy in a split). No default hotkey; assign one in Settings → Hotkeys.
+
 ### Block Summarizer
 
 Uses Google Gemini to generate an ultra-short **bolded title phrase** for any bullet point or paragraph, making it easy to scan long notes at a glance.

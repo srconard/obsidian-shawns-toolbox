@@ -35,6 +35,7 @@ import { DrawerChrome } from "./drawer-chrome";
 import { openVaultChooser } from "./settings";
 import { fileShareToNote, registerFilingMenu } from "./filing-service";
 import type { CardsHost } from "./section-cards";
+import { toggleLeafFullscreen, toggleLeafToolbar } from "./web-fullscreen";
 
 export default class ShawnsToolboxPlugin extends Plugin {
 	settings: ShawnsToolboxSettings = DEFAULT_SETTINGS;
@@ -263,6 +264,23 @@ export default class ShawnsToolboxPlugin extends Plugin {
 				},
 			});
 		}
+		// ---- Web viewer fullscreen ----
+
+		this.addCommand({
+			id: "toggle-web-fullscreen",
+			name: "Toggle fullscreen (hides web viewer toolbar)",
+			hotkeys: [{ modifiers: [], key: "F11" }],
+			callback: () => void toggleLeafFullscreen(this.app),
+		});
+		this.addCommand({
+			id: "toggle-web-toolbar",
+			name: "Toggle web viewer toolbar",
+			callback: () => {
+				const hidden = toggleLeafToolbar(this.app);
+				new Notice(hidden ? "Web viewer toolbar hidden" : "Web viewer toolbar shown");
+			},
+		});
+
 		this.addRibbonIcon("zap", "Open capture view", () =>
 			void this.activateView(CAPTURE_VIEW_TYPE, "main")
 		);

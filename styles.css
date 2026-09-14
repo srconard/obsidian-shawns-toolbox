@@ -2486,3 +2486,24 @@ div.view-content.stx-dual-root {
 	max-width: none;
 	margin-inline: 0;
 }
+
+/* ---- Web viewer fullscreen / toolbar hiding (web-fullscreen.ts) ---- */
+
+/* Hide the web viewer toolbar (address bar, back/forward, reload) whenever the
+   leaf is fullscreen or explicitly toolbar-hidden. Scoped to webviewer leaves
+   so a fullscreened note keeps its header. */
+.stx-web-fullscreen .workspace-leaf-content[data-type="webviewer"] > .view-header,
+.stx-web-hide-toolbar .workspace-leaf-content[data-type="webviewer"] > .view-header {
+	/* !important: core marks the web viewer header .view-header-always-show */
+	display: none !important;
+}
+
+/* Let the page fill the whole screen while fullscreen. */
+.stx-web-fullscreen {
+	background-color: var(--background-primary);
+}
+.stx-web-fullscreen .workspace-leaf-content[data-type="webviewer"] > .view-content,
+.stx-web-fullscreen .workspace-leaf-content[data-type="webviewer"] webview {
+	height: 100%;
+	width: 100%;
+}
