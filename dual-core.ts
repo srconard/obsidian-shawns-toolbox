@@ -288,6 +288,16 @@ export function pageAfterSwipe(
 }
 
 /**
+ * Whether a touch that has just landed should be tracked as a possible page
+ * swipe. Exactly one finger (two is a pinch, and a pinch that drifts sideways
+ * must not flip the page), and not on the divider — the divider owns its own
+ * drag, and a resize is not a page change.
+ */
+export function trackableSwipeTouch(touchCount: number, onDivider: boolean): boolean {
+	return touchCount === 1 && !onDivider;
+}
+
+/**
  * Drag the divider below pane `index`: the two panes it separates trade share,
  * everything else keeps its height. Both stay at least MIN_PANE_SHARE.
  */

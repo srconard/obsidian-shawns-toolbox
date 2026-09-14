@@ -55,6 +55,7 @@ import {
 	MAX_PAGES,
 	MAX_PANES,
 	pageAfterSwipe,
+	trackableSwipeTouch,
 	paneGrows,
 	ratiosChanged,
 	ratiosFromDrag,
@@ -483,38 +484,80 @@ export class DualPanelView extends ItemView {
 
 	/**
 	 * Horizontal swipe = page change. Touch only (a mouse drag on desktop is
-	 * text selection); the divider owns its own pointer capture so a divider
-	 * drag never reads as a swipe; and a swipe is judged at pointerup from the
-	 * total travel, so a vertical scroll that wanders sideways is ignored.
+	 * text selection, and touch events simply never fire for a mouse); the
+	 * divider owns its own drag so a divider drag never reads as a swipe; a
+	 * second finger is a pinch, not a swipe; and a swipe is judged at the end
+	 * of the gesture from the total travel, so a vertical scroll that wanders
+	 * sideways is ignored.
+	 *
+	 * This is wired on TOUCH events, not pointer events, and that is the whole
+	 * fix for v1.45.1 — the left dual panel never changed page on the phone.
+	 * Measured in the NAS Obsidian under phone emulation with real CDP touch
+	 * input: a one-finger horizontal drag inside the view produces
+	 *
+	 *     pointerdown → pointermove → POINTERCANCEL → touchmove … → touchend
+	 *
+	 * The browser cancels the compatibility pointer stream partway through the
+	 * drag, so `pointerup` never arrives and a swipe judged at pointerup is
+	 * silently dropped. The right panel got away with it because on every page
+	 * but the first it leaves `data-ignore-swipe` off, so Obsidian's own drawer
+	 * swipe manager claims the gesture and calls `preventDefault()` on
+	 * touchmove — which incidentally keeps the pointer stream alive. The left
+	 * panel sets `data-ignore-swipe` on every page but the LAST (its drawer
+	 * closes on a LEFTWARD swipe, the same direction as "next page"), so on the
+	 * page Shawn actually swipes from, Obsidian steps aside, nothing calls
+	 * preventDefault, the pointer stream is cancelled, and the page never
+	 * moves. Touch events are not cancelled: touchend always arrives with the
+	 * final position in `changedTouches`.
 	 */
 	private wireSwipe(root: HTMLElement): void {
 		let startX = 0;
 		let startY = 0;
+		let lastX = 0;
+		let lastY = 0;
 		let tracking = false;
-		this.registerDomEvent(root, "pointerdown", (e: PointerEvent) => {
-			if (e.pointerType === "mouse") return;
-			if ((e.target as HTMLElement | null)?.closest?.(".stx-dual-divider")) return;
+		this.registerDomEvent(root, "touchstart", (e: TouchEvent) => {
+			const onDivider = !!(e.target as HTMLElement | null)?.closest?.(
+				".stx-dual-divider"
+			);
+			if (!trackableSwipeTouch(e.touches.length, onDivider)) {
+				// A second finger landing mid-gesture turns it into a pinch.
+				tracking = false;
+				return;
+			}
+			const touch = e.touches[0];
 			tracking = true;
-			startX = e.clientX;
-			startY = e.clientY;
+			startX = lastX = touch.clientX;
+			startY = lastY = touch.clientY;
 		});
-		const end = (e: PointerEvent) => {
+		this.registerDomEvent(root, "touchmove", (e: TouchEvent) => {
+			if (!tracking) return;
+			const touch = e.touches[0];
+			if (!touch) return;
+			lastX = touch.clientX;
+			lastY = touch.clientY;
+		});
+		// touchcancel ends the gesture the same way: the finger travelled, and
+		// dropping the swipe because the platform took the touch back is the
+		// exact failure this handler exists to avoid.
+		const end = (e: TouchEvent) => {
 			if (!tracking) return;
 			tracking = false;
 			if (this.pages.length < 2) return;
+			const touch = e.changedTouches[0];
+			const endX = touch ? touch.clientX : lastX;
+			const endY = touch ? touch.clientY : lastY;
 			const next = pageAfterSwipe(
 				this.pageIndex,
 				this.pages.length,
-				e.clientX - startX,
-				e.clientY - startY,
+				endX - startX,
+				endY - startY,
 				SWIPE_PX
 			);
 			if (next !== this.pageIndex) void this.goToPage(next);
 		};
-		this.registerDomEvent(root, "pointerup", end);
-		this.registerDomEvent(root, "pointercancel", () => {
-			tracking = false;
-		});
+		this.registerDomEvent(root, "touchend", end);
+		this.registerDomEvent(root, "touchcancel", end);
 	}
 
 	// ---- panes ----

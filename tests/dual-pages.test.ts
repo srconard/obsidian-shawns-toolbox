@@ -19,6 +19,7 @@ import {
 	resolveDualPages,
 	reversePage,
 	setPagePanel,
+	trackableSwipeTouch,
 } from "../dual-core";
 
 const IDS = ["capture", "threads", "dreams", "voice", "highlights"];
@@ -135,6 +136,46 @@ describe("pageAfterSwipe", () => {
 		expect(pageAfterSwipe(0, 3, -40, 0)).toBe(0);
 		expect(pageAfterSwipe(0, 3, -80, 70)).toBe(0);
 		expect(pageAfterSwipe(0, 3, NaN, 0)).toBe(0);
+	});
+});
+
+describe("trackableSwipeTouch", () => {
+	it("tracks a single finger anywhere but the divider", () => {
+		expect(trackableSwipeTouch(1, false)).toBe(true);
+	});
+
+	it("ignores a divider drag — that is a resize, not a page change", () => {
+		expect(trackableSwipeTouch(1, true)).toBe(false);
+	});
+
+	it("ignores a second finger — a pinch that drifts sideways is not a swipe", () => {
+		expect(trackableSwipeTouch(2, false)).toBe(false);
+		expect(trackableSwipeTouch(3, false)).toBe(false);
+	});
+
+	it("ignores a touchstart carrying no touches at all", () => {
+		expect(trackableSwipeTouch(0, false)).toBe(false);
+	});
+});
+
+/**
+ * v1.45.1 regression. The left dual panel never changed page on the phone:
+ * a real one-finger drag produces pointerdown → pointermove → POINTERCANCEL →
+ * touchmove … → touchend, so a swipe judged at `pointerup` is dropped. The
+ * handler now judges at touchend/touchcancel from the last touch position,
+ * which is what these cases stand in for — the decision must hold when the
+ * final coordinate comes from `changedTouches` after the pointer stream died.
+ */
+describe("pageAfterSwipe — judged from the end of a cancelled pointer stream", () => {
+	it("still pages when the travel is only known from the final touch", () => {
+		// start 306 → end 40 on the left panel's first of two pages
+		expect(pageAfterSwipe(0, 2, 40 - 306, 0)).toBe(1);
+		// and back again
+		expect(pageAfterSwipe(1, 2, 306 - 40, 0)).toBe(0);
+	});
+
+	it("a swipe that stopped short of the threshold still does not page", () => {
+		expect(pageAfterSwipe(0, 2, 225 - 250, 0)).toBe(0);
 	});
 });
 
