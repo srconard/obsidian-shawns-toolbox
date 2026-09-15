@@ -38,6 +38,18 @@
 //
 // Nothing is destroyed: `restore()` puts every icon back exactly where it came
 // from, so disabling the plugin (or the setting) leaves the drawer stock.
+//
+// v1.45.2 — THE SECOND TRAP, measured: the icons are not all there when we
+// first run. `apply()` used to skip any drawer it had already folded, so it
+// adopted exactly the icons that existed at `onLayoutReady`. Obsidian Sync
+// builds its `.sync-status-icon` into the right drawer's header LATER, and the
+// skip meant no later `layout-change` ever picked it up — leaving it stranded
+// in the header row we hide, i.e. no sync status anywhere on the phone (Shawn,
+// 2026-09-15). This never showed up in testing because a hot `plugin:reload`
+// runs apply() when Sync's icon already exists; only a cold start loses it.
+// So `apply()` now re-scans an already-folded drawer for stragglers, and a
+// MutationObserver on the header adopts a late icon the moment it is built
+// (a cold phone start need not produce another layout-change at all).
 import { App, Platform } from "obsidian";
 
 export const OPTIONS_ROW_CLASS = "stx-drawer-options-row";
@@ -59,6 +71,8 @@ interface Applied {
 	header: HTMLElement;
 	options: HTMLElement;
 	icons: Moved[];
+	/** Watches the header for icons Obsidian creates AFTER the first apply. */
+	observer: MutationObserver | null;
 }
 
 export class DrawerChrome {
@@ -95,23 +109,64 @@ export class DrawerChrome {
 			const header = drawer.headerEl!;
 			const options = drawer.activeTabHeaderEl!.parentElement;
 			if (!options) continue;
-			if (this.applied.some((a) => a.options === options)) continue;
-			const icons: Moved[] = [];
-			for (const icon of Array.from(
-				header.querySelectorAll<HTMLElement>(".workspace-drawer-header-icon")
-			)) {
-				icons.push({ icon, parent: header, next: icon.nextSibling });
-				options.appendChild(icon);
+			const existing = this.applied.find((a) => a.options === options);
+			if (existing) {
+				// Already folded — but Obsidian may have built another icon into
+				// the header since (the v1.45.2 bug: Sync creates its status icon
+				// after `onLayoutReady`, so a cold start stranded it in the header
+				// we hide). Adopt the stragglers instead of skipping the drawer.
+				if (existing.header !== header) {
+					existing.observer?.disconnect();
+					existing.header.removeClass(HEADER_HIDDEN_CLASS);
+					existing.header = header;
+					existing.observer = this.watch(existing);
+				}
+				this.adopt(existing);
+				header.addClass(HEADER_HIDDEN_CLASS);
+				continue;
 			}
+			const entry: Applied = { header, options, icons: [], observer: null };
+			this.adopt(entry);
 			header.addClass(HEADER_HIDDEN_CLASS);
 			options.addClass(OPTIONS_ROW_CLASS);
-			this.applied.push({ header, options, icons });
+			entry.observer = this.watch(entry);
+			this.applied.push(entry);
 		}
+	}
+
+	/**
+	 * Move every `.workspace-drawer-header-icon` still sitting in the header
+	 * into the pill row, remembering where each came from. Safe to re-run: an
+	 * icon already moved is no longer a child of the header.
+	 */
+	private adopt(entry: Applied): void {
+		for (const icon of Array.from(
+			entry.header.querySelectorAll<HTMLElement>(".workspace-drawer-header-icon")
+		)) {
+			entry.icons.push({ icon, parent: entry.header, next: icon.nextSibling });
+			entry.options.appendChild(icon);
+		}
+	}
+
+	/**
+	 * Adopt late-built icons the moment they appear, rather than waiting for the
+	 * next `layout-change` — on a cold phone start there may not be one, and an
+	 * unadopted icon is invisible because we hide the row it lives in.
+	 */
+	private watch(entry: Applied): MutationObserver | null {
+		if (typeof MutationObserver === "undefined") return null;
+		const observer = new MutationObserver(() => {
+			if (!Platform.isPhone || !this.enabled()) return;
+			this.adopt(entry);
+		});
+		observer.observe(entry.header, { childList: true });
+		return observer;
 	}
 
 	/** Put every icon back where Obsidian built it and unhide the headers. */
 	restore(): void {
 		for (const a of this.applied.splice(0)) {
+			a.observer?.disconnect();
 			a.options.removeClass(OPTIONS_ROW_CLASS);
 			a.header.removeClass(HEADER_HIDDEN_CLASS);
 			for (const m of a.icons) {
