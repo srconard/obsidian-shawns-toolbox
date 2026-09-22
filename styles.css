@@ -1378,6 +1378,209 @@ body.is-phone .stx-drawer-options-row > .workspace-drawer-header-icon {
 	border-color: var(--interactive-accent);
 }
 
+/* ---- thoughts screen: day navigation + month calendar picker (v1.47.0) ----
+   The Threads panel's thoughts screen opens on today but moves to any past day:
+   ‹ › step a day (› dead at today), the date opens a month grid, "Today" comes
+   back. Sized for a thumb in the phone drawer. */
+.stx-thoughts-today {
+	flex: 0 0 auto;
+	font-size: var(--font-ui-smaller);
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	color: var(--text-muted);
+	border-radius: var(--radius-s);
+	padding: 0.3em 0.6em;
+	cursor: pointer;
+}
+.stx-thoughts-today:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.stx-thoughts-nav {
+	display: flex;
+	align-items: center;
+	gap: 0.25em;
+	margin-bottom: 0.5em;
+}
+
+.stx-thoughts-navbtn {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 2.8em;
+	min-height: 2.2em;
+	background: transparent;
+	border: none;
+	box-shadow: none;
+	color: var(--text-muted);
+	border-radius: var(--radius-s);
+	padding: 0.3em;
+	cursor: pointer;
+}
+.stx-thoughts-navbtn:hover:not(.is-disabled) {
+	color: var(--text-normal);
+	background: var(--background-modifier-hover);
+}
+.stx-thoughts-navbtn.is-active {
+	color: var(--text-on-accent);
+	background: var(--interactive-accent);
+}
+/* A day after today is not a place a thought can live — the button stays put
+   rather than disappearing, so the row never reflows under a thumb. */
+.stx-thoughts-navbtn.is-disabled {
+	opacity: 0.3;
+	cursor: default;
+}
+
+.stx-thoughts-date {
+	flex: 1 1 auto;
+	min-width: 7em;
+	min-height: 2.2em;
+	text-align: center;
+	font-size: var(--font-ui-small);
+	color: var(--text-normal);
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	padding: 0.35em 0.4em;
+	cursor: pointer;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.stx-thoughts-date:hover {
+	border-color: var(--interactive-accent);
+}
+
+/* The month grid sits inline under the nav row rather than floating: a popover
+   inside the phone drawer is a positioning minefield. */
+.stx-cal {
+	margin-bottom: 0.6em;
+	padding: 0.4em;
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+}
+
+.stx-cal-head {
+	display: flex;
+	align-items: center;
+	gap: 0.25em;
+	margin-bottom: 0.3em;
+}
+
+.stx-cal-title {
+	flex: 1 1 auto;
+	text-align: center;
+	font-weight: 600;
+	font-size: var(--font-ui-small);
+	color: var(--text-normal);
+}
+
+.stx-cal-navbtn {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 2.2em;
+	min-height: 2.2em;
+	background: transparent;
+	border: none;
+	box-shadow: none;
+	color: var(--text-muted);
+	border-radius: var(--radius-s);
+	padding: 0.3em;
+	cursor: pointer;
+}
+.stx-cal-navbtn:hover:not(.is-disabled) {
+	color: var(--text-normal);
+	background: var(--background-modifier-hover);
+}
+.stx-cal-navbtn.is-disabled {
+	opacity: 0.3;
+	cursor: default;
+}
+
+/* minmax(0, 1fr), not 1fr: Obsidian's mobile CSS gives every <button> a
+   touch-sized min-height, which aspect-ratio turns into a min-WIDTH — with
+   plain 1fr that intrinsic minimum wins and the Sunday column is pushed off
+   the edge of the drawer (measured: 7x44px + gaps = 320px in a 296px box). */
+.stx-cal-weekdays,
+.stx-cal-grid {
+	display: grid;
+	grid-template-columns: repeat(7, minmax(0, 1fr));
+	gap: 2px;
+}
+
+.stx-cal-weekday {
+	text-align: center;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+	padding: 0.15em 0;
+}
+
+.stx-cal-day {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	/* Deliberately NOT aspect-ratio: Obsidian's mobile chrome gives buttons a
+	   touch height that aspect-ratio turns into an equal min-WIDTH, pushing the
+	   Sunday column off the edge of the drawer (measured 7x44px in a 296px box).
+	   A fixed height + a stretched grid width keeps all seven columns inside. */
+	width: 100%;
+	min-width: 0;
+	height: 2.6em;
+	padding: 0;
+	background: transparent;
+	border: 1px solid transparent;
+	box-shadow: none;
+	border-radius: var(--radius-s);
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+	cursor: pointer;
+}
+.stx-cal-day:hover:not(.is-disabled):not(.is-pad) {
+	background: var(--background-modifier-hover);
+}
+.stx-cal-day.is-pad {
+	cursor: default;
+}
+.stx-cal-day.is-disabled {
+	color: var(--text-faint);
+	opacity: 0.4;
+	cursor: default;
+}
+.stx-cal-day.is-today {
+	border-color: var(--interactive-accent);
+}
+.stx-cal-day.is-selected {
+	background: var(--interactive-accent);
+	border-color: var(--interactive-accent);
+	color: var(--text-on-accent);
+	font-weight: 600;
+}
+
+.stx-cal-daynum {
+	line-height: 1.1;
+}
+
+/* A day that already has a daily note — the dot is what makes the grid worth
+   opening rather than just typing a date. */
+.stx-cal-dot {
+	width: 4px;
+	height: 4px;
+	margin-top: 2px;
+	border-radius: 50%;
+	background: var(--text-accent);
+}
+.stx-cal-day.is-selected .stx-cal-dot {
+	background: var(--text-on-accent);
+}
+
 .stx-post-hl {
 	animation: stx-post-flash 1.4s ease-out;
 }

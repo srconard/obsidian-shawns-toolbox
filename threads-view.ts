@@ -26,6 +26,20 @@ import {
 	type AreaGroup,
 	type ThreadArea,
 } from "./thread-areas";
+import {
+	buildMonthGrid,
+	monthDayIsos,
+	monthStartIso,
+	cellState,
+	stepDayIso,
+	stepMonthIso,
+	canStepDay,
+	canStepMonth,
+	thoughtsTitle,
+	dayHeaderLabel,
+	missingNoteMessage,
+	isDateIso,
+} from "./thoughts-calendar-core";
 import { wireLongPressMenu, showTagMenu as showTagMenuAt } from "./tag-menu";
 import { ToolboxPanel } from "./panel-base";
 import { ToolboxPanelView } from "./panel-view";
@@ -46,12 +60,24 @@ export class ThreadsPanel extends ToolboxPanel {
 	private posts: ThreadPost[] = [];
 	private periodic: PeriodicPost[] = [];
 	private today: ThoughtPost[] = [];
+	// The thoughts screen's posts for the day it is showing. Same array object
+	// as `today` while the selected day IS today.
+	private dayThoughts: ThoughtPost[] = [];
+	private dayNoteExists = true;
 	// Thread → area mapping, parsed from the Shawn-editable areas note.
 	private areas: ThreadArea[] = [];
 	private activeThread: string | null = null;
 	private activePeriod: string | null = null;
-	// "Today's thoughts" view (every top-level thought in today's note).
+	// Thoughts view (every top-level thought in a day's note).
 	private activeToday = false;
+	// Which day the thoughts view is showing. Session-scoped only — never
+	// persisted, and reset to today every time the Threads button opens the
+	// screen, so "Today's thoughts" always means today (v1.47.0).
+	private thoughtsDate: string | null = null;
+	// Month the calendar picker is showing (first of month), or null = closed.
+	private calendarMonth: string | null = null;
+	// Days of `calendarMonth` that have a daily note — the picker's dots.
+	private calendarNotes = new Set<string>();
 	private threadPeriodFilter = new Set<string>();
 	// Periodic-thoughts view: show all posts, only those already carrying a
 	// #thread/ tag, or only untagged ones (Shawn's "not yet processed" set).
@@ -137,6 +163,7 @@ export class ThreadsPanel extends ToolboxPanel {
 		this.posts = posts;
 		this.periodic = periodic;
 		this.today = await this.service.todayThoughtPosts();
+		await this.loadDayThoughts();
 		this.areas = await this.service.loadThreadAreas();
 		this.render();
 	}
@@ -190,7 +217,11 @@ export class ThreadsPanel extends ToolboxPanel {
 			this.activeThread = null;
 			this.activePeriod = null;
 			this.todayTagFilter = "all";
-			this.render();
+			// Entering from the Threads button always lands on today, whatever day
+			// the screen was left on earlier in the session.
+			this.thoughtsDate = this.service.todayIso();
+			this.calendarMonth = null;
+			void this.loadDayThoughts().then(() => this.render());
 		});
 
 		const head = this.contentEl.createDiv({ cls: "stx-threads-head" });
@@ -335,19 +366,119 @@ export class ThreadsPanel extends ToolboxPanel {
 		return row;
 	}
 
-	// ---- today's thoughts ----
+	// ---- thoughts for a day (default today) ----
+
+	/** The day the thoughts screen is showing — today until Shawn moves it. */
+	private selectedDay(): string {
+		return this.thoughtsDate ?? this.service.todayIso();
+	}
+
+	/** Load the selected day's thought posts. Today's are already in hand from
+	 *  the refresh (the list button's untagged count needs them), so that case
+	 *  costs no extra read. */
+	private async loadDayThoughts(): Promise<void> {
+		const day = this.selectedDay();
+		this.dayNoteExists = this.service.hasDayNote(day);
+		this.dayThoughts =
+			day === this.service.todayIso()
+				? this.today
+				: await this.service.dayThoughtPosts(day);
+	}
+
+	/** Move the thoughts screen to a day, clamped at today, and redraw. */
+	private async goToDay(dateIso: string): Promise<void> {
+		if (!isDateIso(dateIso)) return;
+		const today = this.service.todayIso();
+		this.thoughtsDate = dateIso > today ? today : dateIso;
+		this.calendarMonth = null;
+		await this.loadDayThoughts();
+		this.render();
+	}
+
+	/** Open (or move) the month picker, probing the vault for which of that
+	 *  month's days actually have a daily note. */
+	private showCalendar(monthIso: string): void {
+		this.calendarMonth = monthStartIso(monthIso);
+		this.calendarNotes = this.service.daysWithNotes(
+			monthDayIsos(this.calendarMonth)
+		);
+		this.render();
+	}
 
 	private renderToday(): void {
+		const day = this.selectedDay();
+		const today = this.service.todayIso();
+
 		const head = this.contentEl.createDiv({ cls: "stx-threads-head" });
 		this.iconButton(head, "arrow-left", "Back", () => {
 			this.activeToday = false;
+			this.calendarMonth = null;
 			this.render();
 		});
-		head.createSpan({ cls: "stx-threads-title", text: "Today's thoughts" });
+		head.createSpan({
+			cls: "stx-threads-title",
+			text: thoughtsTitle(day, today),
+		});
+		if (day !== today) {
+			const todayBtn = head.createEl("button", {
+				cls: "stx-thoughts-today",
+				text: "Today",
+				attr: { "aria-label": "Back to today" },
+			});
+			todayBtn.addEventListener("click", () => void this.goToDay(today));
+		}
+
+		// Day navigation: ‹ | the date (tap = calendar) | › | calendar button.
+		const nav = this.contentEl.createDiv({ cls: "stx-thoughts-nav" });
+		const stepBtn = (icon: string, label: string, delta: -1 | 1) => {
+			const btn = nav.createEl("button", {
+				cls: "stx-thoughts-navbtn",
+				attr: { "aria-label": label },
+			});
+			setIcon(btn, icon);
+			if (!canStepDay(day, delta, today)) {
+				btn.disabled = true;
+				btn.addClass("is-disabled");
+			} else {
+				btn.addEventListener("click", () =>
+					void this.goToDay(stepDayIso(day, delta))
+				);
+			}
+		};
+		stepBtn("chevron-left", "Previous day", -1);
+
+		const dateBtn = nav.createEl("button", {
+			cls: "stx-thoughts-date",
+			text: dayHeaderLabel(day),
+			attr: { "aria-label": "Pick a day" },
+		});
+		dateBtn.addEventListener("click", () => {
+			if (this.calendarMonth) {
+				this.calendarMonth = null;
+				this.render();
+			} else this.showCalendar(day);
+		});
+
+		stepBtn("chevron-right", "Next day", 1);
+
+		const calBtn = nav.createEl("button", {
+			cls: "stx-thoughts-navbtn",
+			attr: { "aria-label": "Open the month calendar" },
+		});
+		setIcon(calBtn, "calendar-days");
+		if (this.calendarMonth) calBtn.addClass("is-active");
+		calBtn.addEventListener("click", () => {
+			if (this.calendarMonth) {
+				this.calendarMonth = null;
+				this.render();
+			} else this.showCalendar(day);
+		});
+
+		if (this.calendarMonth) this.renderCalendar(this.calendarMonth, day, today);
 
 		// Same All / Tagged / Untagged filter as the periodic views, so this view
 		// doubles as a processing pass (Untagged = no #thread/ tag yet).
-		const all = this.today;
+		const all = this.dayThoughts;
 		const filterBar = this.contentEl.createDiv({ cls: "stx-period-filter" });
 		const opts: Array<[PeriodTagFilter, string]> = [
 			["all", "All"],
@@ -375,10 +506,13 @@ export class ThreadsPanel extends ToolboxPanel {
 		if (posts.length === 0) {
 			this.contentEl.createDiv({
 				cls: "stx-threads-empty",
-				text:
-					all.length === 0
-						? "No thoughts in today's note yet."
-						: "No thoughts match this filter.",
+				text: !this.dayNoteExists
+					? missingNoteMessage(day)
+					: all.length === 0
+					  ? day === today
+						  ? "No thoughts in today's note yet."
+						  : "No thoughts in that day's note."
+					  : "No thoughts match this filter.",
 			});
 			return;
 		}
@@ -405,6 +539,7 @@ export class ThreadsPanel extends ToolboxPanel {
 				t.addEventListener("click", (e) => {
 					e.stopPropagation();
 					this.activeToday = false;
+					this.calendarMonth = null;
 					this.activeThread = threadName;
 					this.threadPeriodFilter.clear();
 					this.render();
@@ -413,6 +548,72 @@ export class ThreadsPanel extends ToolboxPanel {
 		}
 	}
 
+	// ---- month calendar picker ----
+
+	/**
+	 * A month grid dropped inline under the nav row (rather than a floating
+	 * popover, which is a positioning minefield inside the phone drawer).
+	 * Days that have a daily note carry a dot; today is outlined; the selected
+	 * day is filled; future days and the neighbour-month padding are dead.
+	 */
+	private renderCalendar(monthIso: string, selected: string, today: string): void {
+		const grid = buildMonthGrid(monthIso);
+		const root = this.contentEl.createDiv({ cls: "stx-cal" });
+
+		const head = root.createDiv({ cls: "stx-cal-head" });
+		const monthBtn = (icon: string, label: string, delta: -1 | 1) => {
+			const btn = head.createEl("button", {
+				cls: "stx-cal-navbtn",
+				attr: { "aria-label": label },
+			});
+			setIcon(btn, icon);
+			if (!canStepMonth(grid.monthIso, delta, today)) {
+				btn.disabled = true;
+				btn.addClass("is-disabled");
+			} else {
+				btn.addEventListener("click", () =>
+					this.showCalendar(stepMonthIso(grid.monthIso, delta))
+				);
+			}
+		};
+		monthBtn("chevron-left", "Previous month", -1);
+		head.createSpan({ cls: "stx-cal-title", text: grid.label });
+		monthBtn("chevron-right", "Next month", 1);
+
+		const weekdayRow = root.createDiv({ cls: "stx-cal-weekdays" });
+		for (const wd of grid.weekdays)
+			weekdayRow.createSpan({ cls: "stx-cal-weekday", text: wd });
+
+		const body = root.createDiv({ cls: "stx-cal-grid" });
+		const ctx = {
+			todayIso: today,
+			selectedIso: selected,
+			notes: this.calendarNotes,
+		};
+		for (const week of grid.weeks) {
+			for (const cell of week) {
+				const state = cellState(cell, ctx);
+				if (!state.inMonth) {
+					body.createDiv({ cls: "stx-cal-day is-pad" });
+					continue;
+				}
+				const el = body.createEl("button", {
+					cls: "stx-cal-day",
+					attr: { "aria-label": cell.iso },
+				});
+				el.createSpan({ cls: "stx-cal-daynum", text: String(cell.day) });
+				if (state.hasNote) el.createSpan({ cls: "stx-cal-dot" });
+				if (state.isToday) el.addClass("is-today");
+				if (state.isSelected) el.addClass("is-selected");
+				if (!state.selectable) {
+					el.disabled = true;
+					el.addClass("is-disabled");
+					continue;
+				}
+				el.addEventListener("click", () => void this.goToDay(cell.iso));
+			}
+		}
+	}
 	// ---- periodic-thoughts detail ----
 
 	private renderPeriod(period: string): void {

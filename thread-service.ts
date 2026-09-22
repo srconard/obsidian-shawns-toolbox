@@ -129,17 +129,43 @@ export class ThreadService {
 		return { posts, periodic };
 	}
 
+	/** "Today" under the day-rollover rule — the thoughts screen's default day
+	 *  and the ceiling its ‹ › navigation clamps to. */
+	todayIso(): string {
+		return logicalTodayIso(this.getSettings());
+	}
+
+	/** Vault path of a day's daily note (whether or not it exists). */
+	dayNotePath(dateIso: string): string {
+		return periodicNotePath(this.getSettings(), "day", dateIso);
+	}
+
+	/** Whether a daily note exists for that day — what the calendar marks, and
+	 *  what tells an empty thoughts list apart from a day with no note at all. */
+	hasDayNote(dateIso: string): boolean {
+		return this.app.vault.getAbstractFileByPath(this.dayNotePath(dateIso))
+			instanceof TFile;
+	}
+
+	/** Which of the given days have a daily note — the calendar picker's dots.
+	 *  A path lookup per day, no reads (the whole month is ~31 map hits). */
+	daysWithNotes(dateIsos: string[]): Set<string> {
+		const out = new Set<string>();
+		for (const iso of dateIsos) if (this.hasDayNote(iso)) out.add(iso);
+		return out;
+	}
+
 	/**
-	 * Every top-level thought line under today's daily note's # Thoughts section
-	 * (tagged or not), for the "Today's thoughts" view — Shawn's capture→process
-	 * bridge (record a thought, open this, tag it into a thread). Returns [] when
-	 * today's note doesn't exist yet. Read fresh each call (a single note, cheap;
-	 * the vault modify events already drive a refresh so the list stays live).
+	 * Every top-level thought line under a day's daily note's # Thoughts section
+	 * (tagged or not), for the thoughts view — Shawn's capture→process bridge
+	 * (record a thought, open this, tag it into a thread). Returns [] when that
+	 * day's note doesn't exist (use hasDayNote to tell that apart from an empty
+	 * section). Read fresh each call (a single note, cheap; the vault modify
+	 * events already drive a refresh so the list stays live).
 	 */
-	async todayThoughtPosts(): Promise<ThoughtPost[]> {
+	async dayThoughtPosts(dateIso: string): Promise<ThoughtPost[]> {
 		const settings = this.getSettings();
-		const path = periodicNotePath(settings, "day", logicalTodayIso(settings));
-		const f = this.app.vault.getAbstractFileByPath(path);
+		const f = this.app.vault.getAbstractFileByPath(this.dayNotePath(dateIso));
 		if (!(f instanceof TFile)) return [];
 		const content = await this.app.vault.cachedRead(f);
 		return parseThoughtPosts(
@@ -149,6 +175,11 @@ export class ThreadService {
 			settings.captureTargets.thought,
 			f.path
 		);
+	}
+
+	/** The same list for today — the default day the screen opens on. */
+	async todayThoughtPosts(): Promise<ThoughtPost[]> {
+		return this.dayThoughtPosts(this.todayIso());
 	}
 
 	/**
