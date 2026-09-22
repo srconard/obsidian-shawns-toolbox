@@ -29,7 +29,14 @@ import {
 	periodicNotePath,
 	type NoteScope,
 } from "./capture-service";
-import { stepAnchorIso, formatDateLabel } from "./date-nav";
+import {
+	stepAnchorIso,
+	formatDateLabel,
+	readScopeAnchor,
+	writeScopeAnchor,
+	backChipLabel,
+	shouldShowBackChip,
+} from "./date-nav";
 import { EmbeddedMarkdownEditor, type LineOp } from "./embedded-editor";
 import type { PillarSource } from "./pillar-core";
 import { wirePillarScrub } from "./pillar-scrub";
@@ -57,8 +64,12 @@ export class SectionCards extends Component {
 	private scope: NoteScope;
 	private cards: Card[] = [];
 	private cardsEl: HTMLElement | null = null;
-	/** Date the view is anchored on; null = follow (logical) today. */
+	/** Date the view is anchored on; null = follow (logical) today.
+	 *  On the Focus surface this is also persisted per scope (see setAnchor). */
 	private anchorIso: string | null = null;
+	/** Focus surface only: the period "back to today" was last pressed from —
+	 *  what the "Back to W38" chip offers to return to. */
+	private prevAnchorIso: string | null = null;
 	/** The bottom padding we last applied (to tell ours from Obsidian's). */
 	private myPad: string | null = null;
 
@@ -72,6 +83,78 @@ export class SectionCards extends Component {
 		super();
 		this.scope =
 			surface === "focus" ? host.getSettings().focusScope : "day";
+		// Restore where the Focus pane was last pointed. The dual panel
+		// re-creates its panes on a drawer swipe-away/back and on every page
+		// change, so without this the week/day you navigated to is thrown
+		// away the moment the pane is rebuilt (Shawn, 2026-09-22).
+		if (surface === "focus") {
+			this.anchorIso = readScopeAnchor(
+				host.getSettings().focusAnchors,
+				this.scope
+			);
+			this.prevAnchorIso = readScopeAnchor(
+				host.getSettings().focusPrevAnchors,
+				this.scope
+			);
+		}
+	}
+
+	/**
+	 * Move the ◀ ▶ anchor and, on the Focus surface, persist it under the
+	 * current scope. null = follow today (the key is removed, not stored as
+	 * null). Every anchor change goes through here so nothing can set the
+	 * anchor without persisting it.
+	 */
+	private async setAnchor(iso: string | null): Promise<void> {
+		this.anchorIso = iso;
+		await this.persistAnchors();
+	}
+
+	/**
+	 * Leave the period being viewed and follow today again, remembering where
+	 * we were so the chip can offer it back (Shawn, 2026-09-22). Both keys are
+	 * written in one save — two awaited saves would race on data.json.
+	 */
+	private async returnToToday(): Promise<void> {
+		this.prevAnchorIso = this.anchorIso;
+		this.anchorIso = null;
+		await this.persistAnchors();
+	}
+
+	/** Go back to the remembered period; the chip has nothing left to offer. */
+	private async restorePrevAnchor(): Promise<void> {
+		const target = this.prevAnchorIso;
+		if (!target) return;
+		this.anchorIso = target;
+		this.prevAnchorIso = null;
+		await this.persistAnchors();
+	}
+
+	/** Forget the remembered period (the chip's ×). */
+	private async clearPrevAnchor(): Promise<void> {
+		this.prevAnchorIso = null;
+		await this.persistAnchors();
+	}
+
+	/**
+	 * Write both anchors under the current scope. Only the Focus surface
+	 * persists — the main and pillar surfaces are always "today" anyway, and
+	 * keying their transient anchor would collide with Focus's.
+	 */
+	private async persistAnchors(): Promise<void> {
+		if (this.surface !== "focus") return;
+		const s = this.host.getSettings();
+		s.focusAnchors = writeScopeAnchor(
+			s.focusAnchors,
+			this.scope,
+			this.anchorIso
+		);
+		s.focusPrevAnchors = writeScopeAnchor(
+			s.focusPrevAnchors,
+			this.scope,
+			this.prevAnchorIso
+		);
+		await this.host.saveSettings();
 	}
 
 	onload(): void {
@@ -264,7 +347,17 @@ export class SectionCards extends Component {
 					this.scope = scope;
 					if (this.surface === "focus") {
 						this.host.getSettings().focusScope = scope;
-						void this.host.saveSettings();
+						// The anchor carried across a scope switch before it
+						// was persisted; keep that, and file it under the
+						// scope now showing so returning restores it. The
+						// remembered period does NOT carry — "W38" means
+						// nothing once you are looking at months — so each
+						// scope keeps its own.
+						this.prevAnchorIso = readScopeAnchor(
+							this.host.getSettings().focusPrevAnchors,
+							scope
+						);
+						void this.persistAnchors();
 					}
 					void this.rebuild();
 				});
@@ -462,7 +555,9 @@ export class SectionCards extends Component {
 		};
 
 		navBtn(`Previous ${this.scope}`, "chevron-left", () => {
-			this.anchorIso = stepAnchorIso(this.resolvedIso(), this.scope, -1);
+			void this.setAnchor(
+				stepAnchorIso(this.resolvedIso(), this.scope, -1)
+			);
 			void this.rebuild();
 		});
 
@@ -484,7 +579,9 @@ export class SectionCards extends Component {
 		});
 
 		navBtn(`Next ${this.scope}`, "chevron-right", () => {
-			this.anchorIso = stepAnchorIso(this.resolvedIso(), this.scope, 1);
+			void this.setAnchor(
+				stepAnchorIso(this.resolvedIso(), this.scope, 1)
+			);
 			void this.rebuild();
 		});
 
@@ -495,12 +592,60 @@ export class SectionCards extends Component {
 		const todayPath = periodicNotePath(this.host.getSettings(), this.scope);
 		if (this.anchorIso !== null && this.notePath() !== todayPath) {
 			const today = navBtn("Back to today", "calendar-check", () => {
-				this.anchorIso = null;
-				void this.rebuild();
+				void (async () => {
+					await this.returnToToday();
+					void this.rebuild();
+				})();
 			});
 			today.addClass("is-anchored");
 		}
 
+		this.buildBackChip(nav, todayPath);
+	}
+
+	/**
+	 * "← Back to W38" — the way back to the period you just left. Only the
+	 * Focus surface remembers one, and it only shows while the pane is
+	 * following today (see shouldShowBackChip for why all three conditions
+	 * matter). The × forgets it without navigating anywhere.
+	 */
+	private buildBackChip(nav: HTMLElement, todayPath: string): void {
+		if (this.surface !== "focus") return;
+		const prev = this.prevAnchorIso;
+		const prevPath = prev
+			? periodicNotePath(this.host.getSettings(), this.scope, prev)
+			: null;
+		if (
+			prev === null ||
+			!shouldShowBackChip(this.anchorIso, prev, prevPath, todayPath)
+		) {
+			return;
+		}
+		const label = backChipLabel(prev, this.scope);
+		const chip = nav.createDiv("stx-nav-back-chip");
+		const go = chip.createEl("button", {
+			cls: "stx-nav-back-go",
+			text: `← ${label}`,
+			attr: { "aria-label": label },
+		});
+		go.addEventListener("click", () => {
+			void (async () => {
+				await this.restorePrevAnchor();
+				void this.rebuild();
+			})();
+		});
+		const dismiss = chip.createEl("button", {
+			cls: "stx-nav-back-x",
+			text: "×",
+			attr: { "aria-label": "Forget that period" },
+		});
+		dismiss.addEventListener("click", (e) => {
+			e.stopPropagation();
+			void (async () => {
+				await this.clearPrevAnchor();
+				void this.rebuild();
+			})();
+		});
 	}
 
 	/**

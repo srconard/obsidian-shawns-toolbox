@@ -16,6 +16,7 @@ import { ThreadService } from "./thread-service";
 import { renderThreadsBlock } from "./threads-block-view";
 import { findConflicts, formatConflictReport } from "./status-conflicts";
 import { todayIso } from "./status-service";
+import { sanitizeScopeAnchors } from "./date-nav";
 import { ensureDailyNote, logicalTodayIso } from "./capture-service";
 import { CaptureView, CAPTURE_VIEW_TYPE } from "./capture-view";
 import {
@@ -30,6 +31,7 @@ import { PillarsView, PILLARS_VIEW_TYPE } from "./pillars-view";
 import { GuidingQuestionsView, GUIDING_VIEW_TYPE } from "./guiding-view";
 import { HighlightsView, HIGHLIGHTS_VIEW_TYPE } from "./highlights-view";
 import { DreamsView, DREAMS_VIEW_TYPE } from "./dreams-view";
+import { VSearchView, VSEARCH_VIEW_TYPE } from "./vsearch-view";
 import { DualPanelView, DUAL_VIEW_TYPE, DUAL_LEFT_VIEW_TYPE } from "./dual-view";
 import { DrawerChrome } from "./drawer-chrome";
 import { openVaultChooser } from "./settings";
@@ -168,6 +170,10 @@ export default class ShawnsToolboxPlugin extends Plugin {
 			DREAMS_VIEW_TYPE,
 			(leaf: WorkspaceLeaf) => new DreamsView(leaf, host)
 		);
+		this.registerView(
+			VSEARCH_VIEW_TYPE,
+			(leaf: WorkspaceLeaf) => new VSearchView(leaf, host)
+		);
 		// Two panels stacked in one leaf — the only way to see two toolbox
 		// surfaces at once in the phone drawer, which shows one panel at a time.
 		this.registerView(
@@ -231,6 +237,11 @@ export default class ShawnsToolboxPlugin extends Plugin {
 			id: "open-dreams-panel",
 			name: "Open dreams panel",
 			callback: () => void this.activateView(DREAMS_VIEW_TYPE, "right"),
+		});
+		this.addCommand({
+			id: "open-vsearch-panel",
+			name: "Open vault search panel",
+			callback: () => void this.activateView(VSEARCH_VIEW_TYPE, "right"),
 		});
 		this.addCommand({
 			id: "open-dual-panel",
@@ -304,6 +315,9 @@ export default class ShawnsToolboxPlugin extends Plugin {
 		);
 		this.addRibbonIcon("moon", "Open dreams panel", () =>
 			void this.activateView(DREAMS_VIEW_TYPE, "right")
+		);
+		this.addRibbonIcon("scan-search", "Open vault search panel", () =>
+			void this.activateView(VSEARCH_VIEW_TYPE, "right")
 		);
 		this.addRibbonIcon("rows-2", "Open dual panel", () =>
 			void this.activateView(DUAL_VIEW_TYPE, "right")
@@ -497,6 +511,15 @@ export default class ShawnsToolboxPlugin extends Plugin {
 			...DEFAULT_SETTINGS.focusSectionSelections,
 			...this.settings.focusSectionSelections,
 		};
+		// Sanitised copy (v1.46.0): a stored anchor is only honoured when it
+		// is a real ISO date, and the fresh object keeps per-scope writes off
+		// the module-level DEFAULT_SETTINGS.
+		this.settings.focusAnchors = sanitizeScopeAnchors(
+			this.settings.focusAnchors
+		);
+		this.settings.focusPrevAnchors = sanitizeScopeAnchors(
+			this.settings.focusPrevAnchors
+		);
 		this.settings.pillarSectionSelections = {
 			...DEFAULT_SETTINGS.pillarSectionSelections,
 			...this.settings.pillarSectionSelections,

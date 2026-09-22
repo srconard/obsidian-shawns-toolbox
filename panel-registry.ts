@@ -17,6 +17,7 @@ import { FocusPanel } from "./focus-view";
 import { SectionsPanel } from "./sections-view";
 import { GuidingQuestionsPanel } from "./guiding-view";
 import { StatusPanel } from "./status-view";
+import { VSearchPanel } from "./vsearch-view";
 
 export interface PanelSpec {
 	/** Stable id stored in settings — never rename one without a migration. */
@@ -88,6 +89,12 @@ export const PANEL_SPECS: readonly PanelSpec[] = [
 		label: "Note status",
 		icon: "check-circle",
 		create: (h, c) => new StatusPanel(h, c),
+	},
+	{
+		id: "vsearch",
+		label: "Vault search",
+		icon: "scan-search",
+		create: (h, c) => new VSearchPanel(h, c),
 	},
 ] as const;
 

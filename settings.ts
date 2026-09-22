@@ -67,6 +67,14 @@ export interface ShawnsToolboxSettings {
 	/** Persisted selection per scope for the left Focus panel */
 	focusSectionSelections: Record<NoteScope, string[]>;
 	focusScope: NoteScope;
+	/** v1.46.0: the Focus panel's ◀ ▶ anchor date per scope (ISO YYYY-MM-DD).
+	 *  Absent key = follow today. Keyed exactly like focusSectionSelections so
+	 *  a pane rebuilt by the dual panel comes back on the week you left it. */
+	focusAnchors: Record<string, string>;
+	/** v1.46.0: the period "back to today" was pressed FROM, per scope — what
+	 *  the "Back to W38" chip offers to return to. Same shape and lifetime as
+	 *  focusAnchors; an absent key means there is nothing to go back to. */
+	focusPrevAnchors: Record<string, string>;
 	/** Reading-mode toggles, persisted per surface */
 	sectionsReadingMode: boolean;
 	focusReadingMode: boolean;
@@ -149,6 +157,14 @@ export interface ShawnsToolboxSettings {
 	mediaInboxUrl: string;
 	/** Shared secret sent as the x-media-key header (= MEDIA_INBOX_KEY on the NAS). */
 	mediaInboxKey: string;
+
+	// Vault search panel (v1.46.0)
+	/** Base URL of the NAS bridge exposing GET /search (no trailing slash). */
+	vaultSearchUrl: string;
+	/** Which corpus the semantic half searches (query_vault.py VAULT_CORPORA). */
+	vaultSearchCorpus: "shawn" | "agent" | "dev" | "all";
+	/** Last query, so a rebuilt pane comes back with the box still filled. */
+	vaultSearchLastQuery: string;
 }
 
 export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
@@ -199,6 +215,8 @@ export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
 		year: [],
 	},
 	focusScope: "day",
+	focusAnchors: {},
+	focusPrevAnchors: {},
 	sectionsReadingMode: false,
 	focusReadingMode: false,
 	sectionsChipsCollapsed: false,
@@ -244,6 +262,13 @@ export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
 	// The NAS Tailscale address the phone reaches; overridable in settings.
 	mediaInboxUrl: "http://100.97.68.101:8799",
 	mediaInboxKey: "",
+
+	// Same NAS, the bridge's port. Reachable from the phone over Tailscale.
+	vaultSearchUrl: "http://100.97.68.101:8787",
+	// "shawn" = Shawn's own notes; the agent/dev corpora are the system's own
+	// writing and would drown his thoughts in its commentary about them.
+	vaultSearchCorpus: "shawn",
+	vaultSearchLastQuery: "",
 };
 
 export class ShawnsToolboxSettingTab extends PluginSettingTab {
@@ -917,6 +942,50 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 					});
 				text.inputEl.type = "password";
 				text.inputEl.style.width = "300px";
+			});
+
+		// ---- Vault search panel (v1.46.0) ----
+		containerEl.createEl("h3", { text: "Vault search" });
+
+		containerEl.createEl("p", {
+			text: "The Vault search panel asks the NAS bridge for semantic matches across the whole vault. The embeddings live on the NAS, so the panel needs to reach it.",
+			cls: "setting-item-description",
+		});
+
+		new Setting(containerEl)
+			.setName("Vault search (bridge) URL")
+			.setDesc(
+				"Base URL of the NAS bridge exposing GET /search (no trailing slash). On the phone this is the NAS Tailscale address."
+			)
+			.addText((text) => {
+				text
+					.setPlaceholder("http://100.97.68.101:8787")
+					.setValue(this.plugin.settings.vaultSearchUrl)
+					.onChange(async (value) => {
+						this.plugin.settings.vaultSearchUrl =
+							value.trim().replace(/\/+$/, "") ||
+							DEFAULT_SETTINGS.vaultSearchUrl;
+						await this.plugin.saveSettings();
+					});
+				text.inputEl.style.width = "300px";
+			});
+
+		new Setting(containerEl)
+			.setName("Search which corpus")
+			.setDesc(
+				'"Your notes" is the vault as you wrote it; the agent and dev corpora are the AI system\'s own writing.'
+			)
+			.addDropdown((dd) => {
+				dd.addOption("shawn", "Your notes");
+				dd.addOption("agent", "Agent notes");
+				dd.addOption("dev", "Dev docs");
+				dd.addOption("all", "Everything");
+				dd.setValue(this.plugin.settings.vaultSearchCorpus);
+				dd.onChange(async (value) => {
+					this.plugin.settings.vaultSearchCorpus =
+						value as typeof DEFAULT_SETTINGS.vaultSearchCorpus;
+					await this.plugin.saveSettings();
+				});
 			});
 	}
 

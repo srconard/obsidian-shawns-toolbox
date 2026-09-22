@@ -860,6 +860,53 @@ body.is-phone .stx-voice-btn {
 	color: var(--interactive-accent);
 }
 
+/* "← Back to W38" (v1.46.0): the way back to the period you were looking at
+   when you pressed "back to today". Lives at the right end of the nav row and
+   is allowed to shrink — on a phone drawer the row is ~200px wide and the
+   ◀ label ▶ cluster must never be pushed off to make room for it. */
+.stx-nav-back-chip {
+	display: flex;
+	align-items: center;
+	margin-left: auto;
+	min-width: 0;
+	flex: 0 1 auto;
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 999px;
+	overflow: hidden;
+}
+
+.stx-nav-back-go {
+	background: transparent;
+	border: none;
+	box-shadow: none;
+	color: var(--interactive-accent);
+	font-size: var(--font-ui-smaller);
+	padding: 0.2em 0.1em 0.2em 0.6em;
+	cursor: pointer;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	min-width: 0;
+	flex: 0 1 auto;
+}
+
+.stx-nav-back-x {
+	background: transparent;
+	border: none;
+	box-shadow: none;
+	color: var(--text-faint);
+	font-size: var(--font-ui-smaller);
+	line-height: 1;
+	padding: 0.2em 0.5em 0.3em 0.3em;
+	cursor: pointer;
+	flex: 0 0 auto;
+}
+
+.stx-nav-back-x:hover {
+	color: var(--text-normal);
+}
+
 .stx-nav-label {
 	background: transparent;
 	border: none;
@@ -2506,4 +2553,198 @@ div.view-content.stx-dual-root {
 .stx-web-fullscreen .workspace-leaf-content[data-type="webviewer"] webview {
 	height: 100%;
 	width: 100%;
+}
+
+/* ---- Vault search panel (v1.46.0) ----
+   Semantic search over the whole vault. The query box is pinned and the
+   results scroll under it, which needs the full-height flex column — so the
+   root is written with the COMPOUND selector `div.view-content.stx-vsearch-root`
+   (0,2,1). Obsidian's own `.workspace-drawer .view-content` rules are (0,2,0)
+   and out-specify a bare class, which is the footgun that cost v1.7.5 and
+   v1.36.0 a release each: the column silently drops, children stack at their
+   natural height, and the leftover space becomes a dead gap. The dual-panel
+   body variant is listed alongside because there the root is a plain div. */
+div.view-content.stx-vsearch-root,
+.stx-dual-body.stx-vsearch-root {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	min-height: 0;
+	padding: 0.5em;
+	gap: 0.45em;
+	overflow: hidden;
+}
+
+.stx-vsearch-bar {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: flex-end;
+	gap: 0.4em;
+}
+
+.stx-vsearch-field {
+	position: relative;
+	flex: 1 1 auto;
+	min-width: 0;
+	display: flex;
+}
+
+.stx-vsearch-input {
+	width: 100%;
+	resize: none;
+	font-size: var(--font-ui-small);
+	line-height: 1.35;
+	/* Room for the mic, which floats over the box's bottom-right corner. */
+	padding-right: 2.2em;
+}
+
+.stx-vsearch-mic {
+	position: absolute;
+	right: 0.25em;
+	bottom: 0.25em;
+	background: transparent;
+	border: none;
+	box-shadow: none;
+	color: var(--text-muted);
+	padding: 0.25em;
+	border-radius: var(--radius-s);
+	cursor: pointer;
+	display: flex;
+}
+
+.stx-vsearch-mic.is-recording {
+	color: var(--text-error);
+}
+
+.stx-vsearch-mic.is-busy {
+	color: var(--interactive-accent);
+}
+
+.stx-vsearch-go {
+	flex: 0 0 auto;
+	cursor: pointer;
+}
+
+.stx-vsearch-status {
+	flex: 0 0 auto;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	padding: 0 0.15em;
+}
+
+.stx-vsearch-status.is-error {
+	color: var(--text-error);
+}
+
+/* The only scrolling region — the bar above it stays put while results move. */
+.stx-vsearch-results {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+	gap: 0.5em;
+}
+
+.stx-vsearch-group {
+	display: flex;
+	flex-direction: column;
+	gap: 0.3em;
+}
+
+.stx-vsearch-group-title {
+	font-size: var(--font-ui-smaller);
+	font-weight: 600;
+	color: var(--text-faint);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	padding: 0.1em 0.15em;
+}
+
+.stx-vsearch-row {
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	padding: 0.4em 0.55em;
+	cursor: pointer;
+}
+
+.stx-vsearch-row:hover {
+	border-color: var(--background-modifier-border-hover);
+}
+
+.stx-vsearch-note-title {
+	font-size: var(--font-ui-small);
+	font-weight: 600;
+	color: var(--text-normal);
+}
+
+.stx-vsearch-path {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.stx-vsearch-hit-head {
+	display: flex;
+	align-items: baseline;
+	gap: 0.4em;
+	min-width: 0;
+}
+
+.stx-vsearch-hit-note {
+	font-size: var(--font-ui-smaller);
+	font-weight: 600;
+	color: var(--text-normal);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	flex: 0 1 auto;
+}
+
+.stx-vsearch-hit-heading {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	flex: 0 1 auto;
+}
+
+/* The similarity badge — a relative number, deliberately quiet. */
+.stx-vsearch-score {
+	margin-left: auto;
+	flex: 0 0 auto;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+	font-variant-numeric: tabular-nums;
+}
+
+.stx-vsearch-snippet {
+	margin-top: 0.15em;
+	font-size: var(--font-ui-small);
+	line-height: 1.35;
+	color: var(--text-muted);
+	/* Three lines is enough to recognise a passage; more and the list stops
+	   being scannable on a phone. */
+	display: -webkit-box;
+	-webkit-line-clamp: 3;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+
+.stx-vsearch-more {
+	flex: 0 0 auto;
+	align-self: center;
+	cursor: pointer;
+	font-size: var(--font-ui-smaller);
+}
+
+.stx-vsearch-empty {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	padding: 0.8em 0.3em;
+	text-align: center;
 }
