@@ -78,7 +78,13 @@ export class SectionCards extends Component {
 		private containerEl: HTMLElement,
 		private surface: "main" | "focus" | "pillar",
 		/** Only used by the "pillar" surface: the pillar ring to cycle through. */
-		private pillarSource?: PillarSource
+		private pillarSource?: PillarSource,
+		/**
+		 * "full" = the Focus screen opened in the main area (v1.48.0): the
+		 * week nav moves to the bottom of the screen with big buttons. Same
+		 * data, same persisted week and selection as the sidebar pane.
+		 */
+		private layout: "pane" | "full" = "pane"
 	) {
 		super();
 		this.scope =
@@ -307,6 +313,7 @@ export class SectionCards extends Component {
 		this.teardownCards();
 		this.containerEl.empty();
 		this.containerEl.addClass("stx-section-cards");
+		this.containerEl.toggleClass("stx-cards-full", this.layout === "full");
 		// Layout as INLINE styles: in the mobile drawer Obsidian's own
 		// .view-content rules kept beating our class selectors (the probe
 		// showed display:flex never applying → the column didn't stretch and
@@ -377,7 +384,10 @@ export class SectionCards extends Component {
 
 		// The date-nav row (◀ ▶ through days/weeks/…) is periodic-only; the
 		// pillar surface cycles pillars via its own row in the toolbar above.
-		if (this.surface !== "pillar") this.buildNavRow();
+		// Full-screen Focus puts it at the bottom instead (after the cards,
+		// below), where the thumb is — Shawn, 2026-09-22.
+		const navAtBottom = this.layout === "full" && this.surface !== "pillar";
+		if (this.surface !== "pillar" && !navAtBottom) this.buildNavRow();
 
 		const chipsEl = this.containerEl.createDiv(
 			"stx-chips" + (collapsed ? " is-collapsed" : "")
@@ -385,6 +395,7 @@ export class SectionCards extends Component {
 		this.cardsEl = this.containerEl.createDiv("stx-cards");
 		this.cardsEl.style.flex = "1 1 auto";
 		this.cardsEl.style.minHeight = "0";
+		if (navAtBottom) this.buildNavRow();
 		if (!this.readingMode()) this.buildEditBar();
 
 		const file = this.noteFile();
@@ -543,6 +554,7 @@ export class SectionCards extends Component {
 	/** ◀ note-label ▶ [today] — plus the line-edit cluster in edit mode. */
 	private buildNavRow(): void {
 		const nav = this.containerEl.createDiv("stx-nav-row");
+		const full = this.layout === "full";
 
 		const navBtn = (aria: string, icon: string, cb: () => void) => {
 			const btn = nav.createEl("button", {
@@ -550,6 +562,8 @@ export class SectionCards extends Component {
 				attr: { "aria-label": aria },
 			});
 			setIcon(btn, icon);
+			// Full screen has the room to say what the big buttons do.
+			if (full) btn.createSpan({ cls: "stx-nav-btn-text", text: aria });
 			btn.addEventListener("click", cb);
 			return btn;
 		};

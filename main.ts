@@ -24,7 +24,12 @@ import {
 	CAPTURE_SIDE_VIEW_TYPE,
 } from "./capture-side-view";
 import { SectionsView, SECTIONS_VIEW_TYPE } from "./sections-view";
-import { FocusView, FOCUS_VIEW_TYPE } from "./focus-view";
+import {
+	FocusFullView,
+	FocusView,
+	FOCUS_FULL_VIEW_TYPE,
+	FOCUS_VIEW_TYPE,
+} from "./focus-view";
 import { VoiceView, VOICE_VIEW_TYPE } from "./voice-view";
 import { ThreadsView, THREADS_VIEW_TYPE } from "./threads-view";
 import { PillarsView, PILLARS_VIEW_TYPE } from "./pillars-view";
@@ -147,6 +152,10 @@ export default class ShawnsToolboxPlugin extends Plugin {
 			(leaf: WorkspaceLeaf) => new FocusView(leaf, host)
 		);
 		this.registerView(
+			FOCUS_FULL_VIEW_TYPE,
+			(leaf: WorkspaceLeaf) => new FocusFullView(leaf, host)
+		);
+		this.registerView(
 			VOICE_VIEW_TYPE,
 			(leaf: WorkspaceLeaf) => new VoiceView(leaf, host)
 		);
@@ -206,6 +215,12 @@ export default class ShawnsToolboxPlugin extends Plugin {
 			id: "open-focus-panel",
 			name: "Open focus panel",
 			callback: () => void this.activateView(FOCUS_VIEW_TYPE, "left"),
+		});
+		this.addCommand({
+			id: "open-focus-full",
+			name: "Open focus full screen",
+			callback: () =>
+				void this.activateView(FOCUS_FULL_VIEW_TYPE, "main"),
 		});
 		this.addCommand({
 			id: "open-voice-panel",
