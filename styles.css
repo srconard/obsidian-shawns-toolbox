@@ -3024,3 +3024,26 @@ body.is-phone.is-floating-nav .workspace-split.mod-root div.view-content.stx-car
 .stx-nav-btn-text {
 	white-space: nowrap;
 }
+
+/* ---- Section cards in the main pane (v1.49.0) ----
+   On a phone Obsidian pads the top of every main-area markdown scroller by
+   --view-top-spacing-markdown so a real note clears the floating view header:
+     .is-phone .mod-root .workspace-leaf-content .view-content
+       .markdown-source-view > .cm-editor > .cm-scroller { padding-top: … }
+   The selector also matches our embedded card editors once the Focus screen
+   is a main-area tab (v1.48.0), so every card grew ~120px of blank space
+   between its title and its first line — Shawn, 2026-09-23: "There is a big
+   space below headings." Sidebars are not .mod-root, which is why the pane
+   never showed it. One class more specific than Obsidian's rule. */
+.is-phone .mod-root .workspace-leaf-content .view-content .stx-card-body .markdown-source-view > .cm-editor > .cm-scroller,
+.is-phone .mod-root .workspace-leaf-content .view-content .stx-card-body .markdown-reading-view > .markdown-preview-view {
+	padding-top: 0;
+}
+
+/* While Obsidian's mobile toolbar is up (v1.49.0: the full-screen Focus
+   tab uses it instead of our edit bar) the floating navbar is hidden and the
+   toolbar's spacer already reserves its height, so drop the navbar
+   clearance. */
+body.is-phone.is-floating-nav.mod-toolbar-open .workspace-split.mod-root div.view-content.stx-cards-full {
+	padding-bottom: 0.4em;
+}

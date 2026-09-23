@@ -11,6 +11,7 @@ import {
 	Component,
 	MarkdownRenderer,
 	Notice,
+	Platform,
 	TFile,
 	setIcon,
 } from "obsidian";
@@ -396,7 +397,11 @@ export class SectionCards extends Component {
 		this.cardsEl.style.flex = "1 1 auto";
 		this.cardsEl.style.minHeight = "0";
 		if (navAtBottom) this.buildNavRow();
-		if (!this.readingMode()) this.buildEditBar();
+		// Full screen on the phone uses Obsidian's own mobile toolbar above
+		// the keyboard instead of our bar (v1.49.0, Shawn 2026-09-23: "the
+		// normal obsidian toolbar above the keyboard … instead of the buttons
+		// that we added"). The pane layout keeps its bar; desktop keeps it too.
+		if (!this.readingMode() && !this.usesNativeToolbar()) this.buildEditBar();
 
 		const file = this.noteFile();
 		if (!file) {
@@ -666,9 +671,11 @@ export class SectionCards extends Component {
 	 * The edit bar: bullet / checkbox / outdent / indent / move up / move
 	 * down, pinned to the bottom of the view so it sits directly above the
 	 * phone keyboard (the container is a flex column; this is its last row).
-	 * Obsidian's own mobile toolbar ignores embedded editors — the v1.7.1
+	 * Obsidian's own mobile toolbar ignored embedded editors — the v1.7.1
 	 * activeEditor claim did not populate it on-device — so the cards carry
-	 * their own bar instead.
+	 * their own bar. v1.49.0 found why (the owner lacked `editor`, so the
+	 * toolbar's hasFocus() check threw) and the full-screen Focus tab now
+	 * uses the native toolbar instead; the pane layout keeps this bar.
 	 */
 	private buildEditBar(): void {
 		const bar = this.containerEl.createDiv("stx-edit-bar");
@@ -691,6 +698,15 @@ export class SectionCards extends Component {
 		opBtn("indent", "Indent line", "chevrons-right");
 		opBtn("up", "Move line up", "arrow-up");
 		opBtn("down", "Move line down", "arrow-down");
+	}
+
+	/**
+	 * The full-screen Focus tab on mobile hands editing to Obsidian's native
+	 * mobile toolbar (the embedded editors expose `editor` on their owner so
+	 * the toolbar recognises them). The sidebar pane is unchanged.
+	 */
+	private usesNativeToolbar(): boolean {
+		return this.layout === "full" && Platform.isMobile;
 	}
 
 	/** Route a line op to the focused card's editor (or the only card). */
@@ -731,6 +747,7 @@ export class SectionCards extends Component {
 			card.editor = new EmbeddedMarkdownEditor(this.host.app, bodyEl, {
 				value: slice,
 				filePath: file.path,
+				nativeToolbar: this.usesNativeToolbar(),
 				onChange: (value) => {
 					if (card.timer !== null) window.clearTimeout(card.timer);
 					card.timer = window.setTimeout(() => {

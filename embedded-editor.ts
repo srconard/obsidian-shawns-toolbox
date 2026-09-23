@@ -33,6 +33,14 @@ export interface EmbeddedEditorOptions {
 	filePath?: string;
 	onChange?: (value: string) => void;
 	onBlur?: (value: string) => void;
+	/**
+	 * Let Obsidian's own mobile toolbar (the strip above the keyboard) drive
+	 * this editor (v1.49.0). Obsidian's editor focus handler already sets
+	 * `workspace.activeEditor = owner`, and the toolbar shows only when
+	 * `activeEditor.editor.hasFocus()` — our owner had no `editor`, so that
+	 * check threw and the toolbar never appeared (the v1.7.1 failure).
+	 */
+	nativeToolbar?: boolean;
 }
 
 let EditorClass: any = null;
@@ -115,17 +123,65 @@ export class EmbeddedMarkdownEditor extends Component {
 				return f instanceof TFile ? f : null;
 			}
 		}
-		this.editor = new SectionEditor(this.app, container, {
+		// The owner is what Obsidian announces as `workspace.activeEditor`
+		// while this editor has focus. With nativeToolbar it is shaped like a
+		// MarkdownFileInfo (`editor` + `file`), so the mobile toolbar's
+		// hasFocus() check passes and its editor commands act on this card.
+		const owner: Record<string, unknown> = {
 			app: this.app,
 			onMarkdownScroll: () => {},
 			getMode: () => "source",
-		});
+		};
+		if (this.opts.nativeToolbar) {
+			Object.defineProperty(owner, "editor", {
+				get: () => self.editor?.editor ?? null,
+				configurable: true,
+			});
+			Object.defineProperty(owner, "file", {
+				get: () => self.fileFromOpts(),
+				configurable: true,
+			});
+			this.owner = owner;
+		}
+		this.editor = new SectionEditor(this.app, container, owner);
 		this.editor.set(this.opts.value, false);
 		const el: HTMLElement = this.editor.editorEl ?? container;
 		if (this.opts.onBlur) {
 			this.registerDomEvent(el, "focusout", () =>
 				this.opts.onBlur?.(this.get())
 			);
+		}
+		if (this.opts.nativeToolbar) {
+			this.registerDomEvent(el, "focusin", () => this.reassertActive());
+		}
+	}
+
+	private owner: Record<string, unknown> | null = null;
+
+	private fileFromOpts(): TFile | null {
+		if (!this.opts.filePath) return null;
+		const f = this.app.vault.getAbstractFileByPath(this.opts.filePath);
+		return f instanceof TFile ? f : null;
+	}
+
+	/**
+	 * Obsidian sets activeEditor from the editor's own focus handler, but a
+	 * tap that also activates the leaf runs setActiveLeaf, which clears it
+	 * again. Re-claim it shortly after focus (only while we still hold
+	 * focus) and ask the toolbar to re-evaluate.
+	 */
+	private reassertActive(): void {
+		for (const ms of [0, 80, 300]) {
+			window.setTimeout(() => {
+				if (!this.owner || !this.hasFocus) return;
+				try {
+					const ws = this.app.workspace as any;
+					if (ws.activeEditor !== this.owner) ws.activeEditor = this.owner;
+					(this.app as any).mobileToolbar?.update?.();
+				} catch {
+					// internals moved — never break typing over the toolbar
+				}
+			}, ms);
 		}
 	}
 
@@ -248,6 +304,16 @@ export class EmbeddedMarkdownEditor extends Component {
 	}
 
 	onunload(): void {
+		try {
+			// Do not leave a torn-down card announced as the active editor.
+			if (this.owner) {
+				(this.app.workspace as any).unsetActiveEditor?.(this.owner);
+				(this.app as any).mobileToolbar?.update?.();
+			}
+		} catch {
+			// best effort
+		}
+		this.owner = null;
 		try {
 			this.editor?.destroy?.();
 			this.editor?.unload?.();
