@@ -3125,3 +3125,34 @@ body.is-phone.is-floating-nav.mod-toolbar-open .workspace-split.mod-root div.vie
 .stx-rename-undo {
 	margin-left: 0.5em;
 }
+
+/* Auto-hide status bar (v1.53.0, desktop only). With the setting on, the plugin
+   puts .stx-autohide-statusbar on <body>. The bar slides down until only a 3px
+   sliver is left and fades out. Its ::before is an invisible hover target
+   (48px tall, the bar's width) that sits just above the sliver, so the mouse
+   reaching the bottom-right corner counts as hovering the bar. Showing is
+   immediate; hiding waits 400ms (transition-delay) so it does not flicker.
+   Menus the bar opens (sync popover, etc.) are separate body-level elements,
+   so they stay usable once opened. Removing the class restores the default. */
+body.stx-autohide-statusbar:not(.is-mobile) .status-bar {
+	opacity: 0;
+	transform: translateY(calc(100% - 3px));
+	transition: opacity 180ms ease, transform 180ms ease;
+	transition-delay: 400ms;
+}
+body.stx-autohide-statusbar:not(.is-mobile) .status-bar::before {
+	content: "";
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 100%;
+	height: 48px;
+	background: transparent;
+	pointer-events: auto;
+}
+body.stx-autohide-statusbar:not(.is-mobile) .status-bar:hover,
+body.stx-autohide-statusbar:not(.is-mobile) .status-bar:focus-within {
+	opacity: 1;
+	transform: none;
+	transition-delay: 0ms;
+}

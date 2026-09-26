@@ -168,6 +168,10 @@ export interface ShawnsToolboxSettings {
 	vaultSearchCorpus: "shawn" | "agent" | "dev" | "all";
 	/** Last query, so a rebuilt pane comes back with the box still filled. */
 	vaultSearchLastQuery: string;
+
+	// Desktop status bar (v1.53.0)
+	/** Hide Obsidian's bottom-right status bar until the mouse reaches that corner. */
+	autohideStatusBar: boolean;
 }
 
 export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
@@ -273,6 +277,8 @@ export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
 	// writing and would drown his thoughts in its commentary about them.
 	vaultSearchCorpus: "shawn",
 	vaultSearchLastQuery: "",
+
+	autohideStatusBar: true,
 };
 
 export class ShawnsToolboxSettingTab extends PluginSettingTab {
@@ -318,6 +324,24 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 						this.plugin.settings.drawerPillInHeader = value;
 						await this.plugin.saveSettings();
 						this.plugin.refreshDrawerChrome();
+					})
+			);
+
+		// ---- Desktop status bar (v1.53.0) ----
+		containerEl.createEl("h3", { text: "Status bar (desktop)" });
+
+		new Setting(containerEl)
+			.setName("Auto-hide status bar (show on hover at bottom-right)")
+			.setDesc(
+				"Hide the strip in the bottom-right corner (backlinks, word count, sync …) until the mouse reaches that corner. It hides again shortly after the mouse leaves. Desktop only; turning this off restores it immediately."
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.autohideStatusBar)
+					.onChange(async (value) => {
+						this.plugin.settings.autohideStatusBar = value;
+						await this.plugin.saveSettings();
+						this.plugin.refreshStatusBarAutohide();
 					})
 			);
 

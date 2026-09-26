@@ -1,4 +1,4 @@
-import { Notice, Plugin, WorkspaceLeaf, TFile } from "obsidian";
+import { Notice, Platform, Plugin, WorkspaceLeaf, TFile } from "obsidian";
 import { summarizeBlock } from "./block-summarizer";
 import {
 	createCheckboxExtensions,
@@ -45,6 +45,10 @@ import { fileShareToNote, registerFilingMenu } from "./filing-service";
 import type { CardsHost } from "./section-cards";
 import { toggleLeafFullscreen, toggleLeafToolbar } from "./web-fullscreen";
 import { registerEditorTagMenu } from "./editor-tag-menu";
+import {
+	applyStatusBarAutohide,
+	STATUSBAR_AUTOHIDE_CLASS,
+} from "./statusbar-core";
 
 export default class ShawnsToolboxPlugin extends Plugin {
 	settings: ShawnsToolboxSettings = DEFAULT_SETTINGS;
@@ -292,6 +296,18 @@ export default class ShawnsToolboxPlugin extends Plugin {
 				},
 			});
 		}
+		// ---- Auto-hide status bar (v1.53.0, desktop only) ----
+		this.refreshStatusBarAutohide();
+		this.addCommand({
+			id: "toggle-autohide-status-bar",
+			name: "Toggle auto-hide status bar",
+			checkCallback: (checking) => {
+				if (Platform.isMobile) return false;
+				if (!checking) void this.toggleStatusBarAutohide();
+				return true;
+			},
+		});
+
 		// ---- Web viewer fullscreen ----
 
 		this.addCommand({
@@ -455,6 +471,7 @@ export default class ShawnsToolboxPlugin extends Plugin {
 	}
 
 	onunload(): void {
+		document.body.classList.remove(STATUSBAR_AUTOHIDE_CLASS);
 		this.drawerChrome?.restore();
 		this.statusFooter?.unmount();
 		this.mentionsFooter?.unmount();
@@ -578,6 +595,26 @@ export default class ShawnsToolboxPlugin extends Plugin {
 			this.settings.focusSectionSelections[this.settings.focusScope] =
 				legacy as string[];
 		}
+	}
+
+	/** Add or remove the status-bar auto-hide body class for the current setting. */
+	refreshStatusBarAutohide(): void {
+		applyStatusBarAutohide(
+			document.body.classList,
+			this.settings.autohideStatusBar,
+			Platform.isMobile
+		);
+	}
+
+	private async toggleStatusBarAutohide(): Promise<void> {
+		this.settings.autohideStatusBar = !this.settings.autohideStatusBar;
+		await this.saveSettings();
+		this.refreshStatusBarAutohide();
+		new Notice(
+			this.settings.autohideStatusBar
+				? "Status bar auto-hide on — hover the bottom-right corner to show it"
+				: "Status bar auto-hide off"
+		);
 	}
 
 	/** Re-apply (or undo) the drawer pill move after a settings change. */
