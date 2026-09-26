@@ -58,6 +58,12 @@ export interface ShawnsToolboxSettings {
 	/** Nested-thread tree nodes (full names, e.g. "flow/movement") whose
 	 *  children are collapsed in the Threads list, persisted (v1.51.0). */
 	threadTreeCollapsed: string[];
+	/** Threads panel layout: the collapsible tree or drill-down tiles (v1.56.0). */
+	threadsViewMode: "tree" | "tiles";
+	/** Tiles mode: the thread path drilled into ("" = the top level), persisted. */
+	threadsTilesPath: string;
+	/** Tiles mode: the "Show all at and below this level" chip, persisted. */
+	threadsTilesShowAll: boolean;
 
 	// Capture & Sections
 	/** Full heading line each capture button appends under */
@@ -220,6 +226,9 @@ export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
 	threadAreasNotePath: "01. Default/Thread Areas.md",
 	threadAreasCollapsed: [],
 	threadTreeCollapsed: [],
+	threadsViewMode: "tree",
+	threadsTilesPath: "",
+	threadsTilesShowAll: false,
 
 	captureTargets: {
 		thought: "# Thoughts",

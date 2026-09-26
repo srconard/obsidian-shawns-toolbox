@@ -3194,3 +3194,163 @@ body.stx-focus-mode:not(.is-mobile) .workspace-split.mod-root {
 body.stx-focus-mode.stx-focus-mode-hide-view-headers:not(.is-mobile) .workspace-leaf-content > .view-header {
 	display: none !important;
 }
+
+/* ---- v1.56.0: Threads tiles mode — root threads as big full-width tiles,
+   drill-down with a breadcrumb. One column, so it reads the same in a
+   300–450 px sidebar and on the phone; tiles are ≥ 56 px tall for a thumb. */
+.stx-tiles {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5em;
+	margin: 0.2em 0 0.8em;
+}
+.stx-tile {
+	display: flex;
+	flex-direction: column;
+	gap: 0.25em;
+	min-height: 56px;
+	justify-content: center;
+	padding: 0.7em 0.85em;
+	border-radius: var(--radius-m, 8px);
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-secondary);
+	cursor: pointer;
+	user-select: none;
+	-webkit-user-select: none;
+	-webkit-tap-highlight-color: transparent;
+	transition: border-color 0.12s ease, background 0.12s ease;
+}
+.stx-tile:hover {
+	border-color: var(--interactive-accent);
+	background: var(--background-modifier-hover);
+}
+.stx-tile:active {
+	background: var(--background-modifier-active-hover, var(--background-modifier-hover));
+}
+.stx-tile:focus {
+	outline: none;
+}
+.stx-tile:focus-visible {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: 1px;
+}
+.stx-tile.is-pinned {
+	border-left: 3px solid var(--interactive-accent);
+}
+.stx-tile-name {
+	display: flex;
+	align-items: center;
+	gap: 0.4em;
+	min-width: 0;
+}
+.stx-tile-label {
+	flex: 1 1 auto;
+	min-width: 0;
+	font-size: var(--font-ui-large, 1.15em);
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+	color: var(--text-normal);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.stx-tile-chevron {
+	display: inline-flex;
+	flex: 0 0 auto;
+	color: var(--text-faint);
+}
+.stx-tile-chevron .svg-icon {
+	width: 1.05em;
+	height: 1.05em;
+}
+.stx-tile-sub {
+	display: flex;
+	flex-wrap: wrap;
+	column-gap: 0.4em;
+	row-gap: 0.1em;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+.stx-tile-dot {
+	color: var(--text-faint);
+}
+
+/* Drilled-in header: back · breadcrumb (wraps in a narrow sidebar) · actions */
+.stx-tiles-crumbs {
+	flex: 1 1 auto;
+	min-width: 0;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.1em 0.2em;
+}
+.stx-tiles-crumb {
+	background: transparent;
+	border: none;
+	box-shadow: none;
+	padding: 2px 4px;
+	height: auto;
+	min-height: 28px;
+	border-radius: 4px;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	cursor: pointer;
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.stx-tiles-crumb:hover {
+	color: var(--text-normal);
+	background: var(--background-modifier-hover);
+}
+.stx-tiles-crumb.is-current {
+	color: var(--text-normal);
+	font-weight: 600;
+	cursor: default;
+}
+.stx-tiles-crumb-sep {
+	color: var(--text-faint);
+}
+.stx-tiles-sub {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.4em 0.6em;
+	margin: 0 0.3em 0.6em;
+}
+.stx-tiles-sub-stats {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	flex: 1 1 auto;
+}
+.stx-tiles-showall {
+	flex: 0 0 auto;
+	min-height: 28px;
+}
+.stx-tiles-section-head {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	margin: 0.4em 0.3em 0.35em;
+}
+.stx-post-thread.stx-tile-subpath.is-own {
+	color: var(--text-faint);
+	cursor: default;
+}
+
+/* Phone: bigger targets. */
+body.is-mobile .stx-tile {
+	min-height: 64px;
+	padding: 0.85em 1em;
+}
+body.is-mobile .stx-tiles-crumb,
+body.is-mobile .stx-tiles-showall {
+	min-height: 36px;
+}
+.stx-post-thread.stx-tile-subpath.is-own:hover {
+	text-decoration: none;
+}

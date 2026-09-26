@@ -60,6 +60,20 @@ import {
 	askApplyToReplies,
 	showTagMenu as showTagMenuAt,
 } from "./tag-menu";
+import {
+	breadcrumb,
+	flattenSubtreePosts,
+	isUpLevelKey,
+	moveTileFocus,
+	normalizeViewMode,
+	ownLevelPosts,
+	parentPath,
+	resolveDrillPath,
+	subPathLabel,
+	tileRoots,
+	tileStats,
+	tileSublineParts,
+} from "./thread-tiles-core";
 import { ToolboxPanel } from "./panel-base";
 import { ToolboxPanelView } from "./panel-view";
 
@@ -73,6 +87,36 @@ export const THREADS_VIEW_TYPE = "shawns-toolbox-threads";
 
 const PREVIEW_LEN = 60;
 const REFRESH_DEBOUNCE_MS = 400;
+
+/** Every live Threads panel (standalone leaf or inside the dual view), so the
+ *  "Threads: toggle tiles view" command can redraw them all (v1.56.0). */
+const livePanels = new Set<ThreadsPanel>();
+
+/**
+ * Flip the Threads panel between the tree and the drill-down tiles, persist
+ * it, and redraw every open panel. Returns how many panels were open, so the
+ * command can open one when there are none.
+ */
+export async function toggleThreadsTilesMode(host: CardsHost): Promise<number> {
+	const settings = host.getSettings();
+	const next = normalizeViewMode(settings.threadsViewMode) === "tiles" ? "tree" : "tiles";
+	settings.threadsViewMode = next;
+	// A panel showing one thread's detail follows into tiles at that thread.
+	for (const panel of livePanels) panel.onViewModeChanged(next);
+	await host.saveSettings();
+	for (const panel of livePanels) panel.redraw();
+	return livePanels.size;
+}
+
+/** Card options for the tiles screens (renderThreadCard). */
+interface CardOpts {
+	/** Replaces the sub-thread chip's text (show-all's relative path). */
+	chipLabel?: (thread: string) => string;
+	/** Where a sub-thread chip tap goes (tiles: drill there). */
+	jump?: (thread: string) => void;
+	/** Show the "this level" label on posts tagged at the node itself. */
+	labelOwn?: boolean;
+}
 
 export class ThreadsPanel extends ToolboxPanel {
 	private service: ThreadService;
@@ -110,8 +154,15 @@ export class ThreadsPanel extends ToolboxPanel {
 	// Which surface the DOM currently shows, so render() can save the list's
 	// scroll offset before drilling into a thread/period and restore it on the
 	// way back (session-scoped; contentEl is the scroll container).
-	private renderedMode: "list" | "thread" | "period" | "today" | null = null;
+	private renderedMode: "list" | "thread" | "period" | "today" | "tiles" | null = null;
 	private listScroll = 0;
+	// Tiles mode (v1.56.0): the path the DOM last showed and its scroll offset,
+	// so a rescan keeps the place but a drill starts at the top.
+	private renderedTilesPath: string | null = null;
+	private tilesScroll = 0;
+	// Tile to focus after the next tiles render (keyboard drill / go up):
+	// a full thread name, "" for the first tile, undefined for none.
+	private pendingTileFocus: string | undefined = undefined;
 
 	constructor(host: CardsHost, contentEl: HTMLElement) {
 		super(host, contentEl);
@@ -120,6 +171,8 @@ export class ThreadsPanel extends ToolboxPanel {
 
 	protected async onOpen(): Promise<void> {
 		this.contentEl.addClass("stx-threads");
+		livePanels.add(this);
+		this.registerDomEvent(this.contentEl, "keydown", (e) => this.onTilesKey(e));
 		const rescanOn = (file: TAbstractFile) => {
 			if (!this.service.isScannableFile(file)) return;
 			this.service.invalidate(file.path);
@@ -155,6 +208,7 @@ export class ThreadsPanel extends ToolboxPanel {
 	}
 
 	protected async onClose(): Promise<void> {
+		livePanels.delete(this);
 		if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
 		this.contentEl.empty();
 	}
@@ -190,6 +244,24 @@ export class ThreadsPanel extends ToolboxPanel {
 		this.render();
 	}
 
+	/** Redraw from the data already in hand (the tiles toggle command). */
+	redraw(): void {
+		this.render();
+	}
+
+	/** The command switched modes: a thread detail follows into tiles. */
+	onViewModeChanged(next: "tree" | "tiles"): void {
+		if (next === "tiles" && this.activeThread !== null && !this.activeToday && this.activePeriod === null) {
+			this.host.getSettings().threadsTilesPath = this.activeThread;
+			this.activeThread = null;
+			this.replyOpenFor = null;
+		}
+	}
+
+	private isTilesMode(): boolean {
+		return normalizeViewMode(this.host.getSettings().threadsViewMode) === "tiles";
+	}
+
 	private render(): void {
 		// Remember the list's scroll offset before we tear it down, so returning
 		// from a thread/period (or re-rendering the list after a rescan) lands
@@ -197,6 +269,12 @@ export class ThreadsPanel extends ToolboxPanel {
 		if (this.renderedMode === "list") {
 			this.listScroll = this.contentEl.scrollTop;
 		}
+		if (this.renderedMode === "tiles") {
+			this.tilesScroll = this.contentEl.scrollTop;
+		}
+		const hadFocus =
+			document.activeElement instanceof HTMLElement &&
+			this.contentEl.contains(document.activeElement);
 		this.contentEl.empty();
 		if (this.activeToday) {
 			this.renderedMode = "today";
@@ -207,6 +285,16 @@ export class ThreadsPanel extends ToolboxPanel {
 		} else if (this.activeThread !== null) {
 			this.renderedMode = "thread";
 			this.renderThread(this.activeThread);
+		} else if (this.isTilesMode()) {
+			const wasTiles = this.renderedMode === "tiles";
+			const prevPath = this.renderedTilesPath;
+			this.renderedMode = "tiles";
+			const path = this.renderTiles(hadFocus);
+			this.renderedTilesPath = path;
+			// Same level (a rescan, a reply) keeps the place; a drill starts at the top.
+			const top = wasTiles && prevPath === path ? this.tilesScroll : 0;
+			this.contentEl.scrollTop = top;
+			window.requestAnimationFrame(() => (this.contentEl.scrollTop = top));
 		} else {
 			this.renderedMode = "list";
 			this.renderList();
@@ -224,8 +312,14 @@ export class ThreadsPanel extends ToolboxPanel {
 	// ---- thread list ----
 
 	private renderList(): void {
-		// Top of the main page: jump into today's thoughts (the capture→process
-		// bridge). Shown regardless of whether any threads exist yet.
+		this.renderTodayButton();
+		this.renderListBody();
+	}
+
+	/** Top of the main page (tree and tiles top level): jump into today's
+	 *  thoughts (the capture→process bridge). Shown regardless of whether any
+	 *  threads exist yet. */
+	private renderTodayButton(): void {
 		const untagged = this.today.filter((p) => p.thread === null).length;
 		const todayBtn = this.contentEl.createEl("button", {
 			cls: "stx-today-btn",
@@ -245,9 +339,12 @@ export class ThreadsPanel extends ToolboxPanel {
 			this.calendarMonth = null;
 			void this.loadDayThoughts().then(() => this.render());
 		});
+	}
 
+	private renderListBody(): void {
 		const head = this.contentEl.createDiv({ cls: "stx-threads-head" });
 		head.createSpan({ cls: "stx-threads-title", text: "Threads" });
+		this.viewModeButton(head);
 		this.iconButton(head, "refresh-cw", "Rescan", () => void this.refresh());
 
 		const summaries = summarizeThreads(this.posts);
@@ -276,6 +373,12 @@ export class ThreadsPanel extends ToolboxPanel {
 				for (const g of groups) this.renderAreaGroup(g, pinnedSet);
 			}
 		}
+		this.renderPeriodSection(periods);
+	}
+
+	/** The "Periodic thoughts" rows at the bottom of the main page (tree and
+	 *  tiles top level alike). */
+	private renderPeriodSection(periods: ReturnType<typeof summarizePeriods>): void {
 		if (periods.length > 0) {
 			const sec = this.contentEl.createDiv({ cls: "stx-period-section" });
 			sec.createDiv({ cls: "stx-period-head", text: "Periodic thoughts" });
@@ -443,6 +546,263 @@ export class ThreadsPanel extends ToolboxPanel {
 		});
 		row.addEventListener("click", onClick);
 		return row;
+	}
+
+
+	// ---- tiles mode (v1.56.0) ----
+
+	/** The tree/tiles toggle, placed next to the refresh button. */
+	private viewModeButton(head: HTMLElement): void {
+		const tiles = this.isTilesMode();
+		this.iconButton(
+			head,
+			tiles ? "list-tree" : "layout-grid",
+			tiles ? "Switch to tree view" : "Switch to tiles view",
+			() => void toggleThreadsTilesMode(this.host)
+		);
+	}
+
+	private tilesPath(): string {
+		return this.host.getSettings().threadsTilesPath ?? "";
+	}
+
+	/** Drill tiles mode to `path` (null = the top level), persisted. */
+	private async setTilesPath(path: string | null, focus?: string): Promise<void> {
+		const settings = this.host.getSettings();
+		settings.threadsTilesPath = path ?? "";
+		this.replyOpenFor = null;
+		this.pendingTileFocus = focus;
+		this.render();
+		await this.host.saveSettings();
+	}
+
+	private async toggleTilesShowAll(): Promise<void> {
+		const settings = this.host.getSettings();
+		settings.threadsTilesShowAll = !settings.threadsTilesShowAll;
+		this.replyOpenFor = null;
+		this.render();
+		await this.host.saveSettings();
+	}
+
+	/**
+	 * Tiles mode: the root threads as big full-width tiles; a tile drills into
+	 * its node, which shows a breadcrumb, its child threads as tiles and the
+	 * posts tagged exactly there — or, with "Show all at and below this level",
+	 * every post of the subtree in one newest-first list, each labelled with
+	 * its sub-thread path. Returns the path actually shown (null = top).
+	 */
+	private renderTiles(hadFocus: boolean): string | null {
+		const summaries = summarizeThreads(this.posts);
+		const pinned = this.pinnedThreads();
+		const pinnedSet = new Set(pinned);
+		const groups = groupTreeByArea(summaries, this.areas, pinned);
+		const roots = tileRoots(groups);
+		// A remembered path that no longer exists falls back to its deepest
+		// surviving ancestor (a rename, a retag).
+		const path = resolveDrillPath(roots, this.tilesPath());
+		const node = path === null ? null : findNode(roots, path);
+
+		if (node === null) {
+			this.renderTodayButton();
+			const head = this.contentEl.createDiv({ cls: "stx-threads-head stx-tiles-nav" });
+			head.createSpan({ cls: "stx-threads-title", text: "Threads" });
+			this.viewModeButton(head);
+			this.iconButton(head, "refresh-cw", "Rescan", () => void this.refresh());
+			const periods = summarizePeriods(this.periodic);
+			if (roots.length === 0 && periods.length === 0) {
+				this.contentEl.createDiv({
+					cls: "stx-threads-empty",
+					text: "No #thread or #thought posts found in your notes yet.",
+				});
+				return null;
+			}
+			if (roots.length > 0) this.renderTileGrid(roots, pinnedSet);
+			this.renderPeriodSection(periods);
+			this.focusAfterTiles(hadFocus);
+			return null;
+		}
+
+		// ---- a drilled-in level ----
+		const head = this.contentEl.createDiv({ cls: "stx-threads-head stx-tiles-nav" });
+		this.iconButton(head, "arrow-left", "Up one level", () =>
+			void this.setTilesPath(parentPath(node.name), node.name)
+		);
+		const crumbsEl = head.createDiv({ cls: "stx-tiles-crumbs" });
+		const crumbs = breadcrumb(node.name);
+		crumbs.forEach((c, i) => {
+			if (i > 0) crumbsEl.createSpan({ cls: "stx-tiles-crumb-sep", text: "›" });
+			const last = i === crumbs.length - 1;
+			const btn = crumbsEl.createEl("button", {
+				cls: "stx-tiles-crumb" + (last ? " is-current" : ""),
+				text: c.label,
+			});
+			btn.setAttr("aria-label", c.name ? `#thread/${c.name}` : "All threads");
+			if (last) {
+				btn.setAttr("aria-current", "page");
+				wireLongPressMenu(btn, (x, y, onHide) =>
+					this.showThreadMenu(node.name, x, y, onHide)
+				);
+			} else {
+				// Going up focuses the tile we came down through at that level.
+				const cameThrough = crumbs[i + 1].name ?? undefined;
+				btn.addEventListener("click", () => void this.setTilesPath(c.name, cameThrough));
+			}
+		});
+		this.iconButton(head, "more-horizontal", "Thread actions", () => {
+			const r = crumbsEl.getBoundingClientRect();
+			this.showThreadMenu(node.name, r.left, r.bottom);
+		});
+		this.viewModeButton(head);
+		this.iconButton(head, "refresh-cw", "Rescan", () => void this.refresh());
+
+		const hasKids = node.children.length > 0;
+		const showAll = hasKids && !!this.host.getSettings().threadsTilesShowAll;
+		const sub = this.contentEl.createDiv({ cls: "stx-tiles-sub" });
+		sub.createSpan({
+			cls: "stx-tiles-sub-stats",
+			text: tileSublineParts(tileStats(node)).join(" · "),
+		});
+		if (hasKids) {
+			const chip = sub.createEl("button", {
+				cls: "stx-period-chip stx-tiles-showall",
+				text: "Show all at and below this level",
+			});
+			chip.setAttr("aria-pressed", showAll ? "true" : "false");
+			if (showAll) chip.addClass("is-active");
+			chip.addEventListener("click", () => void this.toggleTilesShowAll());
+		}
+
+		const textByBlock = new Map<string, string>();
+		for (const l of [...this.posts, ...this.replies])
+			if (l.blockId) textByBlock.set(targetKey(l.note, l.blockId), l.text);
+		const cardByKey = new Map<string, HTMLElement>();
+		const drill = (name: string) => void this.setTilesPath(name);
+
+		if (showAll) {
+			const all = flattenSubtreePosts(this.posts, node.name);
+			this.contentEl.createDiv({
+				cls: "stx-tiles-section-head",
+				text: `All posts at and below ${node.label} · ${all.length}`,
+			});
+			const listEl = this.contentEl.createDiv({ cls: "stx-thread-posts" });
+			for (const g of groupPostsWithReplies(all, this.replies))
+				this.renderThreadCard(listEl, g, node.name, textByBlock, cardByKey, {
+					chipLabel: (t) => subPathLabel(t, node.name),
+					jump: drill,
+					labelOwn: true,
+				});
+			if (all.length === 0)
+				listEl.createDiv({ cls: "stx-threads-empty", text: "No posts yet." });
+			this.focusAfterTiles(hadFocus);
+			return node.name;
+		}
+
+		if (hasKids) this.renderTileGrid(node.children, pinnedSet);
+
+		const own = ownLevelPosts(this.posts, node.name);
+		if (hasKids) {
+			this.contentEl.createDiv({
+				cls: "stx-tiles-section-head",
+				text: `Posts here · ${own.length}`,
+			});
+		}
+		const listEl = this.contentEl.createDiv({ cls: "stx-thread-posts" });
+		for (const g of groupPostsWithReplies(own, this.replies))
+			this.renderThreadCard(listEl, g, node.name, textByBlock, cardByKey, { jump: drill });
+		if (own.length === 0)
+			listEl.createDiv({
+				cls: "stx-threads-empty",
+				text: hasKids
+					? "Nothing tagged exactly here — open a thread above, or show all."
+					: "No posts yet.",
+			});
+		this.focusAfterTiles(hadFocus);
+		return node.name;
+	}
+
+	/** Big full-width tiles, one per node: name large, subline below. */
+	private renderTileGrid(nodes: ThreadNode[], pinnedSet: Set<string>): void {
+		const grid = this.contentEl.createDiv({ cls: "stx-tiles" });
+		grid.setAttr("role", "list");
+		for (const n of nodes) {
+			const tile = grid.createDiv({ cls: "stx-tile" });
+			tile.setAttr("role", "button");
+			tile.setAttr("tabindex", "0");
+			tile.setAttr("aria-label", `#thread/${n.name}`);
+			tile.dataset.name = n.name;
+			if (pinnedSet.has(n.name)) tile.addClass("is-pinned");
+			const nameRow = tile.createDiv({ cls: "stx-tile-name" });
+			if (pinnedSet.has(n.name)) {
+				const pin = nameRow.createSpan({ cls: "stx-thread-row-pin" });
+				setIcon(pin, "pin");
+			}
+			nameRow.createSpan({ cls: "stx-tile-label", text: n.label });
+			const chev = nameRow.createSpan({ cls: "stx-tile-chevron" });
+			setIcon(chev, n.children.length > 0 ? "chevron-right" : "file-text");
+			const stats = tileStats(n);
+			const subEl = tile.createDiv({ cls: "stx-tile-sub" });
+			tileSublineParts(stats).forEach((part, i) => {
+				if (i > 0) subEl.createSpan({ cls: "stx-tile-dot", text: "·" });
+				const isHere = stats.here !== null && part === `${stats.here} here`;
+				subEl.createSpan({ cls: isHere ? "stx-thread-row-own" : "", text: part });
+			});
+			const wasLongPress = wireLongPressMenu(tile, (x, y, onHide) =>
+				this.showThreadMenu(n.name, x, y, onHide)
+			);
+			tile.addEventListener("click", () => {
+				if (wasLongPress()) return;
+				void this.setTilesPath(n.name);
+			});
+		}
+	}
+
+	/** After a tiles render: focus the pending tile (a keyboard drill / go up),
+	 *  or — when focus was inside the panel — the first tile, else the back
+	 *  button, so the keys keep working without a click. */
+	private focusAfterTiles(hadFocus: boolean): void {
+		const pending = this.pendingTileFocus;
+		this.pendingTileFocus = undefined;
+		if (pending === undefined && !hadFocus) return;
+		const tiles = Array.from(this.contentEl.querySelectorAll<HTMLElement>(".stx-tile"));
+		const target =
+			(pending ? tiles.find((t) => t.dataset.name === pending) : undefined) ??
+			tiles[0] ??
+			this.contentEl.querySelector<HTMLElement>(".stx-tiles-nav .stx-threads-iconbtn");
+		target?.focus({ preventScroll: true });
+		if (target && pending) target.scrollIntoView({ block: "nearest" });
+	}
+
+	/** Keys in tiles mode: arrows/Home/End move between tiles, Enter/Space
+	 *  opens one, Backspace or Alt+Left goes up a level. Never while typing. */
+	private onTilesKey(e: KeyboardEvent): void {
+		if (this.renderedMode !== "tiles") return;
+		const t = e.target;
+		if (!(t instanceof HTMLElement)) return;
+		if (t.closest("textarea, input, select, [contenteditable='true']")) return;
+		const path = this.renderedTilesPath;
+		if (isUpLevelKey(e)) {
+			if (path === null) return;
+			e.preventDefault();
+			void this.setTilesPath(parentPath(path), path);
+			return;
+		}
+		const tile = t.closest<HTMLElement>(".stx-tile");
+		if (tile && (e.key === "Enter" || e.key === " ")) {
+			e.preventDefault();
+			tile.click();
+			return;
+		}
+		if (!tile && !t.closest(".stx-tiles-nav")) return;
+		if (e.altKey || e.ctrlKey || e.metaKey) return;
+		const tiles = Array.from(this.contentEl.querySelectorAll<HTMLElement>(".stx-tile"));
+		const next = moveTileFocus(tile ? tiles.indexOf(tile) : -1, tiles.length, e.key);
+		if (next === null) return;
+		// Left/Right on a header button keep their default (none) — only the
+		// tiles themselves treat them as movement.
+		if (!tile && (e.key === "ArrowLeft" || e.key === "ArrowRight")) return;
+		e.preventDefault();
+		tiles[next].focus({ preventScroll: true });
+		tiles[next].scrollIntoView({ block: "nearest" });
 	}
 
 	// ---- thoughts for a day (default today) ----
@@ -830,7 +1190,8 @@ export class ThreadsPanel extends ToolboxPanel {
 		group: PostGroup<ThreadPost>,
 		thread: string,
 		textByBlock: Map<string, string>,
-		cardByKey: Map<string, HTMLElement>
+		cardByKey: Map<string, HTMLElement>,
+		opts: CardOpts = {}
 	): void {
 		const post = group.post;
 		const card = listEl.createDiv({ cls: "stx-post" });
@@ -864,8 +1225,17 @@ export class ThreadsPanel extends ToolboxPanel {
 		if (post.thread !== thread) {
 			const sub = post.thread;
 			const chip = card.createDiv({ cls: "stx-post-thread" });
-			chip.setText(`#thread/${sub}`);
-			this.wireThreadChip(chip, post, sub, () => this.openThread(sub));
+			chip.setText(opts.chipLabel ? opts.chipLabel(sub) : `#thread/${sub}`);
+			if (opts.chipLabel) {
+				chip.addClass("stx-tile-subpath");
+				chip.setAttr("aria-label", `#thread/${sub}`);
+			}
+			const jump = opts.jump;
+			this.wireThreadChip(chip, post, sub, () =>
+				jump ? jump(sub) : this.openThread(sub)
+			);
+		} else if (opts.labelOwn) {
+			card.createDiv({ cls: "stx-post-thread stx-tile-subpath is-own", text: "this level" });
 		}
 
 		// footer: reply button + reply count

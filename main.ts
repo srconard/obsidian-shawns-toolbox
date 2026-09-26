@@ -31,7 +31,7 @@ import {
 	FOCUS_VIEW_TYPE,
 } from "./focus-view";
 import { VoiceView, VOICE_VIEW_TYPE } from "./voice-view";
-import { ThreadsView, THREADS_VIEW_TYPE } from "./threads-view";
+import { ThreadsView, THREADS_VIEW_TYPE, toggleThreadsTilesMode } from "./threads-view";
 import { lastThreadRename, undoWithNotice } from "./thread-rename";
 import { PillarsView, PILLARS_VIEW_TYPE } from "./pillars-view";
 import { GuidingQuestionsView, GUIDING_VIEW_TYPE } from "./guiding-view";
@@ -249,6 +249,15 @@ export default class ShawnsToolboxPlugin extends Plugin {
 			id: "open-threads-panel",
 			name: "Open threads panel",
 			callback: () => void this.activateView(THREADS_VIEW_TYPE, "right"),
+		});
+		this.addCommand({
+			id: "threads-toggle-tiles",
+			name: "Threads: toggle tiles view",
+			callback: () =>
+				void (async () => {
+					const open = await toggleThreadsTilesMode(host);
+					if (open === 0) await this.activateView(THREADS_VIEW_TYPE, "right");
+				})(),
 		});
 		this.addCommand({
 			id: "open-pillars-panel",
