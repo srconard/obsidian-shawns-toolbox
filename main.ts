@@ -43,7 +43,8 @@ import { DrawerChrome } from "./drawer-chrome";
 import { openVaultChooser } from "./settings";
 import { fileShareToNote, registerFilingMenu } from "./filing-service";
 import type { CardsHost } from "./section-cards";
-import { toggleLeafFullscreen, toggleLeafToolbar } from "./web-fullscreen";
+import { stopOverlayRelay, toggleLeafFullscreen, toggleLeafToolbar } from "./web-fullscreen";
+import { WebviewHotkeys } from "./webview-hotkeys";
 import { registerEditorTagMenu } from "./editor-tag-menu";
 import {
 	applyStatusBarAutohide,
@@ -58,6 +59,7 @@ export default class ShawnsToolboxPlugin extends Plugin {
 	};
 	private statusFooter: StatusFooter | null = null;
 	private drawerChrome: DrawerChrome | null = null;
+	private webviewHotkeys: WebviewHotkeys | null = null;
 	private mentionsFooter: MentionsFooter | null = null;
 	/** Shared across ```threads block renders so the mtime cache persists. */
 	private threadService: ThreadService | null = null;
@@ -308,6 +310,18 @@ export default class ShawnsToolboxPlugin extends Plugin {
 			},
 		});
 
+		// ---- Web viewer hotkeys (v1.54.0, desktop only) ----
+		if (Platform.isDesktopApp) {
+			this.webviewHotkeys = new WebviewHotkeys(this.app, () => this.settings);
+			this.app.workspace.onLayoutReady(() => this.refreshWebviewHotkeys());
+			this.registerEvent(
+				this.app.workspace.on("layout-change", () => this.webviewHotkeys?.requestScan())
+			);
+			this.registerEvent(
+				this.app.workspace.on("active-leaf-change", () => this.webviewHotkeys?.requestScan())
+			);
+		}
+
 		// ---- Web viewer fullscreen ----
 
 		this.addCommand({
@@ -472,6 +486,8 @@ export default class ShawnsToolboxPlugin extends Plugin {
 
 	onunload(): void {
 		document.body.classList.remove(STATUSBAR_AUTOHIDE_CLASS);
+		this.webviewHotkeys?.stop();
+		stopOverlayRelay();
 		this.drawerChrome?.restore();
 		this.statusFooter?.unmount();
 		this.mentionsFooter?.unmount();
@@ -615,6 +631,11 @@ export default class ShawnsToolboxPlugin extends Plugin {
 				? "Status bar auto-hide on — hover the bottom-right corner to show it"
 				: "Status bar auto-hide off"
 		);
+	}
+
+	/** Start, stop or re-apply Web viewer hotkey forwarding after a settings change. */
+	refreshWebviewHotkeys(): void {
+		this.webviewHotkeys?.refresh();
 	}
 
 	/** Re-apply (or undo) the drawer pill move after a settings change. */

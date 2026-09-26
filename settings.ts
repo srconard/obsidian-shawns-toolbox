@@ -1,4 +1,9 @@
-import { App, Notice, PluginSettingTab, Setting } from "obsidian";
+import { App, Notice, Platform, PluginSettingTab, Setting } from "obsidian";
+import {
+	DEFAULT_PASS_THROUGH_KEYS,
+	parsePassThrough,
+	type ForwardMode,
+} from "./webview-hotkeys-core";
 import {
 	addPage,
 	addPane,
@@ -172,6 +177,14 @@ export interface ShawnsToolboxSettings {
 	// Desktop status bar (v1.53.0)
 	/** Hide Obsidian's bottom-right status bar until the mouse reaches that corner. */
 	autohideStatusBar: boolean;
+
+	// Web viewer hotkeys (v1.54.0)
+	/** Make Obsidian hotkeys (Ctrl+P, Ctrl+O …) work while a Web viewer page has focus. */
+	forwardWebviewHotkeys: boolean;
+	/** Combos the page keeps even when Obsidian binds them (comma separated). */
+	webviewPassThroughKeys: string;
+	/** "auto" = Obsidian's own forwarding when it has it, else inject into the page. */
+	webviewHotkeysMode: ForwardMode;
 }
 
 export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
@@ -279,6 +292,10 @@ export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
 	vaultSearchLastQuery: "",
 
 	autohideStatusBar: true,
+
+	forwardWebviewHotkeys: true,
+	webviewPassThroughKeys: DEFAULT_PASS_THROUGH_KEYS,
+	webviewHotkeysMode: "auto",
 };
 
 export class ShawnsToolboxSettingTab extends PluginSettingTab {
@@ -344,6 +361,75 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 						this.plugin.refreshStatusBarAutohide();
 					})
 			);
+
+		if (Platform.isDesktopApp) {
+			containerEl.createEl("h3", { text: "Web viewer (desktop)" });
+
+			new Setting(containerEl)
+				.setName("Forward Obsidian hotkeys from Web viewer")
+				.setDesc(
+					"Make Obsidian hotkeys such as Ctrl+P (command palette), Ctrl+O and Ctrl+, work while the cursor is inside a web page in the Web viewer. Only combos Obsidian actually binds are taken; typing and everything else stays with the page."
+				)
+				.addToggle((toggle) =>
+					toggle.setValue(this.plugin.settings.forwardWebviewHotkeys).onChange(async (value) => {
+						this.plugin.settings.forwardWebviewHotkeys = value;
+						await this.plugin.saveSettings();
+						this.plugin.refreshWebviewHotkeys();
+					})
+				);
+
+			const passSetting = new Setting(containerEl)
+				.setName("Keys to leave to the web page")
+				.setDesc(
+					"Comma-separated combos the page always keeps, even when Obsidian binds them (e.g. Ctrl+L, Ctrl+Enter). On a Mac, Ctrl entries also cover ⌘. A key the page itself handles is left to it as well."
+				);
+			const passNote = passSetting.descEl.createDiv({ cls: "mod-warning" });
+			const showInvalid = (text: string) => {
+				const { invalid } = parsePassThrough(text, Platform.isMacOS);
+				passNote.setText(invalid.length ? `Not understood: ${invalid.join(", ")}` : "");
+			};
+			showInvalid(this.plugin.settings.webviewPassThroughKeys);
+			passSetting.addTextArea((text) =>
+				text
+					.setPlaceholder(DEFAULT_PASS_THROUGH_KEYS)
+					.setValue(this.plugin.settings.webviewPassThroughKeys)
+					.onChange(async (value) => {
+						this.plugin.settings.webviewPassThroughKeys = value;
+						showInvalid(value);
+						await this.plugin.saveSettings();
+						this.plugin.refreshWebviewHotkeys();
+					})
+			);
+			passSetting.addExtraButton((b) =>
+				b
+					.setIcon("rotate-ccw")
+					.setTooltip("Reset to default")
+					.onClick(async () => {
+						this.plugin.settings.webviewPassThroughKeys = DEFAULT_PASS_THROUGH_KEYS;
+						await this.plugin.saveSettings();
+						this.plugin.refreshWebviewHotkeys();
+						this.display();
+					})
+			);
+
+			new Setting(containerEl)
+				.setName("Forwarding method")
+				.setDesc(
+					"Auto uses Obsidian's own Web viewer key forwarding when this Obsidian has it, and injects a small key listener into the page when it does not. Change this only if hotkeys still do not work."
+				)
+				.addDropdown((dd) =>
+					dd
+						.addOption("auto", "Auto (recommended)")
+						.addOption("inject", "Inject into the page")
+						.addOption("builtin", "Obsidian built-in only")
+						.setValue(this.plugin.settings.webviewHotkeysMode)
+						.onChange(async (value) => {
+							this.plugin.settings.webviewHotkeysMode = value as ForwardMode;
+							await this.plugin.saveSettings();
+							this.plugin.refreshWebviewHotkeys();
+						})
+				);
+		}
 
 		// Checkbox Completion Stamping section
 		containerEl.createEl("h3", { text: "Checkbox Completion Stamping" });
