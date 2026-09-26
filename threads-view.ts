@@ -7,10 +7,7 @@ import type { CardsHost } from "./section-cards";
 import { ThreadService } from "./thread-service";
 import {
 	summarizeThreads,
-	orderThreadsByPin,
-	threadPosts,
-	replyCounts,
-	indexByBlock,
+	postOrder,
 	targetKey,
 	periodicPosts,
 	summarizePeriods,
@@ -19,14 +16,27 @@ import {
 	type ThreadPost,
 	type PeriodicPost,
 	type ThoughtPost,
-	type ThreadSummary,
 } from "./thread-core";
+import { UNSORTED_AREA, type ThreadArea } from "./thread-areas";
 import {
-	groupThreadsByArea,
-	isFlatGrouping,
-	type AreaGroup,
-	type ThreadArea,
-} from "./thread-areas";
+	groupTreeByArea,
+	menuAreaGroups,
+	findNode,
+	buildThreadTree,
+	subtreeFilter,
+	type ThreadNode,
+	type TreeAreaGroup,
+} from "./thread-tree-core";
+import {
+	groupPostsWithReplies,
+	descendantReplies,
+	type ReplyNode,
+	type ReplyPost,
+	type PostGroup,
+} from "./thread-replies-core";
+import type { TagOp } from "./retag-core";
+import { ecoGroupsFromPostGroups, type EcoSendMode } from "./eco-send-core";
+import { sendThreadToEco } from "./eco-send";
 import {
 	buildMonthGrid,
 	monthDayIsos,
@@ -45,15 +55,16 @@ import {
 	wireLongPressMenu,
 	wireChipLongPress,
 	confirmRemoveTag,
+	askApplyToReplies,
 	showTagMenu as showTagMenuAt,
 } from "./tag-menu";
 import { ToolboxPanel } from "./panel-base";
 import { ToolboxPanelView } from "./panel-view";
 
 /** A post the add-tag menu can act on — a thread post, a periodic-thought post,
- *  or a today's-thought post; all carry the fields the service needs to locate
- *  and edit the source line. */
-type TaggablePost = ThreadPost | PeriodicPost | ThoughtPost;
+ *  a today's-thought post, or a reply line (v1.51.0); all carry the fields the
+ *  service needs to locate and edit the source line. */
+type TaggablePost = ThreadPost | PeriodicPost | ThoughtPost | ReplyPost;
 type PeriodTagFilter = "all" | "tagged" | "untagged";
 
 export const THREADS_VIEW_TYPE = "shawns-toolbox-threads";
@@ -65,6 +76,8 @@ export class ThreadsPanel extends ToolboxPanel {
 	private service: ThreadService;
 	private posts: ThreadPost[] = [];
 	private periodic: PeriodicPost[] = [];
+	// Every "↩ [[note#^id]]" line in the vault, tagged or not (v1.51.0).
+	private replies: ReplyPost[] = [];
 	private today: ThoughtPost[] = [];
 	// The thoughts screen's posts for the day it is showing. Same array object
 	// as `today` while the selected day IS today.
@@ -165,9 +178,10 @@ export class ThreadsPanel extends ToolboxPanel {
 	}
 
 	private async refresh(): Promise<void> {
-		const { posts, periodic } = await this.service.scanAll();
+		const { posts, periodic, replies } = await this.service.scanAll();
 		this.posts = posts;
 		this.periodic = periodic;
+		this.replies = replies;
 		this.today = await this.service.todayThoughtPosts();
 		await this.loadDayThoughts();
 		this.areas = await this.service.loadThreadAreas();
@@ -244,16 +258,18 @@ export class ThreadsPanel extends ToolboxPanel {
 			return;
 		}
 		if (summaries.length > 0) {
+			// Nested tags (#thread/a/b/c) render as a collapsible tree (v1.51.0);
+			// areas assign root threads, and a child always follows its root.
 			const pinned = this.pinnedThreads();
 			const pinnedSet = new Set(pinned);
-			const groups = groupThreadsByArea(summaries, this.areas, pinned);
-			if (isFlatGrouping(groups)) {
-				// No areas organised yet — render one flat list (unchanged UX).
-				const flat = groups.length
-					? groups[0].threads
-					: orderThreadsByPin(summaries, pinned);
+			const groups = groupTreeByArea(summaries, this.areas, pinned);
+			const flat =
+				groups.length === 0 ||
+				(groups.length === 1 && groups[0].area === UNSORTED_AREA);
+			if (flat) {
+				// No areas organised yet — one list, no area headers.
 				const list = this.contentEl.createDiv({ cls: "stx-thread-list" });
-				this.renderThreadRows(list, flat, pinnedSet);
+				this.renderTreeNodes(list, groups[0]?.roots ?? [], pinnedSet);
 			} else {
 				for (const g of groups) this.renderAreaGroup(g, pinnedSet);
 			}
@@ -283,7 +299,7 @@ export class ThreadsPanel extends ToolboxPanel {
 	}
 
 	/** An area group: a collapsible header + (when expanded) its thread rows. */
-	private renderAreaGroup(group: AreaGroup, pinnedSet: Set<string>): void {
+	private renderAreaGroup(group: TreeAreaGroup, pinnedSet: Set<string>): void {
 		const collapsed = this.collapsedAreas().includes(group.area);
 		const sec = this.contentEl.createDiv({ cls: "stx-area-section" });
 		const header = sec.createDiv({ cls: "stx-area-head" });
@@ -293,43 +309,98 @@ export class ThreadsPanel extends ToolboxPanel {
 		header.createSpan({ cls: "stx-area-name", text: group.area });
 		header.createSpan({
 			cls: "stx-area-count",
-			text: String(group.threads.length),
+			text: String(group.roots.length),
 		});
 		header.addEventListener("click", () => void this.toggleArea(group.area));
 		if (!collapsed) {
 			const list = sec.createDiv({ cls: "stx-thread-list" });
-			this.renderThreadRows(list, group.threads, pinnedSet);
+			this.renderTreeNodes(list, group.roots, pinnedSet);
 		}
 	}
 
-	/** Render a run of thread rows into a list container (shared by the flat and
-	 *  grouped views). */
-	private renderThreadRows(
+	/**
+	 * Render thread-tree nodes (v1.51.0): one row per node, indented by depth.
+	 * A node with children gets a chevron that collapses them (remembered in
+	 * settings.threadTreeCollapsed); tapping the row opens the node, whose view
+	 * lists its own posts plus every descendant's. The count is the roll-up.
+	 */
+	private renderTreeNodes(
 		list: HTMLElement,
-		threads: ThreadSummary[],
+		nodes: ThreadNode[],
 		pinnedSet: Set<string>
 	): void {
-		for (const s of threads) {
-			const when = s.lastActiveTime
-				? `${s.lastActiveDate} ${s.lastActiveTime}`
-				: s.lastActiveDate;
+		const collapsedSet = new Set(this.collapsedThreads());
+		for (const node of nodes) {
+			const when = node.lastActiveTime
+				? `${node.lastActiveDate} ${node.lastActiveTime}`
+				: node.lastActiveDate;
+			let wasLongPress: () => boolean = () => false;
 			const row = this.listRow(
 				list,
-				s.name,
+				node.label,
 				when,
-				s.postCount,
+				node.totalCount,
 				() => {
-					this.activeThread = s.name;
-					this.threadPeriodFilter.clear();
-					this.replyOpenFor = null;
-					this.render();
+					if (wasLongPress()) return;
+					this.openThread(node.name);
 				},
-				pinnedSet.has(s.name)
+				pinnedSet.has(node.name)
 			);
-			wireLongPressMenu(row, (x, y, onHide) =>
-				this.showThreadMenu(s.name, x, y, onHide)
+			row.addClass("stx-thread-tree-row");
+			row.style.setProperty("--stx-tree-depth", String(node.depth));
+			row.setAttr("aria-label", `#thread/${node.name}`);
+			const nameEl = row.querySelector(".stx-thread-row-name");
+			const hasKids = node.children.length > 0;
+			const collapsed = hasKids && collapsedSet.has(node.name);
+			if (nameEl instanceof HTMLElement) {
+				const chev = createSpan({ cls: "stx-thread-tree-chevron" });
+				nameEl.prepend(chev);
+				if (hasKids) {
+					setIcon(chev, collapsed ? "chevron-right" : "chevron-down");
+					chev.setAttr("aria-label", collapsed ? "Expand" : "Collapse");
+					chev.addEventListener("click", (e) => {
+						e.stopPropagation();
+						void this.toggleThreadCollapsed(node.name);
+					});
+				} else chev.addClass("is-leaf");
+			}
+			if (hasKids && node.ownCount !== node.totalCount) {
+				const meta = row.querySelector(".stx-thread-row-meta");
+				if (meta instanceof HTMLElement)
+					meta.createSpan({
+						cls: "stx-thread-row-own",
+						text: `${node.ownCount} here`,
+					});
+			}
+			wasLongPress = wireLongPressMenu(row, (x, y, onHide) =>
+				this.showThreadMenu(node.name, x, y, onHide)
 			);
+			if (hasKids && !collapsed) this.renderTreeNodes(list, node.children, pinnedSet);
 		}
+	}
+
+	private openThread(name: string): void {
+		this.activeToday = false;
+		this.activePeriod = null;
+		this.calendarMonth = null;
+		this.activeThread = name;
+		this.threadPeriodFilter.clear();
+		this.replyOpenFor = null;
+		this.render();
+	}
+
+	private collapsedThreads(): string[] {
+		return this.host.getSettings().threadTreeCollapsed ?? [];
+	}
+
+	private async toggleThreadCollapsed(name: string): Promise<void> {
+		const settings = this.host.getSettings();
+		const current = settings.threadTreeCollapsed ?? [];
+		settings.threadTreeCollapsed = current.includes(name)
+			? current.filter((n) => n !== name)
+			: [...current, name];
+		await this.host.saveSettings();
+		this.render();
 	}
 
 	private collapsedAreas(): string[] {
@@ -526,29 +597,16 @@ export class ThreadsPanel extends ToolboxPanel {
 		const listEl = this.contentEl.createDiv({ cls: "stx-thread-posts" });
 		for (const post of posts) {
 			const card = listEl.createDiv({ cls: "stx-post" });
-			this.wireTagTap(card, post);
+			// v1.51.0: tap opens the note at the line; long-press tags.
+			this.wireOpenTap(card, post, this.wireTagMenu(card, post));
 			const dateLine = card.createDiv({ cls: "stx-post-date" });
 			dateLine.setText(this.sourceLabel(post));
-			dateLine.addEventListener("click", async (e) => {
-				e.stopPropagation();
-				try {
-					await this.service.openPost(post);
-				} catch (err) {
-					new Notice(err instanceof Error ? err.message : String(err));
-				}
-			});
 			card.createDiv({ cls: "stx-post-text", text: post.text });
 			if (post.thread) {
 				const threadName = post.thread;
 				const t = card.createDiv({ cls: "stx-post-thread" });
 				t.setText(`#thread/${threadName}`);
-				this.wireThreadChip(t, post, threadName, () => {
-					this.activeToday = false;
-					this.calendarMonth = null;
-					this.activeThread = threadName;
-					this.threadPeriodFilter.clear();
-					this.render();
-				});
+				this.wireThreadChip(t, post, threadName, () => this.openThread(threadName));
 			}
 		}
 	}
@@ -662,34 +720,29 @@ export class ThreadsPanel extends ToolboxPanel {
 		const listEl = this.contentEl.createDiv({ cls: "stx-thread-posts" });
 		for (const post of posts) {
 			const card = listEl.createDiv({ cls: "stx-post" });
-			this.wireTagTap(card, post);
+			// v1.51.0: tap opens the note at the line; long-press tags.
+			this.wireOpenTap(card, post, this.wireTagMenu(card, post));
 			const dateLine = card.createDiv({ cls: "stx-post-date" });
 			dateLine.setText(this.sourceLabel(post));
-			dateLine.addEventListener("click", async (e) => {
-				e.stopPropagation();
-				try {
-					await this.service.openPost(post);
-				} catch (err) {
-					new Notice(err instanceof Error ? err.message : String(err));
-				}
-			});
 			card.createDiv({ cls: "stx-post-text", text: post.text });
 			if (post.thread) {
 				const threadName = post.thread;
 				const t = card.createDiv({ cls: "stx-post-thread" });
 				t.setText(`#thread/${threadName}`);
-				this.wireThreadChip(t, post, threadName, () => {
-					this.activePeriod = null;
-					this.activeThread = threadName;
-					this.threadPeriodFilter.clear();
-					this.render();
-				});
+				this.wireThreadChip(t, post, threadName, () => this.openThread(threadName));
 			}
 		}
 	}
 
 	// ---- thread detail ----
 
+	/**
+	 * One thread (or tree node): its own posts plus every descendant's
+	 * (v1.51.0), each post in a box with its replies under it — every line
+	 * carrying "↩ [[…#^id]]" back to the post, tagged or not. Tap a box to open
+	 * its note at the line; long-press it to tag; long-press the header to send
+	 * the thread to Eco.
+	 */
 	private renderThread(thread: string): void {
 		const head = this.contentEl.createDiv({ cls: "stx-threads-head" });
 		this.iconButton(head, "arrow-left", "Back", () => {
@@ -697,14 +750,38 @@ export class ThreadsPanel extends ToolboxPanel {
 			this.replyOpenFor = null;
 			this.render();
 		});
-		head.createSpan({
+		const title = head.createSpan({
 			cls: "stx-threads-title",
 			text: `#thread/${thread}`,
 		});
+		title.setAttr("aria-label", "Long-press for thread actions");
+		wireLongPressMenu(title, (x, y, onHide) =>
+			this.showThreadMenu(thread, x, y, onHide)
+		);
+		// Desktop / discoverability: the same menu from a button.
+		this.iconButton(head, "more-horizontal", "Thread actions", () => {
+			const r = title.getBoundingClientRect();
+			this.showThreadMenu(thread, r.left, r.bottom);
+		});
 
-		const posts = threadPosts(this.posts, thread);
-		const counts = replyCounts(this.posts);
-		const parents = indexByBlock(this.posts);
+		// Sub-threads: one chip per child node, to drill down the tree.
+		const node = findNode(
+			buildThreadTree(summarizeThreads(this.posts), this.pinnedThreads()),
+			thread
+		);
+		if (node && node.children.length > 0) {
+			const bar = this.contentEl.createDiv({ cls: "stx-subthreads" });
+			for (const c of node.children) {
+				const chip = bar.createEl("button", {
+					cls: "stx-period-chip",
+					text: `${c.label} · ${c.totalCount}`,
+				});
+				chip.setAttr("aria-label", `#thread/${c.name}`);
+				chip.addEventListener("click", () => this.openThread(c.name));
+			}
+		}
+
+		const posts = subtreeFilter(this.posts, thread).sort(postOrder);
 
 		// Cadence filter: chips for the periods any post in this thread carries.
 		// Multi-select is a union (a post matches if it carries any selected
@@ -735,74 +812,104 @@ export class ThreadsPanel extends ToolboxPanel {
 						p.periods.some((pr) => this.threadPeriodFilter.has(pr))
 				  );
 
+		const groups = groupPostsWithReplies(visible, this.replies);
+		// "↩ parent" previews resolve against every post AND reply line.
+		const textByBlock = new Map<string, string>();
+		for (const l of [...this.posts, ...this.replies])
+			if (l.blockId) textByBlock.set(targetKey(l.note, l.blockId), l.text);
+
 		const cardByKey = new Map<string, HTMLElement>();
 		const listEl = this.contentEl.createDiv({ cls: "stx-thread-posts" });
+		for (const g of groups) this.renderThreadCard(listEl, g, thread, textByBlock, cardByKey);
+	}
 
-		for (const post of visible) {
-			const card = listEl.createDiv({ cls: "stx-post" });
-			const key = this.cardKey(post);
-			card.dataset.key = key;
-			cardByKey.set(key, card);
-			this.wireTagMenu(card, post);
+	private renderThreadCard(
+		listEl: HTMLElement,
+		group: PostGroup<ThreadPost>,
+		thread: string,
+		textByBlock: Map<string, string>,
+		cardByKey: Map<string, HTMLElement>
+	): void {
+		const post = group.post;
+		const card = listEl.createDiv({ cls: "stx-post" });
+		const key = this.cardKey(post);
+		card.dataset.key = key;
+		cardByKey.set(key, card);
+		this.wireOpenTap(card, post, this.wireTagMenu(card, post));
 
-			// reply-to preview
-			if (post.replyTo) {
-				const pk = targetKey(post.replyTo.note, post.replyTo.blockId);
-				const parent = parents.get(pk);
-				const preview = parent
-					? this.truncate(parent.text)
-					: `${post.replyTo.note}`;
-				const rt = card.createDiv({ cls: "stx-post-replyto" });
-				rt.setText(`↩ ${preview}`);
-				rt.addEventListener("click", (e) => {
-					e.stopPropagation();
-					this.jumpTo(cardByKey, pk);
-				});
-			}
-
-			// date/time (or note name for non-timeline sources) — tapping opens
-			// the source note at the line
-			const dateLine = card.createDiv({ cls: "stx-post-date" });
-			dateLine.setText(this.sourceLabel(post));
-			dateLine.addEventListener("click", async (e) => {
+		// reply-to preview (the parent is not in this view)
+		if (post.replyTo) {
+			const pk = targetKey(post.replyTo.note, post.replyTo.blockId);
+			const parentText = textByBlock.get(pk);
+			const rt = card.createDiv({ cls: "stx-post-replyto" });
+			rt.setText(`↩ ${parentText ? this.truncate(parentText) : post.replyTo.note}`);
+			rt.addEventListener("click", (e) => {
 				e.stopPropagation();
-				try {
-					await this.service.openPost(post);
-				} catch (err) {
-					new Notice(err instanceof Error ? err.message : String(err));
-				}
-			});
-
-			card.createDiv({ cls: "stx-post-text", text: post.text });
-
-			// footer: reply button + reply-count badge
-			const footer = card.createDiv({ cls: "stx-post-footer" });
-			const replyBtn = footer.createEl("button", {
-				cls: "stx-post-reply-btn",
-				text: "Reply",
-			});
-			replyBtn.addEventListener("click", (e) => {
-				e.stopPropagation();
-				this.replyOpenFor = this.replyOpenFor === key ? null : key;
-				this.render();
-			});
-
-			if (post.blockId) {
-				const n = counts.get(targetKey(post.note, post.blockId));
-				if (n && n > 0) {
-					const badge = footer.createSpan({
-						cls: "stx-post-replycount",
-						text: `${n} ↩`,
+				if (cardByKey.has(pk)) this.jumpTo(cardByKey, pk);
+				else
+					void this.openSafe({
+						note: post.replyTo!.note,
+						line: 0,
+						blockId: post.replyTo!.blockId,
 					});
-					badge.addEventListener("click", (e) => {
-						e.stopPropagation();
-						this.jumpToFirstReply(cardByKey, posts, post);
-					});
-				}
+			});
+		}
+
+		card.createDiv({ cls: "stx-post-date", text: this.sourceLabel(post) });
+		card.createDiv({ cls: "stx-post-text", text: post.text });
+
+		// A post from a sub-thread names it (tap = open that sub-thread).
+		if (post.thread !== thread) {
+			const sub = post.thread;
+			const chip = card.createDiv({ cls: "stx-post-thread" });
+			chip.setText(`#thread/${sub}`);
+			this.wireThreadChip(chip, post, sub, () => this.openThread(sub));
+		}
+
+		// footer: reply button + reply count
+		const footer = card.createDiv({ cls: "stx-post-footer" });
+		const replyBtn = footer.createEl("button", {
+			cls: "stx-post-reply-btn",
+			text: "Reply",
+		});
+		replyBtn.addEventListener("click", (e) => {
+			e.stopPropagation();
+			this.replyOpenFor = this.replyOpenFor === key ? null : key;
+			this.render();
+		});
+		if (group.replyCount > 0) {
+			footer.createSpan({
+				cls: "stx-post-replycount",
+				text: `${group.replyCount} ${group.replyCount === 1 ? "reply" : "replies"}`,
+			});
+		}
+
+		if (this.replyOpenFor === key) this.renderReplyBox(card, post);
+
+		if (group.replies.length > 0) {
+			const box = card.createDiv({ cls: "stx-post-replies" });
+			this.renderReplyNodes(box, group.replies, thread);
+		}
+	}
+
+	/** Replies inside their post's box, nested by depth. Each is its own tap
+	 *  (open at its line) and long-press (tag) target. */
+	private renderReplyNodes(box: HTMLElement, nodes: ReplyNode[], thread: string): void {
+		for (const n of nodes) {
+			const r = n.reply;
+			const el = box.createDiv({ cls: "stx-reply" });
+			this.wireOpenTap(el, r, this.wireTagMenu(el, r));
+			el.createDiv({ cls: "stx-post-date", text: `↩ ${this.sourceLabel(r)}` });
+			el.createDiv({ cls: "stx-post-text", text: r.text });
+			if (r.thread && r.thread !== thread) {
+				const other = r.thread;
+				const chip = el.createDiv({ cls: "stx-post-thread" });
+				chip.setText(`#thread/${other}`);
+				this.wireThreadChip(chip, r, other, () => this.openThread(other));
 			}
-
-			if (this.replyOpenFor === key) {
-				this.renderReplyBox(card, post);
+			if (n.children.length > 0) {
+				const sub = el.createDiv({ cls: "stx-post-replies" });
+				this.renderReplyNodes(sub, n.children, thread);
 			}
 		}
 	}
@@ -850,30 +957,61 @@ export class ThreadsPanel extends ToolboxPanel {
 
 	// ---- add-a-tag menu (long-press on touch, right-click on desktop) ----
 
-	private wireTagMenu(card: HTMLElement, post: TaggablePost): void {
-		wireLongPressMenu(card, (x, y, onHide) =>
+	/** Long-press / right-click → the shared tag menu. Returns the "was that
+	 *  click the tail of a long-press" check for the card's tap handler. */
+	private wireTagMenu(card: HTMLElement, post: TaggablePost): () => boolean {
+		return wireLongPressMenu(card, (x, y, onHide) =>
 			this.showTagMenu(post, x, y, onHide)
 		);
 	}
 
 	/**
-	 * In the processing views (Today's thoughts, periodic thoughts) a plain
-	 * tap/left-click on a post opens the add-tag menu at the tap point — the
-	 * "tag it in the moment" gesture. Right-click opens it too (desktop parity).
-	 * Inner controls (date → open source, #thread chip → jump) stopPropagation so
-	 * they keep their own action instead of also opening the menu. Deliberately
-	 * not the long-press path used in the reading/thread view, where a stray tap
-	 * shouldn't pop a menu.
+	 * Tap anywhere on a thought card → open its source note at that line
+	 * (v1.51.0; Shawn 2026-09-25 "maybe if you click on the whole thought it
+	 * will take you to the note"). This replaces v1.22.0's tap-to-tag in the
+	 * thoughts / periodic views — tagging is the long-press everywhere now.
+	 * Controls inside the card keep their own action: buttons, the reply box,
+	 * a #thread chip (tap = jump to the thread), the ↩ preview, and a nested
+	 * reply (which opens ITS line).
 	 */
-	private wireTagTap(card: HTMLElement, post: TaggablePost): void {
-		card.addClass("stx-post-tappable");
-		card.addEventListener("click", (e) =>
-			this.showTagMenu(post, e.clientX, e.clientY)
-		);
-		card.addEventListener("contextmenu", (e) => {
-			e.preventDefault();
-			this.showTagMenu(post, e.clientX, e.clientY);
+	private wireOpenTap(
+		el: HTMLElement,
+		post: { path?: string; note: string; line: number },
+		wasLongPress: () => boolean
+	): void {
+		el.dataset.stxOpen = "1";
+		el.addClass("stx-post-tappable");
+		el.addEventListener("click", (e) => {
+			const t = e.target;
+			if (!(t instanceof Element)) return;
+			if (
+				t.closest(
+					"button, a, textarea, input, .stx-post-thread, .stx-post-replyto, .stx-thread-reply"
+				)
+			)
+				return;
+			if (t.closest("[data-stx-open]") !== el) return;
+			if (wasLongPress()) return;
+			void this.openSafe(post);
 		});
+	}
+
+	/** Open a post's note at its line (or a block by link), reporting failures. */
+	private async openSafe(post: {
+		path?: string;
+		note: string;
+		line: number;
+		blockId?: string | null;
+	}): Promise<void> {
+		try {
+			if (!post.path && post.blockId) {
+				await this.app.workspace.openLinkText(`${post.note}#^${post.blockId}`, "", false);
+				return;
+			}
+			await this.service.openPost(post);
+		} catch (err) {
+			new Notice(err instanceof Error ? err.message : String(err));
+		}
 	}
 
 	private showTagMenu(
@@ -882,9 +1020,9 @@ export class ThreadsPanel extends ToolboxPanel {
 		y: number,
 		onHide?: () => void
 	): void {
-		// Show the existing threads grouped by area (matching the list). Until
-		// areas are organised the grouping is flat (one Unsorted group).
-		const groups = groupThreadsByArea(
+		// Existing threads grouped by area, every nested path listed under its
+		// parent (v1.51.0). Until areas are organised the grouping is flat.
+		const groups = menuAreaGroups(
 			summarizeThreads(this.posts),
 			this.areas,
 			this.pinnedThreads()
@@ -894,20 +1032,43 @@ export class ThreadsPanel extends ToolboxPanel {
 			groups,
 			x,
 			y,
-			onApplyTag: (tag) => void this.applyTag(post, tag),
+			onApplyTag: (tag) => void this.editTag(post, tag, "add"),
 			existingTags: listRemovableTags(post.raw),
-			onRemoveTag: (tag) => void this.removeTag(post, tag),
+			onRemoveTag: (tag) => void this.editTag(post, tag, "remove"),
 			onHide,
 		});
 	}
 
-	/** Remove a (confirmed) tag from the post's own line, then refresh so the
-	 *  post drops out of that thread / the Untagged filter updates. Replies to
-	 *  the post are deliberately untouched (v1.50.0). */
-	private async removeTag(post: TaggablePost, tag: string): Promise<void> {
+	/**
+	 * Add or remove one tag on a post (a removal is already confirmed). When
+	 * the post has replies, ask "Also apply this to its N replies?" first —
+	 * No is the default; Yes applies the same edit to each reply's own line
+	 * (v1.51.0; v1.50.0 always left replies alone). Then refresh.
+	 */
+	private async editTag(post: TaggablePost, tag: string, op: TagOp): Promise<void> {
 		try {
-			const changed = await this.service.removeTagFromPost(post, tag);
-			new Notice(changed ? `Removed ${tag}` : `${tag} was no longer on that post`);
+			const replies = descendantReplies(post, this.replies);
+			const targets: TaggablePost[] = [post];
+			if (replies.length > 0 && (await askApplyToReplies(this.app, replies.length, tag, op)))
+				targets.push(...replies);
+			const { changed, missing } = await this.service.editTagOnPosts(
+				targets.map((t) => ({ path: t.path, note: t.note, line: t.line, raw: t.raw })),
+				tag,
+				op
+			);
+			const verb = op === "add" ? "Added" : "Removed";
+			let msg: string;
+			if (targets.length === 1)
+				msg =
+					changed > 0
+						? `${verb} ${tag}`
+						: op === "add"
+						  ? `${tag} already on that post`
+						  : `${tag} was no longer on that post`;
+			else
+				msg = `${verb} ${tag} ${op === "add" ? "on" : "from"} ${changed} of ${targets.length} lines (the post and its replies)`;
+			if (missing > 0) msg += ` — ${missing} line${missing === 1 ? "" : "s"} not found`;
+			new Notice(msg);
 			await this.refresh();
 		} catch (err) {
 			new Notice(err instanceof Error ? err.message : String(err));
@@ -916,7 +1077,8 @@ export class ThreadsPanel extends ToolboxPanel {
 
 	/**
 	 * A post's #thread chip: tap jumps to the thread (unchanged); long-press /
-	 * right-click asks to remove that tag from the post (v1.50.0).
+	 * right-click asks to remove that tag from the post (v1.50.0), then — if it
+	 * has replies — whether to remove it from them too (v1.51.0).
 	 */
 	private wireThreadChip(
 		chip: HTMLElement,
@@ -926,7 +1088,7 @@ export class ThreadsPanel extends ToolboxPanel {
 	): void {
 		const tag = `#thread/${thread}`;
 		const wasLongPress = wireChipLongPress(chip, () =>
-			confirmRemoveTag(this.app, tag, () => void this.removeTag(post, tag))
+			confirmRemoveTag(this.app, tag, () => void this.editTag(post, tag, "remove"))
 		);
 		chip.addEventListener("click", (e) => {
 			e.stopPropagation();
@@ -935,17 +1097,7 @@ export class ThreadsPanel extends ToolboxPanel {
 		});
 	}
 
-	private async applyTag(post: TaggablePost, tag: string): Promise<void> {
-		try {
-			const changed = await this.service.appendTagToPost(post, tag);
-			new Notice(changed ? `Added ${tag}` : `${tag} already on that post`);
-			await this.refresh();
-		} catch (err) {
-			new Notice(err instanceof Error ? err.message : String(err));
-		}
-	}
-
-	// ---- pin / unpin a thread (long-press / right-click a thread row) ----
+	// ---- thread actions (long-press / right-click a thread row or header) ----
 
 	private pinnedThreads(): string[] {
 		return this.host.getSettings().pinnedThreads ?? [];
@@ -958,6 +1110,21 @@ export class ThreadsPanel extends ToolboxPanel {
 		onHide?: () => void
 	): void {
 		const menu = new Menu();
+		// Send to Eco (v1.51.0; Shawn 2026-09-25 "long press on a thread and
+		// then I can load all into eco and chat").
+		menu.addItem((i) =>
+			i
+				.setTitle("Chat about this thread in a new Eco chat")
+				.setIcon("message-circle")
+				.onClick(() => void this.sendToEco(name, "new"))
+		);
+		menu.addItem((i) =>
+			i
+				.setTitle("Add this thread to the current Eco chat")
+				.setIcon("messages-square")
+				.onClick(() => void this.sendToEco(name, "current"))
+		);
+		menu.addSeparator();
 		const pinned = this.pinnedThreads().includes(name);
 		menu.addItem((i) =>
 			i
@@ -967,6 +1134,22 @@ export class ThreadsPanel extends ToolboxPanel {
 		);
 		if (onHide) menu.onHide(onHide);
 		menu.showAtPosition({ x, y });
+	}
+
+	/** Send a thread (own + sub-thread posts, each with its replies) to Eco. */
+	private async sendToEco(thread: string, mode: EcoSendMode): Promise<void> {
+		const posts = subtreeFilter(this.posts, thread).sort(postOrder);
+		const groups = ecoGroupsFromPostGroups(
+			thread,
+			groupPostsWithReplies(posts, this.replies)
+		);
+		await sendThreadToEco({
+			app: this.app,
+			bridgeUrl: this.host.getSettings().vaultSearchUrl,
+			thread,
+			groups,
+			mode,
+		});
 	}
 
 	private async togglePin(name: string): Promise<void> {
@@ -1005,21 +1188,6 @@ export class ThreadsPanel extends ToolboxPanel {
 		el.scrollIntoView({ behavior: "smooth", block: "center" });
 		el.addClass("stx-post-hl");
 		window.setTimeout(() => el.removeClass("stx-post-hl"), 1400);
-	}
-
-	private jumpToFirstReply(
-		cardByKey: Map<string, HTMLElement>,
-		posts: ThreadPost[],
-		parent: ThreadPost
-	): void {
-		if (!parent.blockId) return;
-		const pk = targetKey(parent.note, parent.blockId);
-		const reply = posts.find(
-			(p) =>
-				p.replyTo &&
-				targetKey(p.replyTo.note, p.replyTo.blockId) === pk
-		);
-		if (reply) this.jumpTo(cardByKey, this.cardKey(reply));
 	}
 
 	private truncate(text: string): string {

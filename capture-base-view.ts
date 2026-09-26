@@ -24,7 +24,7 @@ import { createDateBar, wireLongPress, type DateBar } from "./date-bar";
 import type { CardsHost } from "./section-cards";
 import { ThreadService } from "./thread-service";
 import { summarizeThreads, listRemovableTags } from "./thread-core";
-import { groupThreadsByArea } from "./thread-areas";
+import { menuAreaGroups } from "./thread-tree-core";
 import { wireLongPressMenu, showTagMenu, type TagTarget } from "./tag-menu";
 import {
 	findLastMatching,
@@ -407,7 +407,7 @@ export abstract class BaseCapturePanel extends ToolboxPanel {
 		const { posts } = await this.service.scanAll();
 		const areas = await this.service.loadThreadAreas();
 		const pinned = this.host.getSettings().pinnedThreads ?? [];
-		return groupThreadsByArea(summarizeThreads(posts), areas, pinned);
+		return menuAreaGroups(summarizeThreads(posts), areas, pinned);
 	}
 
 	/** Remove a (confirmed) tag from the thought's own line; replies untouched. */

@@ -2,7 +2,7 @@
 // folder for #thread posts (with a per-file mtime cache so a rescan only
 // re-reads changed notes), appends block ids to parent lines lazily, and
 // writes replies into today's daily note.
-import { App, TAbstractFile, TFile, moment } from "obsidian";
+import { App, MarkdownView, TAbstractFile, TFile, moment } from "obsidian";
 import type { ShawnsToolboxSettings } from "./settings";
 import {
 	logicalTodayIso,
@@ -25,6 +25,8 @@ import {
 	type ThoughtPost,
 } from "./thread-core";
 import { parseThreadAreas, type ThreadArea } from "./thread-areas";
+import { parseNoteReplies, type ReplyPost } from "./thread-replies-core";
+import { editTagInLines, groupByPath, type LineTarget, type TagOp } from "./retag-core";
 
 const DAILY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -34,7 +36,12 @@ export const DEFAULT_THREAD_EXCLUDES = ["AGENTS", "Settings"];
 export class ThreadService {
 	private cache = new Map<
 		string,
-		{ mtime: number; posts: ThreadPost[]; periodic: PeriodicPost[] }
+		{
+			mtime: number;
+			posts: ThreadPost[];
+			periodic: PeriodicPost[];
+			replies: ReplyPost[];
+		}
 	>();
 
 	constructor(
@@ -102,7 +109,11 @@ export class ThreadService {
 	 * ids for edits), but the per-file mtime cache keeps a widened, whole-vault
 	 * scan cheap: unchanged files are never re-read.
 	 */
-	async scanAll(): Promise<{ posts: ThreadPost[]; periodic: PeriodicPost[] }> {
+	async scanAll(): Promise<{
+		posts: ThreadPost[];
+		periodic: PeriodicPost[];
+		replies: ReplyPost[];
+	}> {
 		const files = this.app.vault
 			.getMarkdownFiles()
 			.filter((f) => this.isScannablePath(f.path));
@@ -112,22 +123,33 @@ export class ThreadService {
 		}
 		const posts: ThreadPost[] = [];
 		const periodic: PeriodicPost[] = [];
+		const replies: ReplyPost[] = [];
 		for (const f of files) {
 			const cached = this.cache.get(f.path);
 			if (cached && cached.mtime === f.stat.mtime) {
 				posts.push(...cached.posts);
 				periodic.push(...cached.periodic);
+				replies.push(...cached.replies);
 				continue;
 			}
 			const date = this.noteDate(f);
 			const content = await this.app.vault.cachedRead(f);
 			const p = parseNotePosts(f.basename, date, content, f.path);
 			const pp = parsePeriodicPosts(f.basename, date, content, f.path);
-			this.cache.set(f.path, { mtime: f.stat.mtime, posts: p, periodic: pp });
+			// Every "↩ [[note#^id]]" line, tagged or not (v1.51.0): replies are
+			// shown in their parent's box and offered a parent's tag edits.
+			const rr = parseNoteReplies(f.basename, date, content, f.path);
+			this.cache.set(f.path, {
+				mtime: f.stat.mtime,
+				posts: p,
+				periodic: pp,
+				replies: rr,
+			});
 			posts.push(...p);
 			periodic.push(...pp);
+			replies.push(...rr);
 		}
-		return { posts, periodic };
+		return { posts, periodic, replies };
 	}
 
 	/** "Today" under the day-rollover rule — the thoughts screen's default day
@@ -311,11 +333,53 @@ export class ThreadService {
 		return changed;
 	}
 
+	/**
+	 * Apply one tag add/remove to several post lines at once — a post plus the
+	 * replies Shawn said Yes to (v1.51.0). Targets are grouped by file and each
+	 * file is edited in one vault.process, so a parent and a reply in the same
+	 * note never race. Returns how many lines changed and how many could not
+	 * be found any more.
+	 */
+	async editTagOnPosts(
+		targets: Array<{ path?: string; note: string } & LineTarget>,
+		tag: string,
+		op: TagOp
+	): Promise<{ changed: number; missing: number }> {
+		let changed = 0;
+		let missing = 0;
+		for (const group of groupByPath(targets).values()) {
+			const file = this.resolveFile(group[0]);
+			if (!file) {
+				missing += group.length;
+				continue;
+			}
+			await this.app.vault.process(file, (content) => {
+				const res = editTagInLines(content.split("\n"), group, tag, op);
+				changed += res.changed;
+				missing += res.missing;
+				return res.lines.join("\n");
+			});
+			this.invalidate(file.path);
+		}
+		return { changed, missing };
+	}
+
 	/** Open a post's source note and put the cursor on its line. */
 	async openPost(post: { path?: string; note: string; line: number }): Promise<void> {
 		const file = this.resolveFile(post);
 		if (!file) throw new Error(`Note not found: ${post.note}`);
 		const leaf = this.app.workspace.getLeaf(false);
 		await leaf.openFile(file, { eState: { line: post.line } });
+		// v1.51.0 (tap a thought to open it): also put the cursor on the line
+		// and centre it, so the thought is on screen in live preview too.
+		const view = leaf.view;
+		if (view instanceof MarkdownView && view.getMode() === "source") {
+			const editor = view.editor;
+			if (post.line < editor.lineCount()) {
+				const pos = { line: post.line, ch: 0 };
+				editor.setCursor(pos);
+				editor.scrollIntoView({ from: pos, to: pos }, true);
+			}
+		}
 	}
 }

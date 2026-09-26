@@ -50,6 +50,9 @@ export interface ShawnsToolboxSettings {
 	threadAreasNotePath: string;
 	/** Area names whose group is collapsed in the Threads list, persisted. */
 	threadAreasCollapsed: string[];
+	/** Nested-thread tree nodes (full names, e.g. "flow/movement") whose
+	 *  children are collapsed in the Threads list, persisted (v1.51.0). */
+	threadTreeCollapsed: string[];
 
 	// Capture & Sections
 	/** Full heading line each capture button appends under */
@@ -189,6 +192,7 @@ export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
 	pinnedThreads: [],
 	threadAreasNotePath: "01. Default/Thread Areas.md",
 	threadAreasCollapsed: [],
+	threadTreeCollapsed: [],
 
 	captureTargets: {
 		thought: "# Thoughts",
@@ -955,7 +959,7 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("Vault search (bridge) URL")
 			.setDesc(
-				"Base URL of the NAS bridge exposing GET /search (no trailing slash). On the phone this is the NAS Tailscale address."
+				"Base URL of the NAS bridge exposing GET /search (no trailing slash). On the phone this is the NAS Tailscale address. The Threads panel's \"send to Eco\" uses the same bridge (POST /upload)."
 			)
 			.addText((text) => {
 				text

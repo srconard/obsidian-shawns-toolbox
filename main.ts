@@ -43,6 +43,7 @@ import { openVaultChooser } from "./settings";
 import { fileShareToNote, registerFilingMenu } from "./filing-service";
 import type { CardsHost } from "./section-cards";
 import { toggleLeafFullscreen, toggleLeafToolbar } from "./web-fullscreen";
+import { registerEditorTagMenu } from "./editor-tag-menu";
 
 export default class ShawnsToolboxPlugin extends Plugin {
 	settings: ShawnsToolboxSettings = DEFAULT_SETTINGS;
@@ -400,6 +401,9 @@ export default class ShawnsToolboxPlugin extends Plugin {
 			this.app.metadataCache.on("changed", () => mentions.refreshAll())
 		);
 		this.app.workspace.onLayoutReady(() => mentions.refreshAll());
+
+		// "Remove #tag" in Obsidian's own editor context menu (v1.51.0).
+		registerEditorTagMenu(this);
 
 		// ```threads code block — inline thread views (Feature B). Shares one
 		// ThreadService so the per-file mtime cache persists across renders.

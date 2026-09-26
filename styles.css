@@ -3047,3 +3047,65 @@ body.is-phone.is-floating-nav .workspace-split.mod-root div.view-content.stx-car
 body.is-phone.is-floating-nav.mod-toolbar-open .workspace-split.mod-root div.view-content.stx-cards-full {
 	padding-bottom: 0.4em;
 }
+
+/* ---- v1.51.0: nested thread tree, replies in their post's box ---- */
+.stx-thread-tree-row {
+	padding-left: calc(0.5em + var(--stx-tree-depth, 0) * 1.1em);
+}
+.stx-thread-tree-row .stx-thread-row-meta {
+	padding-left: 1.9em;
+}
+/* A thumb-sized chevron: tapping it folds the node, tapping the row opens it. */
+.stx-thread-tree-chevron {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.5em;
+	height: 1.5em;
+	margin: -0.25em 0;
+	border-radius: 4px;
+	color: var(--text-muted);
+	flex: 0 0 auto;
+}
+.stx-thread-tree-chevron:not(.is-leaf):hover {
+	background: var(--background-modifier-hover);
+}
+.stx-thread-tree-chevron .svg-icon {
+	width: 0.95em;
+	height: 0.95em;
+}
+.stx-thread-row-own {
+	color: var(--text-faint);
+}
+
+.stx-subthreads {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.35em;
+	margin-bottom: 0.5em;
+}
+
+.stx-post-replies {
+	margin-top: 0.4em;
+	padding-left: 0.6em;
+	border-left: 2px solid var(--background-modifier-border);
+	display: flex;
+	flex-direction: column;
+	gap: 0.3em;
+}
+.stx-reply {
+	border-radius: 6px;
+	padding: 0.25em 0.4em;
+	background: var(--background-secondary);
+}
+.stx-reply .stx-post-text {
+	margin: 0.1em 0;
+}
+.stx-reply.stx-post-pressed,
+.stx-reply:hover {
+	background: var(--background-modifier-hover);
+}
+.stx-replies-detail {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}

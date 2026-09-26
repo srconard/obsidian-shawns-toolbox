@@ -7,6 +7,8 @@
 import { App, Menu, Modal, Notice } from "obsidian";
 import { normalizeThreadName, THOUGHT_PERIODS } from "./thread-core";
 import { isFlatGrouping, type AreaGroup } from "./thread-areas";
+import { threadDepth } from "./thread-tree-core";
+import { repliesPrompt, repliesPromptDetail, type TagOp } from "./retag-core";
 
 /** The fields a tag can be appended against (matches ThreadService.appendTagToPost). */
 export interface TagTarget {
@@ -23,15 +25,30 @@ export interface TagTarget {
  * pointerup that follows a successful long-press, and the menu's onHide (via
  * the callback passed to buildMenu) clears it. buildMenu builds and shows the
  * menu at (x, y), calling onHide when it closes.
+ *
+ * v1.51.0: elements can nest (a reply card inside its post's card). Each wired
+ * element is marked, and a press that starts inside a NESTED wired element is
+ * left to that element, so only the innermost card's menu opens. Presses in a
+ * text field are ignored (the reply box keeps its native paste menu). Returns
+ * a function the element's click handler calls to skip the click that ends a
+ * long-press, so "tap opens the note" never fires on the tail of a menu press.
  */
 export function wireLongPressMenu(
 	el: HTMLElement,
 	buildMenu: (x: number, y: number, onHide: () => void) => void
-): void {
+): () => boolean {
 	let timer: number | null = null;
 	let menuOpen = false;
 	let sx = 0;
 	let sy = 0;
+	let openedAt = 0;
+	el.dataset.stxLp = "1";
+	const mine = (e: Event): boolean => {
+		const t = e.target;
+		if (!(t instanceof Element)) return true;
+		if (t.closest("textarea, input, [contenteditable='true']")) return false;
+		return t.closest("[data-stx-lp]") === el;
+	};
 	const clearTint = () => {
 		if (!menuOpen) el.removeClass("stx-post-pressed");
 	};
@@ -43,6 +60,9 @@ export function wireLongPressMenu(
 		clearTint();
 	};
 	const open = (x: number, y: number) => {
+		// Android can fire contextmenu right after our own long-press timer.
+		if (Date.now() - openedAt < 800) return;
+		openedAt = Date.now();
 		menuOpen = true;
 		el.addClass("stx-post-pressed");
 		buildMenu(x, y, () => {
@@ -51,6 +71,7 @@ export function wireLongPressMenu(
 		});
 	};
 	el.addEventListener("contextmenu", (e) => {
+		if (!mine(e)) return;
 		e.preventDefault();
 		cancel();
 		open(e.clientX, e.clientY);
@@ -59,6 +80,7 @@ export function wireLongPressMenu(
 	// press is ignored here to avoid a double affordance.
 	el.addEventListener("pointerdown", (e) => {
 		if (e.pointerType === "mouse") return;
+		if (!mine(e)) return;
 		sx = e.clientX;
 		sy = e.clientY;
 		if (timer !== null) window.clearTimeout(timer);
@@ -78,6 +100,7 @@ export function wireLongPressMenu(
 	el.addEventListener("pointerup", cancel);
 	el.addEventListener("pointerleave", cancel);
 	el.addEventListener("pointercancel", cancel);
+	return () => Date.now() - openedAt < 800;
 }
 
 export interface TagMenuOptions {
@@ -145,9 +168,13 @@ export function showTagMenu(opts: TagMenuOptions): void {
 		}
 		for (const t of g.threads) {
 			const tag = `#thread/${t.name}`;
+			// Nested paths (v1.51.0) are listed under their parent, indented with
+			// non-breaking spaces (plain spaces collapse in the menu).
+			const depth = threadDepth(t.name);
+			const indent = depth > 0 ? "\u00a0\u00a0".repeat(depth - 1) + "↳ " : "";
 			menu.addItem((i) =>
 				i
-					.setTitle(tag)
+					.setTitle(indent + tag)
 					.setIcon("messages-square")
 					.onClick(() => onApplyTag(tag))
 			);
@@ -157,21 +184,98 @@ export function showTagMenu(opts: TagMenuOptions): void {
 	menu.showAtPosition({ x, y });
 }
 
-/** Ask "Remove #thread/x from this thought?" and call onConfirm on Remove. */
-export function confirmRemoveTag(app: App, tag: string, onConfirm: () => void): void {
-	new ConfirmRemoveModal(app, tag, onConfirm).open();
+/** Ask "Remove #thread/x from this thought?" and call onConfirm on Remove.
+ *  `what` names the target ("this line" for the editor menu). */
+export function confirmRemoveTag(
+	app: App,
+	tag: string,
+	onConfirm: () => void,
+	what = "this thought"
+): void {
+	new ConfirmRemoveModal(app, tag, onConfirm, what).open();
+}
+
+/**
+ * Ask "Also apply this to its N replies?" (v1.51.0). Resolves true only on an
+ * explicit Yes; No, Enter (No is the default), Escape and closing all resolve
+ * false, so the edit then touches only the post itself.
+ */
+export function askApplyToReplies(
+	app: App,
+	count: number,
+	tag: string,
+	op: TagOp
+): Promise<boolean> {
+	return new Promise((resolve) => {
+		new RepliesModal(app, count, tag, op, resolve).open();
+	});
+}
+
+class RepliesModal extends Modal {
+	private answered = false;
+	constructor(
+		app: App,
+		private count: number,
+		private tag: string,
+		private op: TagOp,
+		private done: (yes: boolean) => void
+	) {
+		super(app);
+	}
+
+	private answer(yes: boolean): void {
+		if (this.answered) return;
+		this.answered = true;
+		this.close();
+		this.done(yes);
+	}
+
+	onOpen(): void {
+		const { contentEl } = this;
+		contentEl.addClass("stx-new-thread");
+		contentEl.createEl("p", { text: repliesPrompt(this.count) });
+		contentEl.createEl("p", {
+			cls: "stx-replies-detail",
+			text: repliesPromptDetail(this.tag, this.op),
+		});
+		const row = contentEl.createDiv({ cls: "stx-thread-reply-row" });
+		const yes = row.createEl("button", { text: "Yes" });
+		yes.addEventListener("click", () => this.answer(true));
+		const no = row.createEl("button", { cls: "mod-cta", text: "No" });
+		no.addEventListener("click", () => this.answer(false));
+		this.scope.register([], "Enter", (e) => {
+			e.preventDefault();
+			this.answer(false);
+			return false;
+		});
+		window.setTimeout(() => no.focus(), 0);
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+		// Escape / tapping outside counts as No.
+		if (!this.answered) {
+			this.answered = true;
+			this.done(false);
+		}
+	}
 }
 
 /** Two-button confirm for removing a tag. Enter confirms; Escape/Cancel closes. */
 class ConfirmRemoveModal extends Modal {
-	constructor(app: App, private tag: string, private onConfirm: () => void) {
+	constructor(
+		app: App,
+		private tag: string,
+		private onConfirm: () => void,
+		private what: string
+	) {
 		super(app);
 	}
 
 	onOpen(): void {
 		const { contentEl } = this;
 		contentEl.addClass("stx-new-thread");
-		contentEl.createEl("p", { text: `Remove ${this.tag} from this thought?` });
+		contentEl.createEl("p", { text: `Remove ${this.tag} from ${this.what}?` });
 		const row = contentEl.createDiv({ cls: "stx-thread-reply-row" });
 		const remove = row.createEl("button", { cls: "mod-warning", text: "Remove" });
 		remove.addEventListener("click", () => {

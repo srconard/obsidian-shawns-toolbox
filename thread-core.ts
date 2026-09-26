@@ -208,7 +208,7 @@ export function parseNotePosts(
 
 /** Chronological sort key: date, then time (untimed sorts before timed on the
  *  same day), then line order. Works for any post carrying date/time/line. */
-function postOrder(
+export function postOrder(
 	a: { dateIso: string; time: string | null; line: number },
 	b: { dateIso: string; time: string | null; line: number }
 ): number {
