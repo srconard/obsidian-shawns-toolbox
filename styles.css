@@ -3246,8 +3246,9 @@ body.stx-focus-mode.stx-focus-mode-hide-view-headers:not(.is-mobile) .workspace-
 .stx-tile-label {
 	flex: 1 1 auto;
 	min-width: 0;
-	/* v1.56.2: ~18% smaller than --font-ui-large (20 → ~16.4 px at default). */
-	font-size: calc(var(--font-ui-large, 20px) * 0.82);
+	/* v1.56.2: ~18% smaller than --font-ui-large (20 → ~16.4 px at default).
+	   v1.56.3: another ~15% (→ 14 px at default). */
+	font-size: calc(var(--font-ui-large, 20px) * 0.7);
 	font-weight: 700;
 	letter-spacing: 0.02em;
 	text-transform: uppercase;
@@ -3271,7 +3272,8 @@ body.stx-focus-mode.stx-focus-mode-hide-view-headers:not(.is-mobile) .workspace-
 	column-gap: 0.4em;
 	row-gap: 0.1em;
 	color: var(--text-muted);
-	font-size: calc(var(--font-ui-smaller, 12px) * 0.92);
+	/* v1.56.3: 11 → ~9.4 px at default. */
+	font-size: calc(var(--font-ui-smaller, 12px) * 0.78);
 }
 .stx-tile-dot {
 	color: var(--text-faint);
@@ -3286,7 +3288,8 @@ body.stx-focus-mode.stx-focus-mode-hide-view-headers:not(.is-mobile) .workspace-
 	align-items: center;
 	gap: 0.1em 0.25em;
 	margin: -0.2em 0.3em 0.35em;
-	font-size: var(--font-ui-smaller, 12px);
+	/* v1.56.3: 12 → ~10.2 px at default. */
+	font-size: calc(var(--font-ui-smaller, 12px) * 0.85);
 	min-width: 0;
 }
 .stx-threads button.stx-tiles-crumb,
@@ -3330,12 +3333,14 @@ body.stx-focus-mode.stx-focus-mode-hide-view-headers:not(.is-mobile) .workspace-
 }
 .stx-tiles-sub-stats {
 	color: var(--text-muted);
-	font-size: var(--font-ui-smaller);
+	font-size: calc(var(--font-ui-smaller, 12px) * 0.85);
 	flex: 1 1 auto;
 }
-.stx-tiles-showall {
+.stx-threads .stx-tiles-showall {
 	flex: 0 0 auto;
 	min-height: 28px;
+	/* v1.56.3: 12 → ~10.2 px at default; hit area unchanged. */
+	font-size: calc(var(--font-ui-smaller, 12px) * 0.85);
 }
 .stx-tiles-section-head {
 	color: var(--text-muted);
