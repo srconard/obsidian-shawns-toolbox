@@ -3276,36 +3276,43 @@ body.stx-focus-mode.stx-focus-mode-hide-view-headers:not(.is-mobile) .workspace-
 	color: var(--text-faint);
 }
 
-/* Drilled-in header: back · breadcrumb (wraps in a narrow sidebar) · actions */
+/* Drilled-in breadcrumb: its own full-width row under the header, so it
+   wraps cleanly in a narrow sidebar. The crumbs are plain links, not buttons:
+   the extra selector weight beats the mobile theme's button chrome. */
 .stx-tiles-crumbs {
-	flex: 1 1 auto;
-	min-width: 0;
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
-	gap: 0.1em 0.2em;
+	gap: 0.1em 0.25em;
+	margin: -0.2em 0.3em 0.35em;
+	font-size: var(--font-ui-small);
+	min-width: 0;
 }
-.stx-tiles-crumb {
+.stx-threads button.stx-tiles-crumb,
+.stx-threads .stx-tiles-crumb {
 	background: transparent;
 	border: none;
 	box-shadow: none;
 	padding: 2px 4px;
+	margin: 0;
+	width: auto;
 	height: auto;
-	min-height: 28px;
+	min-height: 24px;
 	border-radius: 4px;
-	color: var(--text-muted);
-	font-size: var(--font-ui-small);
+	color: var(--text-accent);
+	font-size: inherit;
+	font-weight: 400;
 	cursor: pointer;
 	max-width: 100%;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-.stx-tiles-crumb:hover {
-	color: var(--text-normal);
+.stx-threads button.stx-tiles-crumb:hover {
 	background: var(--background-modifier-hover);
+	color: var(--text-normal);
 }
-.stx-tiles-crumb.is-current {
+.stx-threads .stx-tiles-crumb.is-current {
 	color: var(--text-normal);
 	font-weight: 600;
 	cursor: default;
@@ -3347,7 +3354,10 @@ body.is-mobile .stx-tile {
 	min-height: 64px;
 	padding: 0.85em 1em;
 }
-body.is-mobile .stx-tiles-crumb,
+body.is-mobile .stx-threads button.stx-tiles-crumb {
+	min-height: 36px;
+	padding: 4px 6px;
+}
 body.is-mobile .stx-tiles-showall {
 	min-height: 36px;
 }

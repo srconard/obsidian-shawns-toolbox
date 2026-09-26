@@ -623,37 +623,46 @@ export class ThreadsPanel extends ToolboxPanel {
 		}
 
 		// ---- a drilled-in level ----
+		// Row 1: back · current thread (long-press = thread menu) · actions.
+		// Row 2: the full breadcrumb, full width so it wraps cleanly in a
+		// narrow sidebar instead of squeezing beside the icon buttons.
 		const head = this.contentEl.createDiv({ cls: "stx-threads-head stx-tiles-nav" });
 		this.iconButton(head, "arrow-left", "Up one level", () =>
 			void this.setTilesPath(parentPath(node.name), node.name)
 		);
-		const crumbsEl = head.createDiv({ cls: "stx-tiles-crumbs" });
-		const crumbs = breadcrumb(node.name);
-		crumbs.forEach((c, i) => {
-			if (i > 0) crumbsEl.createSpan({ cls: "stx-tiles-crumb-sep", text: "›" });
-			const last = i === crumbs.length - 1;
-			const btn = crumbsEl.createEl("button", {
-				cls: "stx-tiles-crumb" + (last ? " is-current" : ""),
-				text: c.label,
-			});
-			btn.setAttr("aria-label", c.name ? `#thread/${c.name}` : "All threads");
-			if (last) {
-				btn.setAttr("aria-current", "page");
-				wireLongPressMenu(btn, (x, y, onHide) =>
-					this.showThreadMenu(node.name, x, y, onHide)
-				);
-			} else {
-				// Going up focuses the tile we came down through at that level.
-				const cameThrough = crumbs[i + 1].name ?? undefined;
-				btn.addEventListener("click", () => void this.setTilesPath(c.name, cameThrough));
-			}
-		});
+		const title = head.createSpan({ cls: "stx-threads-title", text: node.label });
+		title.setAttr("aria-label", `#thread/${node.name} — long-press for thread actions`);
+		wireLongPressMenu(title, (x, y, onHide) =>
+			this.showThreadMenu(node.name, x, y, onHide)
+		);
 		this.iconButton(head, "more-horizontal", "Thread actions", () => {
-			const r = crumbsEl.getBoundingClientRect();
+			const r = title.getBoundingClientRect();
 			this.showThreadMenu(node.name, r.left, r.bottom);
 		});
 		this.viewModeButton(head);
 		this.iconButton(head, "refresh-cw", "Rescan", () => void this.refresh());
+
+		const crumbsEl = this.contentEl.createDiv({ cls: "stx-tiles-crumbs stx-tiles-nav" });
+		crumbsEl.setAttr("role", "navigation");
+		crumbsEl.setAttr("aria-label", "Breadcrumb");
+		const crumbs = breadcrumb(node.name);
+		crumbs.forEach((c, i) => {
+			if (i > 0) crumbsEl.createSpan({ cls: "stx-tiles-crumb-sep", text: "›" });
+			const last = i === crumbs.length - 1;
+			if (last) {
+				crumbsEl.createSpan({
+					cls: "stx-tiles-crumb is-current",
+					text: c.label,
+					attr: { "aria-current": "page" },
+				});
+				return;
+			}
+			const btn = crumbsEl.createEl("button", { cls: "stx-tiles-crumb", text: c.label });
+			btn.setAttr("aria-label", c.name ? `#thread/${c.name}` : "All threads");
+			// Going up focuses the tile we came down through at that level.
+			const cameThrough = crumbs[i + 1].name ?? undefined;
+			btn.addEventListener("click", () => void this.setTilesPath(c.name, cameThrough));
+		});
 
 		const hasKids = node.children.length > 0;
 		const showAll = hasKids && !!this.host.getSettings().threadsTilesShowAll;
