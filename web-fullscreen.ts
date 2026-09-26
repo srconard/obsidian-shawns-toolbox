@@ -125,6 +125,7 @@ function startOverlayRelay(fsEl: HTMLElement): void {
 		moved.add(el);
 		fsEl.appendChild(el);
 		if (hadFocus && focused) focused.focus({ preventScroll: true });
+		else if (el.classList.contains("modal-container")) focusModal(el);
 	};
 	Array.from(body.children).forEach(adopt);
 	syncEscapeLock();
@@ -151,6 +152,30 @@ function startOverlayRelay(fsEl: HTMLElement): void {
 		});
 		moved.clear();
 	};
+}
+
+/**
+ * Obsidian focuses a new modal's first input as it opens — but outside the
+ * fullscreen element that focus() silently fails (no focusin at all, measured
+ * on the NAS 1.13.7), so the palette opened with nothing focused: typing went
+ * nowhere and Escape reached Chromium's fullscreen exit instead of the page.
+ * Once the modal is inside the fullscreen element, give its input the focus.
+ */
+function focusModal(container: HTMLElement): void {
+	const doc = container.ownerDocument;
+	const target =
+		container.querySelector<HTMLElement>(
+			'input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), [contenteditable="true"]'
+		) ?? container.querySelector<HTMLElement>(".modal");
+	if (!target) return;
+	const attempt = () => {
+		if (container.isConnected && !container.contains(doc.activeElement)) {
+			target.focus({ preventScroll: true });
+		}
+	};
+	attempt();
+	// The move and Obsidian's own open() share a task; settle once more after it.
+	window.requestAnimationFrame(attempt);
 }
 
 /** End the overlay relay (fullscreen exit, plugin unload). */
