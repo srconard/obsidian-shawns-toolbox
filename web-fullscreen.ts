@@ -73,28 +73,81 @@ export function toggleLeafToolbar(app: App): boolean {
 
 let relayStop: (() => void) | null = null;
 
-/** Move body-level overlays into the fullscreen element while it lasts. */
+/** Overlays Escape should close (not notices or tooltips). */
+const ESCAPABLE = ["modal-container", "menu", "suggestion-container"];
+
+interface KeyboardLockApi {
+	lock(keys?: string[]): Promise<void>;
+	unlock(): void;
+}
+
+/**
+ * Move body-level overlays into the fullscreen element while it lasts.
+ *
+ * Two details measured on the NAS Obsidian 1.13.7:
+ *   - Re-parenting a focused element blurs it. The palette focuses its input
+ *     right after appending itself, so the focus is put back after the move.
+ *   - In element fullscreen Chromium takes Escape to exit fullscreen, so Esc
+ *     on an open palette left fullscreen and kept the palette open. While a
+ *     modal/menu/suggester is open inside the fullscreen leaf, Escape is
+ *     keyboard-locked to the page, so it closes that overlay instead; with no
+ *     overlay open, Escape exits fullscreen exactly as before.
+ */
 function startOverlayRelay(fsEl: HTMLElement): void {
 	stopOverlayRelay();
-	const body = fsEl.ownerDocument.body;
+	const doc = fsEl.ownerDocument;
+	const body = doc.body;
 	const moved = new Set<HTMLElement>();
+	const keyboard = (doc.defaultView?.navigator as unknown as { keyboard?: KeyboardLockApi } | undefined)
+		?.keyboard;
+	let locked = false;
+	const syncEscapeLock = () => {
+		let open = false;
+		moved.forEach((el) => {
+			if (el.parentNode === fsEl && ESCAPABLE.some((c) => el.classList.contains(c))) open = true;
+		});
+		if (open && !locked && keyboard) {
+			locked = true;
+			keyboard.lock(["Escape"]).catch(() => {
+				locked = false;
+			});
+		} else if (!open && locked && keyboard) {
+			locked = false;
+			keyboard.unlock();
+		}
+	};
 	const adopt = (n: Node) => {
 		if (n.nodeType !== 1 || n.parentNode !== body || n === fsEl) return;
 		const el = n as HTMLElement;
 		if (!isFullscreenOverlay(el.classList)) return;
+		const focused = doc.activeElement as HTMLElement | null;
+		const hadFocus = !!focused && el.contains(focused);
 		moved.add(el);
 		fsEl.appendChild(el);
+		if (hadFocus && focused) focused.focus({ preventScroll: true });
 	};
 	Array.from(body.children).forEach(adopt);
-	const observer = new MutationObserver((mutations) => {
+	syncEscapeLock();
+	const bodyObserver = new MutationObserver((mutations) => {
 		for (const m of mutations) m.addedNodes.forEach(adopt);
+		syncEscapeLock();
 	});
-	observer.observe(body, { childList: true });
+	bodyObserver.observe(body, { childList: true });
+	// Closing an overlay removes it from the fullscreen element.
+	const fsObserver = new MutationObserver(() => syncEscapeLock());
+	fsObserver.observe(fsEl, { childList: true });
 	relayStop = () => {
-		observer.disconnect();
+		bodyObserver.disconnect();
+		fsObserver.disconnect();
+		if (locked && keyboard) keyboard.unlock();
+		locked = false;
 		// Anything still open goes back where Obsidian put it.
 		moved.forEach((el) => {
-			if (el.parentNode === fsEl) body.appendChild(el);
+			if (el.parentNode !== fsEl) return;
+			const focused = doc.activeElement as HTMLElement | null;
+			const hadFocus = !!focused && el.contains(focused);
+			body.appendChild(el);
+			if (hadFocus && focused) focused.focus({ preventScroll: true });
 		});
 		moved.clear();
 	};
