@@ -3247,8 +3247,9 @@ body.stx-focus-mode.stx-focus-mode-hide-view-headers:not(.is-mobile) .workspace-
 	flex: 1 1 auto;
 	min-width: 0;
 	/* v1.56.2: ~18% smaller than --font-ui-large (20 → ~16.4 px at default).
-	   v1.56.3: another ~15% (→ 14 px at default). */
-	font-size: calc(var(--font-ui-large, 20px) * 0.7);
+	   v1.56.3: another ~15% (→ 14 px at default).
+	   v1.56.4: another ~14% (→ 12 px at default). */
+	font-size: calc(var(--font-ui-large, 20px) * 0.6);
 	font-weight: 700;
 	letter-spacing: 0.02em;
 	text-transform: uppercase;
@@ -3272,8 +3273,10 @@ body.stx-focus-mode.stx-focus-mode-hide-view-headers:not(.is-mobile) .workspace-
 	column-gap: 0.4em;
 	row-gap: 0.1em;
 	color: var(--text-muted);
-	/* v1.56.3: 11 → ~9.4 px at default. */
-	font-size: calc(var(--font-ui-smaller, 12px) * 0.78);
+	/* v1.56.3: 11 → ~9.4 px at default.
+	   v1.56.4: → ~8.6 px, floored at 8.5 px. Only ~8% this time: it was
+	   already below the ~11 px legibility guide. */
+	font-size: max(calc(var(--font-ui-smaller, 12px) * 0.72), 8.5px);
 }
 .stx-tile-dot {
 	color: var(--text-faint);
@@ -3288,8 +3291,8 @@ body.stx-focus-mode.stx-focus-mode-hide-view-headers:not(.is-mobile) .workspace-
 	align-items: center;
 	gap: 0.1em 0.25em;
 	margin: -0.2em 0.3em 0.35em;
-	/* v1.56.3: 12 → ~10.2 px at default. */
-	font-size: calc(var(--font-ui-smaller, 12px) * 0.85);
+	/* v1.56.3: 12 → ~10.2 px at default. v1.56.4: → ~8.9 px. */
+	font-size: calc(var(--font-ui-smaller, 12px) * 0.74);
 	min-width: 0;
 }
 .stx-threads button.stx-tiles-crumb,
@@ -3333,14 +3336,14 @@ body.stx-focus-mode.stx-focus-mode-hide-view-headers:not(.is-mobile) .workspace-
 }
 .stx-tiles-sub-stats {
 	color: var(--text-muted);
-	font-size: calc(var(--font-ui-smaller, 12px) * 0.85);
+	font-size: calc(var(--font-ui-smaller, 12px) * 0.74);
 	flex: 1 1 auto;
 }
 .stx-threads .stx-tiles-showall {
 	flex: 0 0 auto;
 	min-height: 28px;
-	/* v1.56.3: 12 → ~10.2 px at default; hit area unchanged. */
-	font-size: calc(var(--font-ui-smaller, 12px) * 0.85);
+	/* v1.56.3: 12 → ~10.2 px at default; v1.56.4: → ~8.9 px. Hit area unchanged. */
+	font-size: calc(var(--font-ui-smaller, 12px) * 0.74);
 }
 .stx-tiles-section-head {
 	color: var(--text-muted);

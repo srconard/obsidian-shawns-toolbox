@@ -98,6 +98,13 @@ function createDetachedLeaf(app: App): HostableLeaf | null {
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 /**
+ * Every leaf a HostedViewSlot currently owns. The workspace never lists them,
+ * so code that must find a hosted view (webview-hotkeys.ts re-hooking a Web
+ * viewer's keys) reads this instead.
+ */
+export const hostedLeaves = new Set<WorkspaceLeaf>();
+
+/**
  * One hosted Obsidian view living inside a dual-panel half.
  *
  * The slot owns the leaf it creates and is responsible for disposing it: every
@@ -133,6 +140,7 @@ export class HostedViewSlot {
 			return false;
 		}
 		this.leaf = leaf;
+		hostedLeaves.add(leaf);
 		try {
 			await leaf.setViewState({ type: this.type, active: false });
 		} catch (e) {
@@ -188,6 +196,7 @@ export class HostedViewSlot {
 		const leaf = this.leaf;
 		this.leaf = null;
 		if (!leaf) return;
+		hostedLeaves.delete(leaf);
 		try {
 			// Disposes the view (unloads its components and event refs). The leaf
 			// has no parent, so this is the whole teardown.

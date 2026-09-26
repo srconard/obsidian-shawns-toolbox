@@ -425,3 +425,47 @@ export function isFullscreenOverlay(classList: { contains(token: string): boolea
 	for (const c of FULLSCREEN_OVERLAY_CLASSES) if (classList.contains(c)) return true;
 	return false;
 }
+
+/**
+ * v1.56.4 — the real reason Ctrl+P died inside the Web viewer.
+ *
+ * Obsidian 1.13.7 hooks a Web viewer's guest `before-input-event` in
+ * WebviewerView.configureWebContents, and calls it ONCE per view, guarded by
+ * `hasConfiguredWebContents`. When the <webview> is re-attached — the tab is
+ * dragged to another split or tab group, the view is moved to a popout — the
+ * element gets a NEW guest webContents, and the flag stops Obsidian from ever
+ * hooking it. Keys typed in the page then never reach app.keymap: Ctrl+P does
+ * nothing until focus leaves the page (reproduced on the NAS Obsidian 1.13.7,
+ * 2026-09-26: guest 17 → 18 after a split move, 1 → 0 listeners, and a real
+ * xdotool Ctrl+P stopped opening the palette).
+ *
+ * The plugin checks each Web viewer's current guest and, when Obsidian has
+ * configured the view but nobody hooks the guest, calls Obsidian's own
+ * configureWebContents again. This decides whether to.
+ */
+export type RehookDecision =
+	| "no-guest" // the webview has no guest yet (not attached / not loaded)
+	| "known" // already checked this guest
+	| "obsidian-pending" // Obsidian has not configured this view yet; it will itself
+	| "cannot-inspect" // no electron.remote to count listeners — never guess
+	| "hooked" // the guest already has a before-input-event listener
+	| "rehook"; // configured view, un-hooked guest: re-run configureWebContents
+
+export interface RehookState {
+	guestId: number | null;
+	/** This guest id was already seen (hooked by Obsidian or by us). */
+	known: boolean;
+	/** view.hasConfiguredWebContents */
+	viewConfigured: boolean;
+	/** before-input-event listener count on the guest, or null if unknown. */
+	listeners: number | null;
+}
+
+export function rehookDecision(s: RehookState): RehookDecision {
+	if (s.guestId === null || !Number.isFinite(s.guestId) || s.guestId <= 0) return "no-guest";
+	if (s.known) return "known";
+	if (!s.viewConfigured) return "obsidian-pending";
+	if (s.listeners === null) return "cannot-inspect";
+	if (s.listeners > 0) return "hooked";
+	return "rehook";
+}

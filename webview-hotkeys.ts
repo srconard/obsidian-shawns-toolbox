@@ -32,6 +32,22 @@
 // @electron/remote — was rejected: remote callbacks run asynchronously in the
 // renderer, so event.preventDefault() arrives after the main process has already
 // delivered the key; it could observe but never keep a key from the page.
+//
+// v1.56.4 — WHY CTRL+P STILL DIED (the 1.54 diagnosis above was incomplete).
+// Shawn, laptop, not in fullscreen: "the command pallet only comes up if i
+// click on part of obsidian that is not the web viewer". Obsidian runs
+// configureWebContents ONCE per view (flag `hasConfiguredWebContents`). When the
+// <webview> is re-attached — its tab dragged to another split or tab group, the
+// view moved to a popout — Chromium gives it a NEW guest webContents, and
+// Obsidian never hooks that one. Measured on the NAS Obsidian 1.13.7: guest
+// 17 → 18 after a split move, before-input-event listeners 1 → 0, and a real
+// xdotool Ctrl+P typed into eco-web stopped opening the palette, while Ctrl+P
+// after clicking Obsidian's own UI still did. The same 1.13.7 app code runs on
+// Windows (the PC's asar is byte-identical in size and version).
+// Fix: repairGuest() — on every dom-ready and scan, a configured view whose
+// current guest has no before-input-event listener gets Obsidian's own
+// configureWebContents() called again (rehookDecision in the core). That also
+// restores Obsidian's click-to-activate-the-leaf hook, lost the same way.
 
 import { App, Platform, WorkspaceLeaf } from "obsidian";
 import {
@@ -50,7 +66,10 @@ import {
 	isForwardableCombo,
 	parsePassThrough,
 	parseSentinel,
+	rehookDecision,
+	RehookDecision,
 } from "./webview-hotkeys-core";
+import { hostedLeaves } from "./foreign-host";
 
 export interface WebviewHotkeySettings {
 	forwardWebviewHotkeys: boolean;
@@ -61,6 +80,19 @@ export interface WebviewHotkeySettings {
 /** The Electron <webview> methods we use. */
 interface WebviewEl extends HTMLElement {
 	executeJavaScript(code: string): Promise<unknown>;
+	getWebContentsId?: () => number;
+}
+
+/** The WebviewerView internals repairGuest() relies on (Obsidian 1.13.x). */
+interface WebviewerViewLike {
+	webview?: HTMLElement;
+	containerEl?: HTMLElement;
+	hasConfiguredWebContents?: boolean;
+	configureWebContents?: () => void;
+}
+
+interface RemoteLike {
+	webContents: { fromId(id: number): { listenerCount(ev: string): number; isDestroyed?: () => boolean } | null | undefined };
 }
 
 interface HotkeyManagerLike {
@@ -94,6 +126,8 @@ export class WebviewHotkeys {
 	private unwrapKeymap: (() => void) | null = null;
 	private scanQueued = false;
 	private running = false;
+	/** Guest webContents ids already checked by repairGuest (hooked by Obsidian or by us). */
+	private checkedGuests = new Set<number>();
 
 	constructor(private app: App, private getSettings: () => WebviewHotkeySettings) {}
 
@@ -176,12 +210,21 @@ export class WebviewHotkeys {
 			for (let i = 0; i < list.length; i++) found.add(list[i] as HTMLElement);
 		};
 		add(document);
-		for (const leaf of this.app.workspace.getLeavesOfType("webviewer")) {
+		for (const leaf of this.webviewerLeaves()) {
 			const el = (leaf.view as unknown as { webview?: HTMLElement }).webview;
 			if (el) found.add(el);
 			else add(leaf.view.containerEl);
 		}
 		return Array.from(found);
+	}
+
+	/** Web viewer leaves in the workspace plus the ones a dual-panel half hosts. */
+	private webviewerLeaves(): WorkspaceLeaf[] {
+		const out = this.app.workspace.getLeavesOfType("webviewer").slice();
+		hostedLeaves.forEach((leaf) => {
+			if (leaf.view?.getViewType?.() === "webviewer" && out.indexOf(leaf) < 0) out.push(leaf);
+		});
+		return out;
 	}
 
 	private scan(): void {
@@ -193,14 +236,62 @@ export class WebviewHotkeys {
 			}
 		});
 		for (const el of this.findWebviews()) {
-			if (!el.isConnected || this.hooks.has(el)) continue;
-			this.hook(el as WebviewEl);
+			if (!el.isConnected) continue;
+			if (!this.hooks.has(el)) this.hook(el as WebviewEl);
+			// A hooked element can have been re-attached since (new guest).
+			this.repairGuest(el as WebviewEl);
 		}
+	}
+
+	/**
+	 * Re-run Obsidian's own configureWebContents when this Web viewer's current
+	 * guest was never hooked (see the v1.56.4 note at the top of the file).
+	 */
+	repairGuest(el: WebviewEl): RehookDecision | "no-view" {
+		const view = this.viewFor(el);
+		if (!view || view.webview !== el || typeof view.configureWebContents !== "function") return "no-view";
+		let guestId: number | null = null;
+		try {
+			guestId = typeof el.getWebContentsId === "function" ? el.getWebContentsId() : null;
+		} catch {
+			guestId = null; // throws until the guest is attached; dom-ready retries
+		}
+		const known = guestId !== null && this.checkedGuests.has(guestId);
+		let listeners: number | null = null;
+		if (guestId !== null && !known && view.hasConfiguredWebContents) {
+			const remote = (window as unknown as { electron?: { remote?: RemoteLike } }).electron?.remote;
+			try {
+				const wc = remote?.webContents.fromId(guestId);
+				if (wc && !(wc.isDestroyed?.() ?? false)) listeners = wc.listenerCount("before-input-event");
+			} catch {
+				listeners = null;
+			}
+		}
+		const d = rehookDecision({ guestId, known, viewConfigured: !!view.hasConfiguredWebContents, listeners });
+		if (d === "hooked" && guestId !== null) this.checkedGuests.add(guestId);
+		if (d === "rehook" && guestId !== null) {
+			this.checkedGuests.add(guestId);
+			try {
+				view.configureWebContents.call(view);
+				console.info(LOG, "re-hooked keys for re-attached Web viewer guest", guestId);
+			} catch (err) {
+				console.error(LOG, "re-hooking Web viewer guest failed", guestId, err);
+			}
+		}
+		return d;
+	}
+
+	private viewFor(el: HTMLElement): WebviewerViewLike | null {
+		for (const leaf of this.webviewerLeaves()) {
+			const view = leaf.view as unknown as WebviewerViewLike;
+			if (view.webview === el) return view;
+		}
+		return null;
 	}
 
 	/** The WebviewerView owning this element, when the workspace lists it. */
 	private leafFor(el: HTMLElement): WorkspaceLeaf | null {
-		for (const leaf of this.app.workspace.getLeavesOfType("webviewer")) {
+		for (const leaf of this.webviewerLeaves()) {
 			const view = leaf.view as unknown as { webview?: HTMLElement; containerEl?: HTMLElement };
 			if (view.webview === el || view.containerEl?.contains(el)) return leaf;
 		}
@@ -227,8 +318,14 @@ export class WebviewHotkeys {
 	private hook(el: WebviewEl): void {
 		const s = this.getSettings();
 		const mechanism = chooseMechanism(s.webviewHotkeysMode, this.builtinFor(el));
+		// A re-attached element loads its page again in its new guest: dom-ready is
+		// the moment that guest exists and can be checked (v1.56.4).
+		const repair = () => {
+			if (this.hooks.has(el)) this.repairGuest(el);
+		};
+		el.addEventListener("dom-ready", repair);
 		if (mechanism === "builtin") {
-			this.hooks.set(el, { mechanism, cleanup: () => {} });
+			this.hooks.set(el, { mechanism, cleanup: () => el.removeEventListener("dom-ready", repair) });
 			return;
 		}
 		const inject = () => void this.inject(el);
@@ -241,6 +338,7 @@ export class WebviewHotkeys {
 		this.hooks.set(el, {
 			mechanism,
 			cleanup: () => {
+				el.removeEventListener("dom-ready", repair);
 				el.removeEventListener("dom-ready", inject);
 				el.removeEventListener("console-message", onConsole);
 				if (el.isConnected) el.executeJavaScript(GUEST_REMOVE_SCRIPT).catch(() => {});

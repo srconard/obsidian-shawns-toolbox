@@ -4,6 +4,7 @@ import {
 	GUEST_REMOVE_SCRIPT,
 	SENTINEL,
 	chooseMechanism,
+	rehookDecision,
 	comboString,
 	decide,
 	eventCombo,
@@ -439,5 +440,33 @@ describe("guestScript", () => {
 			{ key: "Dead", code: "" },
 		];
 		for (const s of samples) expect(guest(new FakeKey(s))).toBe(eventCombo(s));
+	});
+});
+
+describe("rehookDecision (v1.56.4: re-attached Web viewer guests)", () => {
+	const base = { guestId: 18, known: false, viewConfigured: true, listeners: 0 };
+
+	it("re-hooks a configured view whose new guest has no key listener", () => {
+		expect(rehookDecision(base)).toBe("rehook");
+	});
+	it("leaves a guest that already has a listener (Obsidian's first hook)", () => {
+		expect(rehookDecision({ ...base, listeners: 1 })).toBe("hooked");
+	});
+	it("waits for Obsidian on a view it has not configured yet (first page load)", () => {
+		expect(rehookDecision({ ...base, viewConfigured: false })).toBe("obsidian-pending");
+	});
+	it("does nothing twice for the same guest", () => {
+		expect(rehookDecision({ ...base, known: true })).toBe("known");
+	});
+	it("never guesses when it cannot count listeners", () => {
+		expect(rehookDecision({ ...base, listeners: null })).toBe("cannot-inspect");
+	});
+	it("ignores a webview without a guest", () => {
+		expect(rehookDecision({ ...base, guestId: null })).toBe("no-guest");
+		expect(rehookDecision({ ...base, guestId: 0 })).toBe("no-guest");
+		expect(rehookDecision({ ...base, guestId: NaN })).toBe("no-guest");
+	});
+	it("checks 'known' before anything that would touch electron.remote", () => {
+		expect(rehookDecision({ guestId: 5, known: true, viewConfigured: false, listeners: null })).toBe("known");
 	});
 });
