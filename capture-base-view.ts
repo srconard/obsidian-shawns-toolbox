@@ -23,7 +23,7 @@ import { shiftDateIso } from "./template-renderer";
 import { createDateBar, wireLongPress, type DateBar } from "./date-bar";
 import type { CardsHost } from "./section-cards";
 import { ThreadService } from "./thread-service";
-import { summarizeThreads } from "./thread-core";
+import { summarizeThreads, listRemovableTags } from "./thread-core";
 import { groupThreadsByArea } from "./thread-areas";
 import { wireLongPressMenu, showTagMenu, type TagTarget } from "./tag-menu";
 import {
@@ -384,6 +384,8 @@ export abstract class BaseCapturePanel extends ToolboxPanel {
 			x,
 			y,
 			onApplyTag: (tag) => void this.applyTag(target, tag),
+			existingTags: listRemovableTags(target.raw),
+			onRemoveTag: (tag) => void this.removeTag(target, tag),
 			onHide,
 		});
 	}
@@ -406,6 +408,16 @@ export abstract class BaseCapturePanel extends ToolboxPanel {
 		const areas = await this.service.loadThreadAreas();
 		const pinned = this.host.getSettings().pinnedThreads ?? [];
 		return groupThreadsByArea(summarizeThreads(posts), areas, pinned);
+	}
+
+	/** Remove a (confirmed) tag from the thought's own line; replies untouched. */
+	private async removeTag(target: TagTarget, tag: string): Promise<void> {
+		try {
+			const changed = await this.service.removeTagFromPost(target, tag);
+			new Notice(changed ? `Removed ${tag}` : `${tag} was no longer on that post`);
+		} catch (err) {
+			new Notice(err instanceof Error ? err.message : String(err));
+		}
 	}
 
 	private async applyTag(target: TagTarget, tag: string): Promise<void> {

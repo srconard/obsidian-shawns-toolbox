@@ -487,6 +487,57 @@ export function appendTag(line: string, tag: string): string {
 	return `${clean.replace(/\s+$/, "")} ${tag}`;
 }
 
+// A removable tag token on a post line: a #thread/<name> or a #thought/<period>
+// cadence tag, starting at line-start or after whitespace and running to the
+// end of the tag characters (so #thread/dance is never a prefix match inside
+// #thread/dance-studies or #thread/dance/sub).
+const REMOVABLE_TAG_SOURCE = `(^|\\s)(#thread\\/[A-Za-z0-9_/-]+|#thought\\/(?:${THOUGHT_PERIODS.join("|")}))(?![A-Za-z0-9_/-])`;
+
+/**
+ * The removable tags on a post line — every #thread/<name> and #thought/<period>
+ * token — in the order they appear, de-duplicated. Feeds the "Remove tag"
+ * section of the shared tag menu. The reply link ([[note#^id]]) and block id
+ * never match: neither starts a whitespace-delimited "#thread/" token.
+ */
+export function listRemovableTags(line: string): string[] {
+	const clean = stripCr(line);
+	const re = new RegExp(REMOVABLE_TAG_SOURCE, "g");
+	const out: string[] = [];
+	let m: RegExpExecArray | null;
+	while ((m = re.exec(clean))) if (!out.includes(m[2])) out.push(m[2]);
+	return out;
+}
+
+/**
+ * Remove one tag from a post's source line — the exact token only, every
+ * occurrence of it — and close the gap it leaves with a single space. The rest
+ * of the line is verbatim: leading indentation, the list marker and time, a
+ * trailing ^blockid and a "↩ [[note#^id]]" reply link all stay put. A tag that
+ * is only a prefix of a longer one (#thread/dance vs #thread/dance-studies) is
+ * never touched. No-op (returns the line unchanged, CR included) when the tag
+ * is absent. The inverse of appendTag.
+ */
+export function removeTag(line: string, tag: string): string {
+	if (!tag.trim()) return line; // an empty pattern would match forever
+	const hadCr = line.endsWith("\r");
+	let clean = stripCr(line);
+	// No lookbehind (older mobile WebViews lack it): group 1 is the boundary.
+	const re = new RegExp(`(^|\\s)${escapeRe(tag)}(?![A-Za-z0-9_/-])`);
+	let changed = false;
+	for (let m = re.exec(clean); m; m = re.exec(clean)) {
+		changed = true;
+		const start = m.index + m[1].length;
+		const leftRaw = clean.slice(0, start);
+		const left = leftRaw.replace(/[ \t]+$/, "");
+		const right = clean.slice(m.index + m[0].length).replace(/^[ \t]+/, "");
+		if (left === "") clean = leftRaw + right; // tag led the line: keep indent
+		else if (right === "") clean = left;
+		else clean = `${left} ${right}`;
+	}
+	if (!changed) return line;
+	return hadCr ? `${clean}\r` : clean;
+}
+
 /**
  * Append #thought/<period> cadence tags to the FIRST line of a capture block,
  * in THOUGHT_PERIODS (horizon) order, each a no-op if already present. Used by

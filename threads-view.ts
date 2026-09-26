@@ -14,6 +14,7 @@ import {
 	targetKey,
 	periodicPosts,
 	summarizePeriods,
+	listRemovableTags,
 	THOUGHT_PERIODS,
 	type ThreadPost,
 	type PeriodicPost,
@@ -40,7 +41,12 @@ import {
 	missingNoteMessage,
 	isDateIso,
 } from "./thoughts-calendar-core";
-import { wireLongPressMenu, showTagMenu as showTagMenuAt } from "./tag-menu";
+import {
+	wireLongPressMenu,
+	wireChipLongPress,
+	confirmRemoveTag,
+	showTagMenu as showTagMenuAt,
+} from "./tag-menu";
 import { ToolboxPanel } from "./panel-base";
 import { ToolboxPanelView } from "./panel-view";
 
@@ -536,8 +542,7 @@ export class ThreadsPanel extends ToolboxPanel {
 				const threadName = post.thread;
 				const t = card.createDiv({ cls: "stx-post-thread" });
 				t.setText(`#thread/${threadName}`);
-				t.addEventListener("click", (e) => {
-					e.stopPropagation();
+				this.wireThreadChip(t, post, threadName, () => {
 					this.activeToday = false;
 					this.calendarMonth = null;
 					this.activeThread = threadName;
@@ -670,12 +675,12 @@ export class ThreadsPanel extends ToolboxPanel {
 			});
 			card.createDiv({ cls: "stx-post-text", text: post.text });
 			if (post.thread) {
+				const threadName = post.thread;
 				const t = card.createDiv({ cls: "stx-post-thread" });
-				t.setText(`#thread/${post.thread}`);
-				t.addEventListener("click", (e) => {
-					e.stopPropagation();
+				t.setText(`#thread/${threadName}`);
+				this.wireThreadChip(t, post, threadName, () => {
 					this.activePeriod = null;
-					this.activeThread = post.thread;
+					this.activeThread = threadName;
 					this.threadPeriodFilter.clear();
 					this.render();
 				});
@@ -890,7 +895,43 @@ export class ThreadsPanel extends ToolboxPanel {
 			x,
 			y,
 			onApplyTag: (tag) => void this.applyTag(post, tag),
+			existingTags: listRemovableTags(post.raw),
+			onRemoveTag: (tag) => void this.removeTag(post, tag),
 			onHide,
+		});
+	}
+
+	/** Remove a (confirmed) tag from the post's own line, then refresh so the
+	 *  post drops out of that thread / the Untagged filter updates. Replies to
+	 *  the post are deliberately untouched (v1.50.0). */
+	private async removeTag(post: TaggablePost, tag: string): Promise<void> {
+		try {
+			const changed = await this.service.removeTagFromPost(post, tag);
+			new Notice(changed ? `Removed ${tag}` : `${tag} was no longer on that post`);
+			await this.refresh();
+		} catch (err) {
+			new Notice(err instanceof Error ? err.message : String(err));
+		}
+	}
+
+	/**
+	 * A post's #thread chip: tap jumps to the thread (unchanged); long-press /
+	 * right-click asks to remove that tag from the post (v1.50.0).
+	 */
+	private wireThreadChip(
+		chip: HTMLElement,
+		post: TaggablePost,
+		thread: string,
+		jump: () => void
+	): void {
+		const tag = `#thread/${thread}`;
+		const wasLongPress = wireChipLongPress(chip, () =>
+			confirmRemoveTag(this.app, tag, () => void this.removeTag(post, tag))
+		);
+		chip.addEventListener("click", (e) => {
+			e.stopPropagation();
+			if (wasLongPress()) return;
+			jump();
 		});
 	}
 

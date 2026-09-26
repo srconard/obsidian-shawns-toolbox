@@ -1,7 +1,9 @@
 // tag-menu.ts — the shared "add a tag to this thought" component. Extracted
 // from the Threads panel so the Capture panel can reuse the exact same gesture
 // and menu (long-press on touch / right-click on desktop → cadence tags on top,
-// then the existing threads grouped by area, then "New thread…").
+// then the existing threads grouped by area, then "New thread…"). Since
+// v1.50.0 it also removes: a "Remove tag" section on top lists the tags the
+// post's line already carries, each behind a short confirm.
 import { App, Menu, Modal, Notice } from "obsidian";
 import { normalizeThreadName, THOUGHT_PERIODS } from "./thread-core";
 import { isFlatGrouping, type AreaGroup } from "./thread-areas";
@@ -90,6 +92,11 @@ export interface TagMenuOptions {
 	/** Optional non-clickable heading shown above the cadence tags — the capture
 	 *  buttons use it to say what a long-press is tagging ("Thought · tag as"). */
 	title?: string;
+	/** Tags the post's line already carries (listRemovableTags(raw)). With
+	 *  onRemoveTag, they head the menu as "Remove #thread/x" items. */
+	existingTags?: string[];
+	/** Remove a confirmed tag from the target (caller writes + refreshes). */
+	onRemoveTag?: (tag: string) => void;
 }
 
 /**
@@ -99,9 +106,22 @@ export interface TagMenuOptions {
  * grouping is flat (one Unsorted group) and the area headers are suppressed.
  */
 export function showTagMenu(opts: TagMenuOptions): void {
-	const { app, groups, x, y, onApplyTag, onHide, title } = opts;
+	const { app, groups, x, y, onApplyTag, onHide, title, existingTags, onRemoveTag } =
+		opts;
 	const menu = new Menu();
 	if (title) menu.addItem((i) => i.setTitle(title).setIsLabel(true));
+	if (onRemoveTag && existingTags && existingTags.length > 0) {
+		menu.addItem((i) => i.setTitle("Remove tag").setIsLabel(true));
+		for (const tag of existingTags) {
+			menu.addItem((i) =>
+				i
+					.setTitle(`Remove ${tag}`)
+					.setIcon("x")
+					.onClick(() => confirmRemoveTag(app, tag, () => onRemoveTag(tag)))
+			);
+		}
+		menu.addSeparator();
+	}
 	for (const period of THOUGHT_PERIODS) {
 		const tag = `#thought/${period}`;
 		menu.addItem((i) =>
@@ -135,6 +155,107 @@ export function showTagMenu(opts: TagMenuOptions): void {
 	}
 	if (onHide) menu.onHide(onHide);
 	menu.showAtPosition({ x, y });
+}
+
+/** Ask "Remove #thread/x from this thought?" and call onConfirm on Remove. */
+export function confirmRemoveTag(app: App, tag: string, onConfirm: () => void): void {
+	new ConfirmRemoveModal(app, tag, onConfirm).open();
+}
+
+/** Two-button confirm for removing a tag. Enter confirms; Escape/Cancel closes. */
+class ConfirmRemoveModal extends Modal {
+	constructor(app: App, private tag: string, private onConfirm: () => void) {
+		super(app);
+	}
+
+	onOpen(): void {
+		const { contentEl } = this;
+		contentEl.addClass("stx-new-thread");
+		contentEl.createEl("p", { text: `Remove ${this.tag} from this thought?` });
+		const row = contentEl.createDiv({ cls: "stx-thread-reply-row" });
+		const remove = row.createEl("button", { cls: "mod-warning", text: "Remove" });
+		remove.addEventListener("click", () => {
+			this.close();
+			this.onConfirm();
+		});
+		const cancel = row.createEl("button", { text: "Cancel" });
+		cancel.addEventListener("click", () => this.close());
+		this.scope.register([], "Enter", (e) => {
+			e.preventDefault();
+			remove.click();
+			return false;
+		});
+		window.setTimeout(() => remove.focus(), 0);
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
+/**
+ * Wire long-press (touch) / right-click (desktop) on a tag chip that sits inside
+ * a post card, WITHOUT breaking its tap-to-jump. The press is claimed for the
+ * chip (stopPropagation, so the card's own menu does not also open), a guard
+ * swallows the duplicate contextmenu Android fires after a long-press, and the
+ * returned function tells the chip's click handler to skip the jump when the
+ * click is the tail of a long-press (the flag clears on the next press, so a
+ * later genuine tap always navigates).
+ */
+export function wireChipLongPress(el: HTMLElement, onLongPress: () => void): () => boolean {
+	let timer: number | null = null;
+	let firedAt = 0;
+	let suppressClick = false;
+	let sx = 0;
+	let sy = 0;
+	const fire = () => {
+		if (Date.now() - firedAt < 800) return;
+		firedAt = Date.now();
+		suppressClick = true;
+		el.removeClass("stx-post-pressed");
+		onLongPress();
+	};
+	const cancel = () => {
+		if (timer !== null) {
+			window.clearTimeout(timer);
+			timer = null;
+		}
+		el.removeClass("stx-post-pressed");
+	};
+	el.addEventListener("contextmenu", (e) => {
+		e.preventDefault();
+		e.stopPropagation();
+		cancel();
+		fire();
+	});
+	el.addEventListener("pointerdown", (e) => {
+		e.stopPropagation();
+		suppressClick = false; // a fresh press: its own click is a real tap
+		if (e.pointerType === "mouse") return;
+		sx = e.clientX;
+		sy = e.clientY;
+		if (timer !== null) window.clearTimeout(timer);
+		el.addClass("stx-post-pressed");
+		timer = window.setTimeout(() => {
+			timer = null;
+			fire();
+		}, 450);
+	});
+	el.addEventListener("pointermove", (e) => {
+		if (
+			timer !== null &&
+			(Math.abs(e.clientX - sx) > 10 || Math.abs(e.clientY - sy) > 10)
+		)
+			cancel();
+	});
+	el.addEventListener("pointerup", cancel);
+	el.addEventListener("pointerleave", cancel);
+	el.addEventListener("pointercancel", cancel);
+	return () => {
+		const s = suppressClick;
+		suppressClick = false;
+		return s;
+	};
 }
 
 /**

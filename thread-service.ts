@@ -19,6 +19,7 @@ import {
 	generateBlockId,
 	formatReplyLine,
 	appendTag,
+	removeTag,
 	type ThreadPost,
 	type PeriodicPost,
 	type ThoughtPost,
@@ -272,6 +273,34 @@ export class ThreadService {
 			const idx = this.locateLine(lines, post);
 			if (idx < 0) throw new Error("Could not find the post line");
 			const updated = appendTag(lines[idx], tag);
+			if (updated !== lines[idx]) {
+				lines[idx] = updated;
+				changed = true;
+			}
+			return lines.join("\n");
+		});
+		this.invalidate(file.path);
+		return changed;
+	}
+
+	/**
+	 * Remove one tag from a post's own source line (the inverse of
+	 * appendTagToPost, same line location). Touches ONLY that line: replies to
+	 * the post keep their own tags and ↩ links (v1.50.0 decision). No-op when
+	 * the tag is no longer there. Returns whether the line changed.
+	 */
+	async removeTagFromPost(
+		post: { path?: string; note: string; line: number; raw: string },
+		tag: string
+	): Promise<boolean> {
+		const file = this.resolveFile(post);
+		if (!file) throw new Error(`Note not found: ${post.note}`);
+		let changed = false;
+		await this.app.vault.process(file, (content) => {
+			const lines = content.split("\n");
+			const idx = this.locateLine(lines, post);
+			if (idx < 0) throw new Error("Could not find the post line");
+			const updated = removeTag(lines[idx], tag);
 			if (updated !== lines[idx]) {
 				lines[idx] = updated;
 				changed = true;
