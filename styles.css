@@ -3246,7 +3246,8 @@ body.stx-focus-mode.stx-focus-mode-hide-view-headers:not(.is-mobile) .workspace-
 .stx-tile-label {
 	flex: 1 1 auto;
 	min-width: 0;
-	font-size: var(--font-ui-large, 1.15em);
+	/* v1.56.2: ~18% smaller than --font-ui-large (20 → ~16.4 px at default). */
+	font-size: calc(var(--font-ui-large, 20px) * 0.82);
 	font-weight: 700;
 	letter-spacing: 0.02em;
 	text-transform: uppercase;
@@ -3270,7 +3271,7 @@ body.stx-focus-mode.stx-focus-mode-hide-view-headers:not(.is-mobile) .workspace-
 	column-gap: 0.4em;
 	row-gap: 0.1em;
 	color: var(--text-muted);
-	font-size: var(--font-ui-smaller);
+	font-size: calc(var(--font-ui-smaller, 12px) * 0.92);
 }
 .stx-tile-dot {
 	color: var(--text-faint);
@@ -3285,7 +3286,7 @@ body.stx-focus-mode.stx-focus-mode-hide-view-headers:not(.is-mobile) .workspace-
 	align-items: center;
 	gap: 0.1em 0.25em;
 	margin: -0.2em 0.3em 0.35em;
-	font-size: var(--font-ui-small);
+	font-size: var(--font-ui-smaller, 12px);
 	min-width: 0;
 }
 .stx-threads button.stx-tiles-crumb,
