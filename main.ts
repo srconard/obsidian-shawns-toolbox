@@ -50,6 +50,14 @@ import {
 	applyStatusBarAutohide,
 	STATUSBAR_AUTOHIDE_CLASS,
 } from "./statusbar-core";
+import {
+	FOCUS_MODE_CLASS,
+	FOCUS_MODE_HOTKEY,
+	FOCUS_MODE_VIEW_HEADERS_CLASS,
+	applyFocusMode,
+	initialFocusMode,
+	osFullscreenStep,
+} from "./focus-mode-core";
 
 export default class ShawnsToolboxPlugin extends Plugin {
 	settings: ShawnsToolboxSettings = DEFAULT_SETTINGS;
@@ -60,6 +68,8 @@ export default class ShawnsToolboxPlugin extends Plugin {
 	private statusFooter: StatusFooter | null = null;
 	private drawerChrome: DrawerChrome | null = null;
 	private webviewHotkeys: WebviewHotkeys | null = null;
+	/** True while the OS full screen is one focus mode turned on (so we may turn it off). */
+	private focusOwnsOsFullscreen = false;
 	private mentionsFooter: MentionsFooter | null = null;
 	/** Shared across ```threads block renders so the mtime cache persists. */
 	private threadService: ThreadService | null = null;
@@ -310,6 +320,29 @@ export default class ShawnsToolboxPlugin extends Plugin {
 			},
 		});
 
+		// ---- Focus mode (v1.55.0, desktop only) ----
+		// Hides the tab-header strips + titlebar (styles.css). Toggled by the
+		// same hotkey in both directions; Escape is deliberately NOT bound — the
+		// Web viewer page needs it. Mod+Shift+F11 carries a modifier-free F-key,
+		// so v1.54.0's Web viewer forwarding picks it up from bakedHotkeys.
+		if (Platform.isDesktopApp && !Platform.isMobile) {
+			if (initialFocusMode(this.settings) !== this.settings.focusModeOn) {
+				this.settings.focusModeOn = true;
+				void this.saveData(this.settings);
+			}
+			this.refreshFocusMode();
+		}
+		this.addCommand({
+			id: "toggle-focus-mode",
+			name: "Toggle focus mode (hide tab bars)",
+			hotkeys: [{ modifiers: [...FOCUS_MODE_HOTKEY.modifiers], key: FOCUS_MODE_HOTKEY.key }],
+			checkCallback: (checking) => {
+				if (!Platform.isDesktopApp || Platform.isMobile) return false;
+				if (!checking) void this.setFocusMode(!this.settings.focusModeOn, true);
+				return true;
+			},
+		});
+
 		// ---- Web viewer hotkeys (v1.54.0, desktop only) ----
 		if (Platform.isDesktopApp) {
 			this.webviewHotkeys = new WebviewHotkeys(this.app, () => this.settings);
@@ -486,6 +519,8 @@ export default class ShawnsToolboxPlugin extends Plugin {
 
 	onunload(): void {
 		document.body.classList.remove(STATUSBAR_AUTOHIDE_CLASS);
+		document.body.classList.remove(FOCUS_MODE_CLASS, FOCUS_MODE_VIEW_HEADERS_CLASS);
+		if (this.focusOwnsOsFullscreen) this.electronWindow()?.setFullScreen(false);
 		this.webviewHotkeys?.stop();
 		stopOverlayRelay();
 		this.drawerChrome?.restore();
@@ -631,6 +666,54 @@ export default class ShawnsToolboxPlugin extends Plugin {
 				? "Status bar auto-hide on — hover the bottom-right corner to show it"
 				: "Status bar auto-hide off"
 		);
+	}
+
+	/** Apply focus mode (body classes + optional OS full screen) for the current settings. */
+	refreshFocusMode(): void {
+		const active = applyFocusMode(
+			document.body.classList,
+			this.settings.focusModeOn,
+			this.settings.focusModeHideViewHeaders,
+			Platform.isMobile || !Platform.isDesktopApp
+		);
+		const win = this.electronWindow();
+		if (!win) return;
+		const step = osFullscreenStep(
+			active,
+			this.settings.focusModeOsFullscreen,
+			win.isFullScreen(),
+			this.focusOwnsOsFullscreen
+		);
+		if (step.action === "enter") win.setFullScreen(true);
+		else if (step.action === "leave") win.setFullScreen(false);
+		this.focusOwnsOsFullscreen = step.owned;
+	}
+
+	/** Turn focus mode on or off, remember it, and optionally say so. */
+	async setFocusMode(on: boolean, notify = false): Promise<void> {
+		if (Platform.isMobile || !Platform.isDesktopApp) return;
+		this.settings.focusModeOn = on;
+		await this.saveSettings();
+		this.refreshFocusMode();
+		if (notify) {
+			new Notice(
+				on
+					? "Focus mode on — Ctrl/Cmd+Shift+F11 or the command palette turns it off"
+					: "Focus mode off"
+			);
+		}
+	}
+
+	/** The Electron BrowserWindow via @electron/remote; null when unavailable. */
+	private electronWindow(): { isFullScreen(): boolean; setFullScreen(on: boolean): void } | null {
+		try {
+			// eslint-disable-next-line @typescript-eslint/no-var-requires
+			const electron = (window as unknown as { require?: (m: string) => any }).require?.("electron");
+			const win = electron?.remote?.getCurrentWindow?.();
+			return win && typeof win.setFullScreen === "function" ? win : null;
+		} catch {
+			return null;
+		}
 	}
 
 	/** Start, stop or re-apply Web viewer hotkey forwarding after a settings change. */

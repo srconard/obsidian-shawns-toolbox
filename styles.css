@@ -3156,3 +3156,41 @@ body.stx-autohide-statusbar:not(.is-mobile) .status-bar:focus-within {
 	transform: none;
 	transition-delay: 0ms;
 }
+
+/* ---- Focus mode (v1.55.0, desktop only) ----
+   Shawn, 2026-09-26: "get rid of the blue bar at the top of the screen that has
+   the tabs". The command "Toggle focus mode" (Mod+Shift+F11) puts
+   .stx-focus-mode on <body>. It hides:
+     - every tab-header strip: the root split's and both sidebars'
+       (.workspace-tab-header-container, which on a hidden-frame window is also
+       the window's drag region);
+     - the desktop titlebar (.titlebar — the fixed strip holding the window
+       buttons on a hidden or custom frame);
+     - the sidebar-toggle button the collapsed left ribbon draws in that strip.
+   With the headers gone the .workspace-tabs content fills the freed height on
+   its own (flex column). --titlebar-height is zeroed so the ribbon and any
+   theme that pads for the titlebar stop reserving the space. (--header-height
+   is NOT touched: .view-header uses it, and zeroing it squashed the Web
+   viewer's address bar in the live test.)
+   Removing the class restores the default. Never applies on mobile. */
+body.stx-focus-mode:not(.is-mobile) {
+	--titlebar-height: 0px;
+}
+body.stx-focus-mode:not(.is-mobile) .workspace-tab-header-container,
+body.stx-focus-mode:not(.is-mobile) .titlebar,
+body.stx-focus-mode:not(.is-mobile) .workspace-ribbon > .sidebar-toggle-button {
+	display: none !important;
+}
+body.stx-focus-mode:not(.is-mobile) .workspace-ribbon.mod-left,
+body.stx-focus-mode:not(.is-mobile) .workspace-ribbon.mod-right,
+body.stx-focus-mode:not(.is-mobile) .workspace-split.mod-left-split,
+body.stx-focus-mode:not(.is-mobile) .workspace-split.mod-right-split,
+body.stx-focus-mode:not(.is-mobile) .workspace-split.mod-root {
+	margin-top: 0 !important;
+	padding-top: 0 !important;
+}
+/* "Also hide view headers" (off by default): each leaf's back/forward/title
+   row, including the Web viewer's address bar and the Threads header. */
+body.stx-focus-mode.stx-focus-mode-hide-view-headers:not(.is-mobile) .workspace-leaf-content > .view-header {
+	display: none !important;
+}

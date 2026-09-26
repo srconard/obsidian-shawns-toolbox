@@ -185,6 +185,16 @@ export interface ShawnsToolboxSettings {
 	webviewPassThroughKeys: string;
 	/** "auto" = Obsidian's own forwarding when it has it, else inject into the page. */
 	webviewHotkeysMode: ForwardMode;
+
+	// Focus mode (v1.55.0, desktop only) — see focus-mode-core.ts
+	/** Last focus-mode state, restored on reload. */
+	focusModeOn: boolean;
+	/** Always start in focus mode, whatever the last state was. */
+	startInFocusMode: boolean;
+	/** Also hide each pane's view header (title row, Web viewer URL bar). */
+	focusModeHideViewHeaders: boolean;
+	/** Also put the Obsidian window into OS full screen. */
+	focusModeOsFullscreen: boolean;
 }
 
 export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
@@ -296,6 +306,11 @@ export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
 	forwardWebviewHotkeys: true,
 	webviewPassThroughKeys: DEFAULT_PASS_THROUGH_KEYS,
 	webviewHotkeysMode: "auto",
+
+	focusModeOn: false,
+	startInFocusMode: false,
+	focusModeHideViewHeaders: false,
+	focusModeOsFullscreen: false,
 };
 
 export class ShawnsToolboxSettingTab extends PluginSettingTab {
@@ -361,6 +376,56 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 						this.plugin.refreshStatusBarAutohide();
 					})
 			);
+
+		// ---- Focus mode (v1.55.0, desktop) ----
+		if (Platform.isDesktopApp) {
+			containerEl.createEl("h3", { text: "Focus mode (desktop)" });
+			containerEl.createEl("p", {
+				text: "Command \"Toggle focus mode\" (default Ctrl/Cmd+Shift+F11, also works while a Web viewer page has focus) hides the tab bars at the top of the main area and both sidebars, and the window title bar. Press the same hotkey, or run the command from the palette, to leave it. Escape does not leave it.",
+				cls: "setting-item-description",
+			});
+
+			new Setting(containerEl)
+				.setName("Focus mode is on")
+				.setDesc("The current state. It is remembered across reloads.")
+				.addToggle((toggle) =>
+					toggle.setValue(this.plugin.settings.focusModeOn).onChange(async (value) => {
+						await this.plugin.setFocusMode(value);
+					})
+				);
+
+			new Setting(containerEl)
+				.setName("Also hide view headers")
+				.setDesc("Also hide each pane's header row (back / forward / title), including the Web viewer's address bar and the Threads header.")
+				.addToggle((toggle) =>
+					toggle.setValue(this.plugin.settings.focusModeHideViewHeaders).onChange(async (value) => {
+						this.plugin.settings.focusModeHideViewHeaders = value;
+						await this.plugin.saveSettings();
+						this.plugin.refreshFocusMode();
+					})
+				);
+
+			new Setting(containerEl)
+				.setName("Start in focus mode")
+				.setDesc("Always open Obsidian in focus mode, even if it was off when Obsidian closed.")
+				.addToggle((toggle) =>
+					toggle.setValue(this.plugin.settings.startInFocusMode).onChange(async (value) => {
+						this.plugin.settings.startInFocusMode = value;
+						await this.plugin.saveSettings();
+					})
+				);
+
+			new Setting(containerEl)
+				.setName("Also go OS full screen")
+				.setDesc("Also put the Obsidian window into full screen (like F11 in a browser) while focus mode is on. Leaving focus mode leaves full screen only if focus mode entered it.")
+				.addToggle((toggle) =>
+					toggle.setValue(this.plugin.settings.focusModeOsFullscreen).onChange(async (value) => {
+						this.plugin.settings.focusModeOsFullscreen = value;
+						await this.plugin.saveSettings();
+						this.plugin.refreshFocusMode();
+					})
+				);
+		}
 
 		if (Platform.isDesktopApp) {
 			containerEl.createEl("h3", { text: "Web viewer (desktop)" });
