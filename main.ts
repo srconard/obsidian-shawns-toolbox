@@ -32,6 +32,7 @@ import {
 } from "./focus-view";
 import { VoiceView, VOICE_VIEW_TYPE } from "./voice-view";
 import { ThreadsView, THREADS_VIEW_TYPE } from "./threads-view";
+import { lastThreadRename, undoWithNotice } from "./thread-rename";
 import { PillarsView, PILLARS_VIEW_TYPE } from "./pillars-view";
 import { GuidingQuestionsView, GUIDING_VIEW_TYPE } from "./guiding-view";
 import { HighlightsView, HIGHLIGHTS_VIEW_TYPE } from "./highlights-view";
@@ -298,6 +299,29 @@ export default class ShawnsToolboxPlugin extends Plugin {
 			name: "Toggle fullscreen (hides web viewer toolbar)",
 			hotkeys: [{ modifiers: [], key: "F11" }],
 			callback: () => void toggleLeafFullscreen(this.app),
+		});
+		// ---- Threads: undo the last rename (v1.52.0) ----
+		this.addCommand({
+			id: "undo-last-thread-rename",
+			name: "Undo last thread rename",
+			checkCallback: (checking) => {
+				const record = lastThreadRename();
+				if (!record) return false;
+				if (!checking) {
+					const service =
+						this.threadService ?? new ThreadService(this.app, () => this.settings);
+					void undoWithNotice(
+						{
+							app: this.app,
+							getSettings: () => this.settings,
+							saveSettings: () => this.saveSettings(),
+							isScannablePath: (p) => service.isScannablePath(p),
+						},
+						record
+					);
+				}
+				return true;
+			},
 		});
 		this.addCommand({
 			id: "toggle-web-toolbar",

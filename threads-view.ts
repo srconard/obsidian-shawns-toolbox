@@ -37,6 +37,8 @@ import {
 import type { TagOp } from "./retag-core";
 import { ecoGroupsFromPostGroups, type EcoSendMode } from "./eco-send-core";
 import { sendThreadToEco } from "./eco-send";
+import { openRenameThread } from "./thread-rename";
+import { renameThreadName } from "./thread-rename-core";
 import {
 	buildMonthGrid,
 	monthDayIsos,
@@ -1125,6 +1127,14 @@ export class ThreadsPanel extends ToolboxPanel {
 				.onClick(() => void this.sendToEco(name, "current"))
 		);
 		menu.addSeparator();
+		// Rename / move (v1.52.0; Shawn 2026-09-26 "long press on a thread to
+		// rename the entire thread tag and for every thread that has the tag").
+		menu.addItem((i) =>
+			i
+				.setTitle("Rename / move thread…")
+				.setIcon("pencil")
+				.onClick(() => this.renameThread(name))
+		);
 		const pinned = this.pinnedThreads().includes(name);
 		menu.addItem((i) =>
 			i
@@ -1134,6 +1144,35 @@ export class ThreadsPanel extends ToolboxPanel {
 		);
 		if (onHide) menu.onHide(onHide);
 		menu.showAtPosition({ x, y });
+	}
+
+	/** Rename / move a thread and its children across the scanned notes. The
+	 *  open thread view follows the rename (and the undo). */
+	private renameThread(name: string): void {
+		const follow = (from: string, to: string) => {
+			if (this.activeThread === null) return;
+			const next = renameThreadName(this.activeThread, from, to);
+			if (next !== null) this.activeThread = next;
+		};
+		openRenameThread(
+			{
+				app: this.app,
+				getSettings: this.host.getSettings,
+				saveSettings: this.host.saveSettings,
+				isScannablePath: (p) => this.service.isScannablePath(p),
+			},
+			name,
+			{
+				onRenamed: (r) => {
+					follow(r.from, r.to);
+					void this.refresh();
+				},
+				onUndone: (r) => {
+					follow(r.to, r.from);
+					void this.refresh();
+				},
+			}
+		);
 	}
 
 	/** Send a thread (own + sub-thread posts, each with its replies) to Eco. */

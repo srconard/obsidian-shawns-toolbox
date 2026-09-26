@@ -3109,3 +3109,19 @@ body.is-phone.is-floating-nav.mod-toolbar-open .workspace-split.mod-root div.vie
 	color: var(--text-muted);
 	font-size: var(--font-ui-smaller);
 }
+
+/* Rename / move thread (v1.52.0): inline validation, merge warning, and the
+   Undo button inside the post-rename Notice. */
+.stx-rename-error {
+	color: var(--text-error);
+	font-size: var(--font-ui-smaller);
+	min-height: 1.2em;
+	margin: 0 0 0.3em;
+}
+.stx-rename-warning {
+	color: var(--text-warning);
+	font-weight: 600;
+}
+.stx-rename-undo {
+	margin-left: 0.5em;
+}
