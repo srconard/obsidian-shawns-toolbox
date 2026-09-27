@@ -374,7 +374,7 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("Auto-hide status bar (show on hover at bottom-right)")
 			.setDesc(
-				"Hide the strip in the bottom-right corner (backlinks, word count, sync …) until the mouse reaches that corner. It hides again shortly after the mouse leaves. Desktop only; turning this off restores it immediately."
+				"Hide the strip in the bottom-right corner (backlinks, word count, sync …) until the mouse reaches the very bottom-right corner of the window (a small square; hovering elsewhere along the bottom edge does nothing). It stays up while the mouse is over the bar and hides again shortly after the mouse leaves. Desktop only; turning this off restores it immediately."
 			)
 			.addToggle((toggle) =>
 				toggle

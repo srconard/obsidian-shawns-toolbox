@@ -3128,25 +3128,38 @@ body.is-phone.is-floating-nav.mod-toolbar-open .workspace-split.mod-root div.vie
 
 /* Auto-hide status bar (v1.53.0, desktop only). With the setting on, the plugin
    puts .stx-autohide-statusbar on <body>. The bar slides down until only a 3px
-   sliver is left and fades out. Its ::before is an invisible hover target
-   (48px tall, the bar's width) that sits just above the sliver, so the mouse
-   reaching the bottom-right corner counts as hovering the bar. Showing is
+   sliver is left and fades out.
+   v1.56.5 (Shawn, 2026-09-27: it appeared when hovering anywhere along the
+   bar's area; he wants ONLY the bottom-right corner): the hidden bar takes
+   pointer-events: none, so neither its sliver nor its width reacts. Its
+   ::before is the only hover target: a --stx-statusbar-hotzone square pinned
+   to the window's bottom-right corner (the bar's right edge, reaching down to
+   the window edge over the sliver). Hovering the pseudo-element counts as
+   hovering the bar, so the bar reveals; once revealed it takes pointer events
+   again, so it stays up while the mouse is over the bar itself (or still in
+   the corner square) and hides after the mouse leaves both. Showing is
    immediate; hiding waits 400ms (transition-delay) so it does not flicker.
    Menus the bar opens (sync popover, etc.) are separate body-level elements,
    so they stay usable once opened. Removing the class restores the default. */
+body.stx-autohide-statusbar:not(.is-mobile) {
+	--stx-statusbar-hotzone: 48px;
+}
 body.stx-autohide-statusbar:not(.is-mobile) .status-bar {
 	opacity: 0;
 	transform: translateY(calc(100% - 3px));
+	pointer-events: none;
 	transition: opacity 180ms ease, transform 180ms ease;
 	transition-delay: 400ms;
 }
 body.stx-autohide-statusbar:not(.is-mobile) .status-bar::before {
 	content: "";
 	position: absolute;
-	left: 0;
 	right: 0;
-	bottom: 100%;
-	height: 48px;
+	left: auto;
+	bottom: auto;
+	top: calc(3px - var(--stx-statusbar-hotzone));
+	width: var(--stx-statusbar-hotzone);
+	height: var(--stx-statusbar-hotzone);
 	background: transparent;
 	pointer-events: auto;
 }
@@ -3154,6 +3167,7 @@ body.stx-autohide-statusbar:not(.is-mobile) .status-bar:hover,
 body.stx-autohide-statusbar:not(.is-mobile) .status-bar:focus-within {
 	opacity: 1;
 	transform: none;
+	pointer-events: auto;
 	transition-delay: 0ms;
 }
 
