@@ -18,6 +18,7 @@ import { SectionsPanel } from "./sections-view";
 import { GuidingQuestionsPanel } from "./guiding-view";
 import { StatusPanel } from "./status-view";
 import { VSearchPanel } from "./vsearch-view";
+import { EcoTasksPanel } from "./eco-tasks-view";
 
 export interface PanelSpec {
 	/** Stable id stored in settings — never rename one without a migration. */
@@ -95,6 +96,12 @@ export const PANEL_SPECS: readonly PanelSpec[] = [
 		label: "Vault search",
 		icon: "scan-search",
 		create: (h, c) => new VSearchPanel(h, c),
+	},
+	{
+		id: "eco-tasks",
+		label: "Eco tasks",
+		icon: "message-square-plus",
+		create: (h, c) => new EcoTasksPanel(h, c),
 	},
 ] as const;
 

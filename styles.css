@@ -3387,3 +3387,94 @@ body.is-mobile .stx-tiles-showall {
 .stx-post-thread.stx-tile-subpath.is-own:hover {
 	text-decoration: none;
 }
+
+/* ---- Eco tasks panel (v1.57.0) ---- */
+.stx-eco-tasks {
+	padding: 6px 8px;
+}
+.stx-eco-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 8px;
+	margin-bottom: 6px;
+}
+.stx-eco-title {
+	font-weight: 600;
+}
+.stx-eco-counts,
+.stx-eco-meta {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+.stx-eco-group {
+	margin: 10px 0 4px;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+.stx-eco-item {
+	padding: 6px 8px;
+	margin-bottom: 6px;
+	border: 1px solid var(--background-modifier-border);
+	border-left: 3px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	cursor: pointer;
+}
+.stx-eco-item:hover {
+	background: var(--background-modifier-hover);
+}
+.stx-eco-item.is-running { border-left-color: var(--color-blue); }
+.stx-eco-item.is-blocked { border-left-color: var(--color-orange); }
+.stx-eco-item.is-done { border-left-color: var(--color-green); }
+.stx-eco-item.is-failed { border-left-color: var(--color-red); }
+.stx-eco-item.is-comment { border-left-color: var(--color-purple); }
+.stx-eco-top {
+	display: flex;
+	gap: 6px;
+	align-items: baseline;
+}
+.stx-eco-chip {
+	flex: none;
+	font-size: var(--font-ui-smaller);
+	padding: 0 6px;
+	border-radius: 8px;
+	background: var(--background-modifier-hover);
+	color: var(--text-muted);
+}
+.stx-eco-chip.is-running { color: var(--color-blue); }
+.stx-eco-chip.is-blocked { color: var(--color-orange); }
+.stx-eco-chip.is-done { color: var(--color-green); }
+.stx-eco-chip.is-failed { color: var(--color-red); }
+.stx-eco-chip.is-comment { color: var(--color-purple); }
+.stx-eco-item.is-done .stx-eco-text,
+.stx-eco-item.is-cancelled .stx-eco-text {
+	color: var(--text-muted);
+}
+.stx-eco-context,
+.stx-eco-summary,
+.stx-eco-reply {
+	margin-top: 3px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+.stx-eco-question {
+	margin-top: 4px;
+	font-size: var(--font-ui-small);
+	color: var(--text-normal);
+}
+.stx-eco-answer {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin-top: 6px;
+	cursor: default;
+}
+.stx-eco-answer textarea {
+	width: 100%;
+	resize: vertical;
+}
+.stx-eco-answer button {
+	align-self: flex-end;
+}
