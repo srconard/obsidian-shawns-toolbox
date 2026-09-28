@@ -145,6 +145,8 @@ export interface ShawnsToolboxSettings {
 	dualLeftHeaderCollapsed: boolean;
 	/** Show the 🐞 layout-probe button in the capture view (writes phone geometry to a note). */
 	captureLayoutProbe: boolean;
+	/** Desktop only (v1.58.0): hide the capture buttons until the mouse hovers over them. */
+	captureHoverButtons: boolean;
 
 	// Phone drawer chrome (v1.42.0)
 	/** Move Obsidian's panel-switcher pill into the drawer's bottom header row,
@@ -287,6 +289,7 @@ export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
 	dualLeftPage: 0,
 	dualLeftHeaderCollapsed: false,
 	captureLayoutProbe: true,
+	captureHoverButtons: true,
 
 	drawerPillInHeader: true,
 
@@ -781,6 +784,19 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 					})
 			);
 		}
+
+		new Setting(containerEl)
+			.setName("Hide capture buttons until hover (desktop)")
+			.setDesc("On desktop, the four buttons under the capture box stay invisible until the mouse is over where they sit, so the capture window is just a blank page to write into. Ctrl/Cmd+Enter still captures a thought. The phone (Android) is unaffected — its buttons always show.")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.captureHoverButtons)
+					.onChange(async (value) => {
+						this.plugin.settings.captureHoverButtons = value;
+						await this.plugin.saveSettings();
+						this.plugin.refreshCaptureHoverButtons();
+					})
+			);
 
 		new Setting(containerEl)
 			.setName("Layout probe button (phone debugging)")

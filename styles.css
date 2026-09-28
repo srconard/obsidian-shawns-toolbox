@@ -390,6 +390,28 @@ body.is-mobile:not(:has(.mobile-toolbar .mobile-toolbar-option)) .mobile-toolbar
 	color: var(--text-muted);
 }
 
+/* v1.58.0 (Shawn, 2026-09-28): "on desktop (not android) the buttons at the
+   bottom are hidden and you have to hover over them to have them appear".
+   The plugin puts .stx-capture-hover-buttons on <body> (desktop only, setting
+   "Hide capture buttons until hover"). The row keeps its place in the layout —
+   opacity only — so the spot the mouse goes to is always where the buttons
+   will be, and nothing jumps when they appear. Showing is immediate; hiding
+   waits 400ms so a mouse passing between buttons does not flicker them. They
+   also show while one has keyboard focus (Tab) or while the long-press date
+   bar is up, so a half-finished "Do Today on …" never sits invisible.
+   :not(.is-mobile) guards Obsidian's mobile emulation and the phone. */
+body.stx-capture-hover-buttons:not(.is-mobile) .stx-capture-buttons {
+	opacity: 0;
+	transition: opacity 180ms ease;
+	transition-delay: 400ms;
+}
+body.stx-capture-hover-buttons:not(.is-mobile) .stx-capture-buttons:hover,
+body.stx-capture-hover-buttons:not(.is-mobile) .stx-capture-buttons:focus-within,
+body.stx-capture-hover-buttons:not(.is-mobile) .stx-capture-root:has(.stx-datebar:not([style*="display: none"])) .stx-capture-buttons {
+	opacity: 1;
+	transition-delay: 0ms;
+}
+
 .is-mobile .stx-capture-btn {
 	min-height: 3.8em;
 }

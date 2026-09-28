@@ -52,6 +52,10 @@ import {
 	STATUSBAR_AUTOHIDE_CLASS,
 } from "./statusbar-core";
 import {
+	applyCaptureHoverButtons,
+	CAPTURE_HOVER_BUTTONS_CLASS,
+} from "./capture-hover-core";
+import {
 	FOCUS_MODE_CLASS,
 	FOCUS_MODE_HOTKEY,
 	FOCUS_MODE_VIEW_HEADERS_CLASS,
@@ -329,6 +333,8 @@ export default class ShawnsToolboxPlugin extends Plugin {
 		}
 		// ---- Auto-hide status bar (v1.53.0, desktop only) ----
 		this.refreshStatusBarAutohide();
+		// ---- Capture buttons hidden until hover (v1.58.0, desktop only) ----
+		this.refreshCaptureHoverButtons();
 		this.addCommand({
 			id: "toggle-autohide-status-bar",
 			name: "Toggle auto-hide status bar",
@@ -538,6 +544,7 @@ export default class ShawnsToolboxPlugin extends Plugin {
 
 	onunload(): void {
 		document.body.classList.remove(STATUSBAR_AUTOHIDE_CLASS);
+		document.body.classList.remove(CAPTURE_HOVER_BUTTONS_CLASS);
 		document.body.classList.remove(FOCUS_MODE_CLASS, FOCUS_MODE_VIEW_HEADERS_CLASS);
 		if (this.focusOwnsOsFullscreen) this.electronWindow()?.setFullScreen(false);
 		this.webviewHotkeys?.stop();
@@ -672,6 +679,15 @@ export default class ShawnsToolboxPlugin extends Plugin {
 		applyStatusBarAutohide(
 			document.body.classList,
 			this.settings.autohideStatusBar,
+			Platform.isMobile
+		);
+	}
+
+	/** Add or remove the capture-buttons hover-reveal body class for the current setting. */
+	refreshCaptureHoverButtons(): void {
+		applyCaptureHoverButtons(
+			document.body.classList,
+			this.settings.captureHoverButtons,
 			Platform.isMobile
 		);
 	}
