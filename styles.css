@@ -3535,3 +3535,26 @@ body.is-mobile .stx-tiles-showall {
 	color: var(--text-faint);
 	margin-top: 6px;
 }
+/* Top tasks ticks (v1.60.0): a checkbox per row + a short Undo bar. */
+.stx-top-check {
+	flex: none;
+	margin: 3px 2px 0 0;
+	cursor: pointer;
+}
+.stx-top-undo {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 2px 0 8px;
+	padding: 6px 8px;
+	border-radius: var(--radius-s);
+	background: var(--background-modifier-hover);
+	font-size: var(--font-ui-small);
+}
+.stx-top-undo span {
+	flex: 1;
+	min-width: 0;
+}
+.stx-top-undo button {
+	flex: none;
+}

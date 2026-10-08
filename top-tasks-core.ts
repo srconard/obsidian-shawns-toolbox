@@ -3,8 +3,11 @@
 //
 // The panel shows Shawn's top 7 open tasks, ranked by the NAS bridge's
 // GET /tasks/top?limit=7. Shawn asked (2026-10-08) for the Top view as a SIDE
-// PANEL, not a query in his daily note. It is read-only: ticking stays on the
-// task's own line. Everything here is defensive — the bridge is a separate,
+// PANEL, not a query in his daily note. Since 1.60.0 (Shawn, voice 2026-10-08
+// 13:48: "there are no checkboxes… I want to be able to check off the tasks")
+// each row has a checkbox that ticks the line through the bridge's
+// POST /tasks/toggle — the same endpoint the Eco phone app and eco-web use, so
+// 🔁 recurrence and the stale-line check live in one place. Everything here is defensive — the bridge is a separate,
 // evolving service, so missing or extra fields must never crash the panel.
 // Design: vault AGENTS/dev/minimum-viable-echo/docs/2026-10-08
 // trusted-resurfacing-design-draft.md §2.4 view 1 + Part 5.
@@ -28,6 +31,8 @@ export interface TopTask {
 	due: string | null;
 	/** Why it ranks, e.g. "🔺 highest · rank 2". */
 	reason: string;
+	/** A 🔁 task — ticking it adds the next instance above the line. */
+	recurring: boolean;
 }
 
 export interface TopList {
@@ -119,6 +124,7 @@ export function normaliseTask(v: unknown, index = 0): TopTask | null {
 		scheduled: str(v.scheduled),
 		due: str(v.due),
 		reason: (str(v.reason) ?? "").trim(),
+		recurring: (str(v.recurrence) ?? "").trim() !== "",
 	};
 }
 
@@ -226,4 +232,73 @@ export function withTimeout<T>(p: Promise<T>, ms: number, what = "request"): Pro
 			}
 		);
 	});
+}
+
+// ── Ticks (1.60.0, 2026-10-08) ──
+// Mirrors eco-web's eco-core.mjs and the phone's src/topTasks.ts: optimistic
+// tick (the row leaves at once), an Undo offered for TOP_TICK_UNDO_MS, a 409
+// (the line changed in the note) is a Notice and a refetch.
+
+/** How long the Undo stays offered after a tick. */
+export const TOP_TICK_UNDO_MS = 6000;
+
+export interface TopToggleBody {
+	id: string;
+	path: string;
+	line: number;
+	raw: string;
+	done: boolean;
+}
+
+export function topToggleUrl(base: string): string {
+	return `${base.trim().replace(/\/+$/, "")}/tasks/toggle`;
+}
+
+/** Can this row be ticked? The bridge must have sent the line's raw text. */
+export function tickable(t: TopTask | null | undefined): boolean {
+	return !!t && t.path !== "" && t.raw !== "";
+}
+
+export function toggleBody(t: TopTask, done = true): TopToggleBody {
+	return { id: t.id, path: t.path, line: t.line, raw: t.raw, done: done !== false };
+}
+
+/** The undo body: the bridge reports where the ticked line sits NOW (a 🔁 tick inserts above it). */
+export function undoBody(t: TopTask, resp: unknown): TopToggleBody {
+	const r = isRecord(resp) ? resp : {};
+	const line = num(r.line);
+	return {
+		id: t.id,
+		path: str(r.path) || t.path,
+		line: line !== null && Number.isInteger(line) ? line : t.line,
+		raw: str(r.raw) || t.raw,
+		done: false,
+	};
+}
+
+/** The list with one task taken out (the optimistic tick). Never mutates. */
+export function listWithout(list: TopList, id: string): TopList {
+	const tasks = list.tasks.filter((t) => t.id !== id);
+	if (tasks.length === list.tasks.length) return list;
+	const candidates = list.candidates !== null ? Math.max(0, list.candidates - 1) : null;
+	return { ...list, tasks, candidates };
+}
+
+/** The line shown with the Undo. */
+export function tickDoneText(t: Pick<TopTask, "text">, resp: unknown): string {
+	const text = t.text || "task";
+	const short = text.length > 48 ? text.slice(0, 47) + "…" : text;
+	const ins = isRecord(resp) && isRecord(resp.inserted) ? resp.inserted : null;
+	const raw = ins ? str(ins.raw) ?? "" : "";
+	const next = raw ? /📅️?\s*(\d{4}-\d{2}-\d{2})/u.exec(raw) || /⏳️?\s*(\d{4}-\d{2}-\d{2})/u.exec(raw) : null;
+	return next ? `Done — ${short} · next 🔁 ${next[1]}` : `Done — ${short}`;
+}
+
+/** A failed toggle → the Notice text. `status` 0 = the bridge was unreachable. */
+export function tickErrorText(status: number, body: unknown): string {
+	const msg = isRecord(body) ? str(body.error) ?? "" : "";
+	if (status === 409) return "That task changed in the note — refreshed the list.";
+	if (status === 422) return msg || "Can’t tick that one here — tick it in Obsidian.";
+	if (status === 0) return "Couldn’t reach the Eco bridge — the task was not ticked.";
+	return "Couldn’t tick that task" + (msg ? `: ${msg}` : ".");
 }

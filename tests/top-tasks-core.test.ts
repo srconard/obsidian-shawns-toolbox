@@ -11,6 +11,14 @@ import {
 	stripTaskLine,
 	topTasksUrl,
 	withTimeout,
+	listWithout,
+	tickDoneText,
+	tickErrorText,
+	tickable,
+	toggleBody,
+	topToggleUrl,
+	undoBody,
+	TOP_TICK_UNDO_MS,
 } from "../top-tasks-core";
 
 // The bridge contract (GET /tasks/top?limit=7), as of 2026-10-08.
@@ -189,5 +197,46 @@ describe("withTimeout", () => {
 		const check = expect(p).rejects.toThrow("Top tasks timed out after 6 s");
 		await vi.advanceTimersByTimeAsync(6000);
 		await check;
+	});
+});
+
+// ── Ticks (1.60.0, 2026-10-08 13:48) ──
+describe("ticks", () => {
+	const RAW = "- [ ] #task prepare for week review in hammock 🔁 every week 📅 2026-10-02";
+	const t = normaliseTask({
+		id: "v-1", text: "prepare for week review in hammock", raw: RAW,
+		path: "00. Timeline/2026-10-02.md", line: 40, recurrence: "every week",
+	})!;
+
+	it("reads the 🔁 flag and knows what can be ticked", () => {
+		expect(t.recurring).toBe(true);
+		expect(tickable(t)).toBe(true);
+		expect(tickable(normaliseTask({ id: "x", path: "a.md", text: "no raw" }))).toBe(false);
+		expect(tickable(null)).toBe(false);
+	});
+
+	it("builds the toggle and undo bodies", () => {
+		expect(topToggleUrl("http://nas:8787/")).toBe("http://nas:8787/tasks/toggle");
+		expect(toggleBody(t)).toEqual({ id: "v-1", path: t.path, line: 40, raw: RAW, done: true });
+		const resp = { ok: true, path: t.path, line: 41, raw: "- [x] … ✅ 2026-10-08",
+			inserted: { line: 40, raw: "- [ ] #task prepare 🔁 every week 📅 2026-10-09" } };
+		expect(undoBody(t, resp)).toEqual({ id: "v-1", path: t.path, line: 41, raw: resp.raw, done: false });
+		expect(undoBody(t, null)).toEqual({ id: "v-1", path: t.path, line: 40, raw: RAW, done: false });
+		expect(tickDoneText(t, resp)).toBe("Done — prepare for week review in hammock · next 🔁 2026-10-09");
+		expect(tickDoneText({ text: "x" }, {})).toBe("Done — x");
+		expect(TOP_TICK_UNDO_MS).toBeGreaterThanOrEqual(3000);
+	});
+
+	it("removes a row without mutating, and words the errors", () => {
+		const list = { generatedAt: null, today: null, indexed: 10, candidates: 4, tasks: [t] };
+		const next = listWithout(list, "v-1");
+		expect(next.tasks).toHaveLength(0);
+		expect(next.candidates).toBe(3);
+		expect(list.tasks).toHaveLength(1);
+		expect(listWithout(list, "nope")).toBe(list);
+		expect(tickErrorText(409, {})).toMatch(/changed in the note/);
+		expect(tickErrorText(0, null)).toMatch(/not ticked/);
+		expect(tickErrorText(422, { error: "🔁 rule" })).toBe("🔁 rule");
+		expect(tickErrorText(500, { error: "boom" })).toMatch(/boom/);
 	});
 });

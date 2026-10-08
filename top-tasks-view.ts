@@ -3,16 +3,26 @@
 //
 // Shows Shawn's top 7 open tasks from the NAS bridge (GET /tasks/top?limit=7),
 // a side panel beside the Eco tasks panel — Shawn asked for the Top view as a
-// panel, not a query in his daily note. Read-only: a click opens the task's
-// note at its line; ticking stays on the line itself. Refreshes when shown,
+// panel, not a query in his daily note. A click on the text opens the task's
+// note at its line; the checkbox (1.60.0) ticks the line through the bridge's
+// POST /tasks/toggle, with a short Undo. Refreshes when shown,
 // every few minutes while visible, and on the ↻ button. Offline it quietly
 // shows the last good list (persisted in plugin data). Rules: top-tasks-core.ts.
-import { TFile, requestUrl, setIcon } from "obsidian";
+import { Notice, TFile, requestUrl, setIcon } from "obsidian";
 import { ToolboxPanel } from "./panel-base";
 import { ToolboxPanelView } from "./panel-view";
 import {
+	listWithout,
 	offlineMessage,
 	parseTopResponse,
+	tickDoneText,
+	tickErrorText,
+	tickable,
+	toggleBody,
+	topToggleUrl,
+	undoBody,
+	TOP_TICK_UNDO_MS,
+	type TopToggleBody,
 	readCache,
 	rowMarkers,
 	sourceNote,
@@ -34,6 +44,9 @@ export class TopTasksPanel extends ToolboxPanel {
 	private wasShown = false;
 	/** null = never fetched this session; true/false = last attempt's outcome. */
 	private online: boolean | null = null;
+	/** The last tick while its Undo is offered. */
+	private lastTick: { task: TopTask; resp: unknown } | null = null;
+	private undoTimer: number | null = null;
 
 	protected onOpen(): void {
 		this.contentEl.addClass("stx-top-tasks");
@@ -59,6 +72,73 @@ export class TopTasksPanel extends ToolboxPanel {
 	protected onClose(): void {
 		if (this.interval !== null) window.clearInterval(this.interval);
 		this.interval = null;
+		if (this.undoTimer !== null) window.clearTimeout(this.undoTimer);
+		this.undoTimer = null;
+	}
+
+	/** POST /tasks/toggle. Never throws: status 200 = ok, 0 = unreachable. */
+	private async postToggle(body: TopToggleBody): Promise<{ status: number; body: unknown }> {
+		const settings = this.host.getSettings();
+		const headers: Record<string, string> = { "content-type": "application/json" };
+		const token = (settings.bridgeToken ?? "").trim();
+		if (token) headers["x-note-chat-token"] = token;
+		try {
+			const res = await withTimeout(
+				requestUrl({ url: topToggleUrl(settings.vaultSearchUrl), method: "POST", headers, body: JSON.stringify(body), throw: false }),
+				TOP_TIMEOUT_MS,
+				"Tick"
+			);
+			let json: unknown = null;
+			try {
+				json = res.json;
+			} catch {
+				json = null;
+			}
+			const ok = res.status >= 200 && res.status < 300 && !(json && typeof json === "object" && (json as { ok?: unknown }).ok === false);
+			return { status: ok ? 200 : res.status || 500, body: json };
+		} catch {
+			return { status: 0, body: null };
+		}
+	}
+
+	/** Optimistic tick: the row leaves at once; Undo for a few seconds; a 409 refetches. */
+	private async tick(t: TopTask): Promise<void> {
+		if (!tickable(t)) return;
+		const settings = this.host.getSettings();
+		const before = this.cache();
+		if (before) settings.topTasksCache = { ...before, list: listWithout(before.list, t.id) };
+		this.lastTick = null;
+		this.render();
+		const r = await this.postToggle(toggleBody(t, true));
+		if (r.status !== 200) {
+			if (before) settings.topTasksCache = before;
+			new Notice(tickErrorText(r.status, r.body));
+			this.render();
+			void this.refresh();
+			return;
+		}
+		await this.host.saveSettings();
+		this.lastTick = { task: t, resp: r.body };
+		if (this.undoTimer !== null) window.clearTimeout(this.undoTimer);
+		this.undoTimer = window.setTimeout(() => {
+			this.lastTick = null;
+			this.undoTimer = null;
+			this.render();
+			void this.refresh();
+		}, TOP_TICK_UNDO_MS);
+		this.render();
+	}
+
+	private async undo(): Promise<void> {
+		const tick = this.lastTick;
+		if (!tick) return;
+		this.lastTick = null;
+		if (this.undoTimer !== null) window.clearTimeout(this.undoTimer);
+		this.undoTimer = null;
+		this.render();
+		const r = await this.postToggle(undoBody(tick.task, tick.resp));
+		if (r.status !== 200) new Notice(tickErrorText(r.status, r.body));
+		void this.refresh();
 	}
 
 	private isShown(): boolean {
@@ -123,6 +203,12 @@ export class TopTasksPanel extends ToolboxPanel {
 		btn.disabled = this.loading;
 		btn.onclick = () => void this.refresh();
 
+		if (this.lastTick) {
+			const bar = el.createDiv({ cls: "stx-top-undo" });
+			bar.createSpan({ text: tickDoneText(this.lastTick.task, this.lastTick.resp) });
+			const undo = bar.createEl("button", { text: "Undo" });
+			undo.onclick = () => void this.undo();
+		}
 		if (this.online === false) el.createDiv({ cls: "stx-top-offline", text: offlineMessage(cache, now) });
 		if (!cache) {
 			if (this.online !== false)
@@ -144,6 +230,13 @@ export class TopTasksPanel extends ToolboxPanel {
 	private row(el: HTMLElement, t: TopTask): void {
 		const row = el.createDiv({ cls: `stx-eco-item stx-top-item${t.overdue ? " is-overdue" : ""}` });
 		const top = row.createDiv({ cls: "stx-eco-top" });
+		const box = top.createEl("input", { cls: "task-list-item-checkbox stx-top-check", type: "checkbox" });
+		box.disabled = !tickable(t) || this.online === false;
+		box.setAttr("aria-label", t.recurring ? "Done — adds the next 🔁 instance above it" : "Done");
+		box.onclick = (e) => e.stopPropagation();
+		box.onchange = () => {
+			if (box.checked) void this.tick(t);
+		};
 		const markers = rowMarkers(t);
 		if (markers) top.createSpan({ cls: "stx-top-markers", text: markers });
 		top.createSpan({ cls: "stx-eco-text", text: t.text });
@@ -154,7 +247,7 @@ export class TopTasksPanel extends ToolboxPanel {
 		row.onclick = () => void this.jump(t);
 	}
 
-	/** Open the task's note at its line (read-only — no ticking here). */
+	/** Open the task's note at its line. */
 	private async jump(t: TopTask): Promise<void> {
 		const file = this.app.vault.getAbstractFileByPath(t.path);
 		if (file instanceof TFile) {
