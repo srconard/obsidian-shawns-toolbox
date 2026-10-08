@@ -33,6 +33,8 @@ export interface TopTask {
 	reason: string;
 	/** A 🔁 task — ticking it adds the next instance above the line. */
 	recurring: boolean;
+	/** A 🔺/⏫ not confirmed in 7 days — ranks as 🔼, shows the "unconfirmed" chip (1.61.0). */
+	unconfirmed: boolean;
 }
 
 export interface TopList {
@@ -125,6 +127,7 @@ export function normaliseTask(v: unknown, index = 0): TopTask | null {
 		due: str(v.due),
 		reason: (str(v.reason) ?? "").trim(),
 		recurring: (str(v.recurrence) ?? "").trim() !== "",
+		unconfirmed: v.unconfirmed === true,
 	};
 }
 
@@ -301,4 +304,55 @@ export function tickErrorText(status: number, body: unknown): string {
 	if (status === 422) return msg || "Can’t tick that one here — tick it in Obsidian.";
 	if (status === 0) return "Couldn’t reach the Eco bridge — the task was not ticked.";
 	return "Couldn’t tick that task" + (msg ? `: ${msg}` : ".");
+}
+
+// ── "unconfirmed" chip (1.61.0, 2026-10-08 evening, Shawn voice 16:43) ──
+// Only confirmed highs count as high in Top: a 🔺/⏫ Shawn has not set or
+// re-confirmed within 7 days ranks as 🔼 and carries a small chip. A click (or
+// right-click / long-press) offers "Still high" → the bridge's POST
+// /tasks/confirm, a dated record — never a line edit. Mirrors eco-web's
+// eco-core.mjs and the phone's src/topTasks.ts (same words).
+
+export const UNCONFIRMED_LABEL = "unconfirmed";
+export const UNCONFIRMED_HINT = "Not confirmed in the last 7 days, so it ranks as 🔼. Still high?";
+export const CONFIRM_LABEL = "Still high";
+
+export interface TopConfirmBody {
+	id: string;
+	path: string;
+	line: number;
+	raw: string;
+}
+
+export function topConfirmUrl(base: string): string {
+	return `${base.trim().replace(/\/+$/, "")}/tasks/confirm`;
+}
+
+/** Does this row get the chip (and the "Still high" action)? */
+export function confirmable(t: TopTask | null | undefined): boolean {
+	return !!t && t.unconfirmed === true && t.id !== "";
+}
+
+export function confirmBody(t: TopTask): TopConfirmBody {
+	return { id: t.id, path: t.path, line: t.line, raw: t.raw };
+}
+
+/** The list with one task marked confirmed (optimistic). Never mutates. */
+export function listConfirmed(list: TopList, id: string): TopList {
+	let hit = false;
+	const tasks = list.tasks.map((t) => {
+		if (t.id !== id || !t.unconfirmed) return t;
+		hit = true;
+		return { ...t, unconfirmed: false };
+	});
+	return hit ? { ...list, tasks } : list;
+}
+
+/** A failed confirm → the Notice text. */
+export function confirmErrorText(status: number, body: unknown): string {
+	const msg = isRecord(body) ? str(body.error) ?? "" : "";
+	if (status === 409) return "That task changed in the note — refreshed the list.";
+	if (status === 404) return "That task is no longer open — refreshed the list.";
+	if (status === 0) return "Couldn’t reach the Eco bridge — not confirmed.";
+	return "Couldn’t confirm that task" + (msg ? `: ${msg}` : ".");
 }

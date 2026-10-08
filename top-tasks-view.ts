@@ -8,10 +8,19 @@
 // POST /tasks/toggle, with a short Undo. Refreshes when shown,
 // every few minutes while visible, and on the ↻ button. Offline it quietly
 // shows the last good list (persisted in plugin data). Rules: top-tasks-core.ts.
-import { Notice, TFile, requestUrl, setIcon } from "obsidian";
+import { Menu, Notice, TFile, requestUrl, setIcon } from "obsidian";
 import { ToolboxPanel } from "./panel-base";
 import { ToolboxPanelView } from "./panel-view";
 import {
+	CONFIRM_LABEL,
+	UNCONFIRMED_HINT,
+	UNCONFIRMED_LABEL,
+	confirmBody,
+	confirmErrorText,
+	confirmable,
+	listConfirmed,
+	topConfirmUrl,
+	type TopConfirmBody,
 	listWithout,
 	offlineMessage,
 	parseTopResponse,
@@ -78,15 +87,44 @@ export class TopTasksPanel extends ToolboxPanel {
 
 	/** POST /tasks/toggle. Never throws: status 200 = ok, 0 = unreachable. */
 	private async postToggle(body: TopToggleBody): Promise<{ status: number; body: unknown }> {
+		return this.postJson(topToggleUrl(this.host.getSettings().vaultSearchUrl), body, "Tick");
+	}
+
+	/** "Still high" (1.61.0): POST /tasks/confirm — a dated record, no line edit. */
+	private async confirm(t: TopTask): Promise<void> {
+		if (!confirmable(t)) return;
+		const settings = this.host.getSettings();
+		const before = this.cache();
+		if (before) settings.topTasksCache = { ...before, list: listConfirmed(before.list, t.id) };
+		this.render();
+		const r = await this.postJson(topConfirmUrl(settings.vaultSearchUrl), confirmBody(t), "Confirm");
+		if (r.status !== 200) {
+			if (before) settings.topTasksCache = before;
+			new Notice(confirmErrorText(r.status, r.body));
+			this.render();
+		}
+		void this.refresh();
+	}
+
+	private offerConfirm(e: MouseEvent, t: TopTask): void {
+		e.preventDefault();
+		e.stopPropagation();
+		const menu = new Menu();
+		menu.addItem((i) => i.setTitle(CONFIRM_LABEL).setIcon("check").onClick(() => void this.confirm(t)));
+		menu.showAtMouseEvent(e);
+	}
+
+	/** POST JSON to the bridge. Never throws: status 200 = ok, 0 = unreachable. */
+	private async postJson(url: string, body: TopToggleBody | TopConfirmBody, what: string): Promise<{ status: number; body: unknown }> {
 		const settings = this.host.getSettings();
 		const headers: Record<string, string> = { "content-type": "application/json" };
 		const token = (settings.bridgeToken ?? "").trim();
 		if (token) headers["x-note-chat-token"] = token;
 		try {
 			const res = await withTimeout(
-				requestUrl({ url: topToggleUrl(settings.vaultSearchUrl), method: "POST", headers, body: JSON.stringify(body), throw: false }),
+				requestUrl({ url, method: "POST", headers, body: JSON.stringify(body), throw: false }),
 				TOP_TIMEOUT_MS,
-				"Tick"
+				what
 			);
 			let json: unknown = null;
 			try {
@@ -240,6 +278,12 @@ export class TopTasksPanel extends ToolboxPanel {
 		const markers = rowMarkers(t);
 		if (markers) top.createSpan({ cls: "stx-top-markers", text: markers });
 		top.createSpan({ cls: "stx-eco-text", text: t.text });
+		if (confirmable(t)) {
+			const chip = top.createEl("button", { cls: "stx-top-unconf", text: UNCONFIRMED_LABEL, attr: { "aria-label": UNCONFIRMED_HINT, title: UNCONFIRMED_HINT } });
+			chip.disabled = this.online === false;
+			chip.onclick = (e) => this.offerConfirm(e, t);
+			chip.oncontextmenu = (e) => this.offerConfirm(e, t);
+		}
 		const meta = row.createDiv({ cls: "stx-eco-meta stx-top-meta" });
 		meta.createSpan({ cls: "stx-top-note", text: sourceNote(t.path) });
 		if (t.reason) meta.createSpan({ cls: "stx-top-reason", text: ` · ${t.reason}` });

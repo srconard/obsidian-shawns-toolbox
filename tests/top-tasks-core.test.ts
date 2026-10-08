@@ -19,6 +19,14 @@ import {
 	topToggleUrl,
 	undoBody,
 	TOP_TICK_UNDO_MS,
+	CONFIRM_LABEL,
+	UNCONFIRMED_HINT,
+	UNCONFIRMED_LABEL,
+	confirmBody,
+	confirmErrorText,
+	confirmable,
+	listConfirmed,
+	topConfirmUrl,
 } from "../top-tasks-core";
 
 // The bridge contract (GET /tasks/top?limit=7), as of 2026-10-08.
@@ -238,5 +246,36 @@ describe("ticks", () => {
 		expect(tickErrorText(0, null)).toMatch(/not ticked/);
 		expect(tickErrorText(422, { error: "🔁 rule" })).toBe("🔁 rule");
 		expect(tickErrorText(500, { error: "boom" })).toMatch(/boom/);
+	});
+});
+
+describe("unconfirmed chip (1.61.0)", () => {
+	it("reads the flag, builds the confirm body, confirms optimistically, words the errors", () => {
+		const parsed = parseTopResponse({
+			ok: true,
+			candidates: 2,
+			tasks: [
+				{ id: "v-9", text: "stale high", raw: "- [ ] #task stale high 🔺", path: "a.md", line: 3, priorityEmoji: "🔺", unconfirmed: true },
+				{ id: "v-8", text: "confirmed", raw: "- [ ] #task confirmed ⏫", path: "b.md", line: 1, priorityEmoji: "⏫" },
+			],
+		});
+		if (!parsed.ok) throw new Error("parse failed");
+		const [a, b] = parsed.list.tasks;
+		expect([a.unconfirmed, b.unconfirmed]).toEqual([true, false]);
+		expect([confirmable(a), confirmable(b)]).toEqual([true, false]);
+		expect(rowMarkers(a)).toBe("🔺");
+		expect(confirmBody(a)).toEqual({ id: "v-9", path: "a.md", line: 3, raw: "- [ ] #task stale high 🔺" });
+		const next = listConfirmed(parsed.list, "v-9");
+		expect(next).not.toBe(parsed.list);
+		expect(parsed.list.tasks[0].unconfirmed).toBe(true);
+		expect(next.tasks[0].unconfirmed).toBe(false);
+		expect(listConfirmed(parsed.list, "v-8")).toBe(parsed.list);
+		expect(topConfirmUrl("http://nas:8787/")).toBe("http://nas:8787/tasks/confirm");
+		expect(UNCONFIRMED_LABEL).toBe("unconfirmed");
+		expect(CONFIRM_LABEL).toBe("Still high");
+		expect(UNCONFIRMED_HINT).toMatch(/7 days.*🔼/);
+		expect(confirmErrorText(409, null)).toMatch(/changed in the note/);
+		expect(confirmErrorText(404, null)).toMatch(/no longer open/);
+		expect(confirmErrorText(0, null)).toMatch(/not confirmed/);
 	});
 });

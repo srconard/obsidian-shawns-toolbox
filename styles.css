@@ -3558,3 +3558,20 @@ body.is-mobile .stx-tiles-showall {
 .stx-top-undo button {
 	flex: none;
 }
+
+/* Top tasks — "unconfirmed" chip (1.61.0): a 🔺/⏫ not confirmed in 7 days ranks as 🔼. */
+.stx-top-tasks .stx-top-unconf {
+	flex: none;
+	margin-left: auto;
+	align-self: center;
+	height: auto;
+	padding: 0 7px;
+	border: 1px solid var(--text-faint);
+	border-radius: 999px;
+	background: none;
+	box-shadow: none;
+	color: var(--text-muted);
+	font-size: 10.5px;
+	line-height: 1.5;
+	cursor: pointer;
+}
