@@ -39,6 +39,7 @@ import { HighlightsView, HIGHLIGHTS_VIEW_TYPE } from "./highlights-view";
 import { DreamsView, DREAMS_VIEW_TYPE } from "./dreams-view";
 import { VSearchView, VSEARCH_VIEW_TYPE } from "./vsearch-view";
 import { EcoTasksView, ECO_TASKS_VIEW_TYPE } from "./eco-tasks-view";
+import { TopTasksView, TOP_TASKS_VIEW_TYPE } from "./top-tasks-view";
 import { DualPanelView, DUAL_VIEW_TYPE, DUAL_LEFT_VIEW_TYPE } from "./dual-view";
 import { DrawerChrome } from "./drawer-chrome";
 import { openVaultChooser } from "./settings";
@@ -210,6 +211,10 @@ export default class ShawnsToolboxPlugin extends Plugin {
 			ECO_TASKS_VIEW_TYPE,
 			(leaf: WorkspaceLeaf) => new EcoTasksView(leaf, host)
 		);
+		this.registerView(
+			TOP_TASKS_VIEW_TYPE,
+			(leaf: WorkspaceLeaf) => new TopTasksView(leaf, host)
+		);
 		// Two panels stacked in one leaf — the only way to see two toolbox
 		// surfaces at once in the phone drawer, which shows one panel at a time.
 		this.registerView(
@@ -293,6 +298,11 @@ export default class ShawnsToolboxPlugin extends Plugin {
 			id: "open-eco-tasks-panel",
 			name: "Open Eco tasks panel",
 			callback: () => void this.activateView(ECO_TASKS_VIEW_TYPE, "right"),
+		});
+		this.addCommand({
+			id: "open-top-tasks-panel",
+			name: "Open Top tasks panel",
+			callback: () => void this.activateView(TOP_TASKS_VIEW_TYPE, "right"),
 		});
 		this.addCommand({
 			id: "open-vsearch-panel",
@@ -443,6 +453,9 @@ export default class ShawnsToolboxPlugin extends Plugin {
 		);
 		this.addRibbonIcon("moon", "Open dreams panel", () =>
 			void this.activateView(DREAMS_VIEW_TYPE, "right")
+		);
+		this.addRibbonIcon("list-ordered", "Open Top tasks panel", () =>
+			void this.activateView(TOP_TASKS_VIEW_TYPE, "right")
 		);
 		this.addRibbonIcon("scan-search", "Open vault search panel", () =>
 			void this.activateView(VSEARCH_VIEW_TYPE, "right")

@@ -23,6 +23,7 @@ import { DUAL_PAGES_CHANGED, type DualSide } from "./dual-view";
 import type ShawnsToolboxPlugin from "./main";
 import type { CaptureKind } from "./section-core";
 import type { NoteScope } from "./capture-service";
+import type { TopTasksCache } from "./top-tasks-core";
 
 export interface ShawnsToolboxSettings {
 	checkboxStampingEnabled: boolean;
@@ -182,6 +183,12 @@ export interface ShawnsToolboxSettings {
 	/** Last query, so a rebuilt pane comes back with the box still filled. */
 	vaultSearchLastQuery: string;
 
+	// Top tasks panel (v1.59.0) — same bridge as vaultSearchUrl
+	/** Optional x-note-chat-token for the bridge (= NOTE_CHAT_TOKEN); blank = send none. */
+	bridgeToken: string;
+	/** Last good GET /tasks/top list, shown when the bridge is unreachable. */
+	topTasksCache: TopTasksCache | null;
+
 	// Desktop status bar (v1.53.0)
 	/** Hide Obsidian's bottom-right status bar until the mouse reaches that corner. */
 	autohideStatusBar: boolean;
@@ -312,6 +319,9 @@ export const DEFAULT_SETTINGS: ShawnsToolboxSettings = {
 	// writing and would drown his thoughts in its commentary about them.
 	vaultSearchCorpus: "shawn",
 	vaultSearchLastQuery: "",
+
+	bridgeToken: "",
+	topTasksCache: null,
 
 	autohideStatusBar: true,
 
@@ -1190,6 +1200,24 @@ export class ShawnsToolboxSettingTab extends PluginSettingTab {
 						value as typeof DEFAULT_SETTINGS.vaultSearchCorpus;
 					await this.plugin.saveSettings();
 				});
+			});
+
+		// ---- Top tasks panel (v1.59.0) ----
+		new Setting(containerEl)
+			.setName("Bridge token (optional)")
+			.setDesc(
+				"Sent as the x-note-chat-token header by the Top tasks panel (GET /tasks/top on the bridge URL above) — the same NOTE_CHAT_TOKEN the Obsidian Eco plugin uses. Leave blank while the bridge is open on the tailnet."
+			)
+			.addText((text) => {
+				text
+					.setPlaceholder("(none)")
+					.setValue(this.plugin.settings.bridgeToken)
+					.onChange(async (value) => {
+						this.plugin.settings.bridgeToken = value.trim();
+						await this.plugin.saveSettings();
+					});
+				text.inputEl.type = "password";
+				text.inputEl.style.width = "300px";
 			});
 	}
 

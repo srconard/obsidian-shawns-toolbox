@@ -3500,3 +3500,38 @@ body.is-mobile .stx-tiles-showall {
 .stx-eco-answer button {
 	align-self: flex-end;
 }
+
+/* ---- Top tasks panel (v1.59.0) — reuses the Eco tasks row styles ---- */
+.stx-top-tasks {
+	padding: 6px 8px;
+}
+.stx-top-head {
+	align-items: center;
+}
+.stx-top-refresh {
+	margin-left: auto;
+	padding: 2px 4px;
+}
+.stx-top-offline {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	margin: 2px 0 6px;
+}
+.stx-top-list.is-stale {
+	opacity: 0.75;
+}
+.stx-top-item.is-overdue {
+	border-left-color: var(--color-orange);
+}
+.stx-top-markers {
+	flex: none;
+	white-space: nowrap;
+}
+.stx-top-reason {
+	color: var(--text-faint);
+}
+.stx-top-foot {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+	margin-top: 6px;
+}

@@ -19,6 +19,7 @@ import { GuidingQuestionsPanel } from "./guiding-view";
 import { StatusPanel } from "./status-view";
 import { VSearchPanel } from "./vsearch-view";
 import { EcoTasksPanel } from "./eco-tasks-view";
+import { TopTasksPanel } from "./top-tasks-view";
 
 export interface PanelSpec {
 	/** Stable id stored in settings — never rename one without a migration. */
@@ -102,6 +103,12 @@ export const PANEL_SPECS: readonly PanelSpec[] = [
 		label: "Eco tasks",
 		icon: "message-square-plus",
 		create: (h, c) => new EcoTasksPanel(h, c),
+	},
+	{
+		id: "top-tasks",
+		label: "Top tasks",
+		icon: "list-ordered",
+		create: (h, c) => new TopTasksPanel(h, c),
 	},
 ] as const;
 
